@@ -112,6 +112,7 @@ static struct scst_trace_log scst_proc_trace_tbl[] = {
     { TRACE_MGMT,		"mgmt" },
     { TRACE_MGMT_DEBUG,		"mgmt_dbg" },
     { TRACE_FLOW_CONTROL,	"flow_control" },
+    { TRACE_PRES,		"pr" },
     { 0,			NULL }
 };
 

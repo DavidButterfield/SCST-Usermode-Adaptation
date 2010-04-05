@@ -830,6 +830,20 @@ struct scst_tgt_template {
 #endif
 
 	/*
+	 * This function returns in tr_id the corresponding to sess initiator
+	 * port TransporID in the form as it's used by PR commands, see
+	 * "Transport Identifiers" in SPC. Space for the initiator port
+	 * TransporID must be allocated via kmalloc(). Caller supposed to
+	 * kfree() it, when it isn't needed anymore.
+	 *
+	 * Returns 0 on success or negative error code otherwise.
+	 *
+	 * MUST HAVE, because it's required for Persistent Reservations.
+	 */
+	int (*get_initiator_port_transport_id) (struct scst_session *sess,
+		uint8_t **transport_id);
+
+	/*
 	 * This function allows to enable or disable particular target.
 	 * A disabled target doesn't receive and process any SCSI commands.
 	 *
@@ -993,6 +1007,13 @@ struct scst_dev_type {
 	 * to optimize commands order management.
 	 */
 	unsigned exec_sync:1;
+
+	/*
+	 * Should be set if the device wants to receive notification of
+	 * Persistent Reservation commands (PR OUT only)
+	 * Note: The notification will not be send if the command failed
+	 */
+	unsigned pr_cmds_notifications:1;
 
 	/*
 	 * Called to parse CDB from the cmd and initialize
@@ -1366,6 +1387,9 @@ struct scst_session {
 	/* Access control for this session and list entry there */
 	struct scst_acg *acg;
 
+	/* Initiator port transport id */
+	uint8_t *transport_id;
+
 	/* List entry for the sessions list inside ACG */
 	struct list_head acg_sess_list_entry;
 
@@ -1541,6 +1565,12 @@ struct scst_cmd {
 	 * Set if the SG buffer was modified by scst_set_resp_data_len()
 	 */
 	unsigned int sg_buff_modified:1;
+
+	/*
+	 * Set if cmd buffer was vmallocated and copied from more
+	 * then one sg chunk
+	 */
+	unsigned int sg_buff_vmallocated:1;
 
 	/*
 	 * Set if scst_cmd_init_stage1_done() called and the target
@@ -1832,6 +1862,17 @@ struct scst_mgmt_cmd {
 	void *tgt_priv;
 };
 
+/* List entry for *dev_registrants_list */
+struct scst_dev_registrant {
+	uint8_t *transport_id;
+	bool marked:1;
+	uint16_t rel_tgt_id;
+	const char *initiator_name;
+	uint64_t key;
+	struct scst_tgt_dev *tgt_dev;
+	struct list_head dev_registrants_list_entry;
+};
+
 struct scst_device {
 	struct scst_dev_type *handler;	/* corresponding dev handler */
 
@@ -1847,11 +1888,20 @@ struct scst_device {
 	/* Set if dev is RESERVED */
 	unsigned short dev_reserved:1;
 
+	/* Set if dev is persistently reserved */
+	unsigned short pr_is_set:1;
+
+	/* True if persist through power loss is activated */
+	unsigned short pr_aptpl:1;
+
 	/* Set if double reset UA is possible */
 	unsigned short dev_double_ua_possible:1;
 
 	/* If set, dev is read only */
 	unsigned short rd_only:1;
+
+	/* Set if tgt_kobj was initialized */
+	unsigned short dev_kobj_initialized:1;
 
 	/**************************************************************/
 
@@ -1887,16 +1937,24 @@ struct scst_device {
 	/* Corresponding real SCSI device, could be NULL for virtual devices */
 	struct scsi_device *scsi_dev;
 
-	/* Lists of commands with lock, if dedicated threads are used */
+	/* List of commands with lock, if dedicated threads are used */
 	struct scst_cmd_threads dev_cmd_threads;
 
 	/* How many cmds alive on this dev */
 	atomic_t dev_cmd_count;
 
+	/* Persistent reservation type */
+	uint8_t pr_type;
+
 	/* How many write cmds alive on this dev. Temporary, ToDo */
 	atomic_t write_cmd_count;
 
 	spinlock_t dev_lock;		/* device lock */
+
+	/*
+	 * Mutex to per device lock of PR operations
+	 */
+	struct mutex dev_pr_mutex;
 
 	/*
 	 * How many times device was blocked for new cmds execution.
@@ -1939,11 +1997,26 @@ struct scst_device {
 	/* Number of threads in the device's threads pools */
 	int threads_num;
 
+	/* Persistent reservation generation value */
+	unsigned int pr_generation;
+
+	/* Persistent reservation scope */
+	uint8_t pr_scope;
+
+	/* List of dev's registrants */
+	struct list_head dev_registrants_list;
+
+	/*
+	 * Reference to registrant - persistent reservation holder
+	 */
+	struct scst_dev_registrant *pr_holder;
+
+	/* Persist through power loss files */
+	char *pr_file_name;
+	char *pr_file_name1;
+
 	/* Threads pool type of the device. Valid only if threads_num > 0. */
 	enum scst_dev_type_threads_pool_type threads_pool_type;
-
-	/* Set if tgt_kobj was initialized */
-	unsigned int dev_kobj_initialized:1;
 
 	/*
 	 * Used to protect sysfs attributes to be called after this
@@ -2071,6 +2144,12 @@ struct scst_tgt_dev {
 	 */
 	unsigned short tgt_dev_valid_sense_len;
 	uint8_t tgt_dev_sense[SCST_SENSE_BUFFERSIZE];
+
+	/*
+	 * Reference to registrant to find quicker
+	 */
+	unsigned int initialized:1;
+	struct scst_dev_registrant *registrant;
 
 #ifdef CONFIG_SCST_MEASURE_LATENCY
 	/*
@@ -2280,7 +2359,7 @@ void scst_unregister(struct scst_tgt *tgt);
  *       inside result_fn(), it will NOT be called automatically.
  */
 struct scst_session *scst_register_session(struct scst_tgt *tgt, int atomic,
-	const char *initiator_name, void *data,
+	const char *initiator_name, void *tgt_priv, void *data,
 	void (*result_fn) (struct scst_session *sess, void *data, int result));
 
 /*

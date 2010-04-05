@@ -61,7 +61,7 @@ extern unsigned long scst_trace_flag;
 
 #define SCST_DEFAULT_LOG_FLAGS (TRACE_OUT_OF_MEM | TRACE_MINOR | TRACE_PID | \
 	TRACE_LINE | TRACE_FUNCTION | TRACE_SPECIAL | TRACE_MGMT | \
-	TRACE_MGMT_DEBUG | TRACE_RTRY)
+	TRACE_MGMT_DEBUG | TRACE_RTRY | TRACE_PRES)
 
 #define TRACE_RETRY(args...)	TRACE_DBG_FLAG(TRACE_RTRY, args)
 #define TRACE_SN(args...)	TRACE_DBG_FLAG(TRACE_SCSI_SERIALIZING, args)
@@ -414,12 +414,17 @@ int scst_alloc_space(struct scst_cmd *cmd);
 int scst_lib_init(void);
 void scst_lib_exit(void);
 
+int scst_get_full_buf(struct scst_cmd *cmd, uint8_t **buf);
+void scst_put_full_buf(struct scst_cmd *cmd, uint8_t *buf);
+
 uint64_t scst_pack_lun(const uint64_t lun, unsigned int addr_method);
 uint64_t scst_unpack_lun(const uint8_t *lun, int len);
 
 struct scst_mgmt_cmd *scst_alloc_mgmt_cmd(gfp_t gfp_mask);
 void scst_free_mgmt_cmd(struct scst_mgmt_cmd *mcmd);
 void scst_done_cmd_mgmt(struct scst_cmd *cmd);
+
+int scst_pr_load_device_file(struct scst_device *dev);
 
 #ifdef CONFIG_SCST_PROC
 
@@ -727,8 +732,9 @@ static inline int scst_sn_before(uint32_t seq1, uint32_t seq2)
 	return (int32_t)(seq1-seq2) < 0;
 }
 
-bool scst_is_relative_target_port_id_unique(uint16_t id, struct scst_tgt *t);
 int gen_relative_target_port_id(uint16_t *id);
+bool scst_is_relative_target_port_id_unique(uint16_t id,
+	const struct scst_tgt *t);
 
 #ifdef CONFIG_SCST_MEASURE_LATENCY
 

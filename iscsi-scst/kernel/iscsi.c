@@ -18,8 +18,10 @@
 #include <linux/hash.h>
 #include <linux/kthread.h>
 #include <linux/scatterlist.h>
+#include <linux/ctype.h>
 #include <net/tcp.h>
 #include <scsi/scsi.h>
+#include <asm/byteorder.h>
 
 #include "iscsi.h"
 #include "digest.h"
@@ -3480,6 +3482,56 @@ static int iscsi_report_aen(struct scst_aen *aen)
 	return res;
 }
 
+int iscsi_get_initiator_port_transport_id(struct scst_session *scst_sess,
+	uint8_t **transport_id)
+{
+	struct iscsi_session *sess;
+	int res = 0;
+	union iscsi_sid sid;
+	int tr_id_size;
+	uint8_t *tr_id;
+	uint8_t q;
+
+	TRACE_ENTRY();
+
+	sess = (struct iscsi_session *)scst_sess_get_tgt_priv(scst_sess);
+
+	sid = *(union iscsi_sid *)&sess->sid;
+	sid.id.tsih = 0;
+
+	tr_id_size = 4 + strlen(sess->initiator_name) + 5 +
+		snprintf(&q, sizeof(q), "%llx", sid.id64) + 1;
+	tr_id_size = (tr_id_size + 3) & -4;
+
+	tr_id = kzalloc(tr_id_size, GFP_KERNEL);
+	if (tr_id == NULL) {
+		PRINT_ERROR("Allocation of TrandportID (size %d) failed",
+			tr_id_size);
+		res = -ENOMEM;
+		goto out;
+	}
+
+	tr_id[0] = 0x40 | SCSI_TRANSPORTID_PROTOCOLID_ISCSI;
+	((uint16_t *)tr_id)[1] = tr_id_size - 4;
+
+	/*
+	 * Add debug feature to simplify testing
+	 */
+#ifdef CONFIG_SCST_SKIP_SID
+	#warning In this mode SID is always zero
+	sprintf(&tr_id[4], "%s,i,0x%llx", sess->initiator_name, 0LL);
+#else
+	sprintf(&tr_id[4], "%s,i,0x%llx", sess->initiator_name, sid.id64);
+#endif
+	*transport_id = tr_id;
+
+	TRACE_DBG("Create tid '%s'", &tr_id[4]);
+
+out:
+	TRACE_EXIT_RES(res);
+	return res;
+}
+
 void iscsi_send_nop_in(struct iscsi_conn *conn)
 {
 	struct iscsi_cmnd *req, *rsp;
@@ -3599,6 +3651,7 @@ struct scst_tgt_template iscsi_template = {
 	.task_mgmt_affected_cmds_done = iscsi_task_mgmt_affected_cmds_done,
 	.task_mgmt_fn_done = iscsi_task_mgmt_fn_done,
 	.report_aen = iscsi_report_aen,
+	.get_initiator_port_transport_id = iscsi_get_initiator_port_transport_id,
 };
 
 static __init int iscsi_run_threads(int count, char *name, int (*fn)(void *))

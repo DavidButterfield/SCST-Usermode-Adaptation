@@ -2876,8 +2876,8 @@ static int dev_user_register_dev(struct file *file,
 	dev->devtype.exec = dev_user_exec;
 	dev->devtype.on_free_cmd = dev_user_on_free_cmd;
 	dev->devtype.task_mgmt_fn = dev_user_task_mgmt_fn;
-
-	dev->devtype.parent = &dev_user_devtype;
+	if (dev_desc->enable_pr_cmds_notifications)
+		dev->devtype.pr_cmds_notifications = 1;
 
 	init_completion(&dev->cleanup_cmpl);
 	dev->block = block;

@@ -32,6 +32,7 @@
 
 #include "scst.h"
 #include "scst_priv.h"
+#include "scst_pres.h"
 
 #if 0 /* Temporary left for future performance investigations */
 /* Deleting it don't forget to delete write_cmd_count */
@@ -1727,6 +1728,16 @@ static int scst_reserve_local(struct scst_cmd *cmd)
 	if (unlikely(rc != 0))
 		goto out_done;
 
+	if (!list_empty(&dev->dev_registrants_list)) {
+		if (scst_pr_crh_case(cmd))
+			goto out_completed;
+		else {
+			scst_set_cmd_error_status(cmd,
+				SAM_STAT_RESERVATION_CONFLICT);
+			goto out_done;
+		}
+	}
+
 	spin_lock_bh(&dev->dev_lock);
 
 	if (test_bit(SCST_TGT_DEV_RESERVED, &cmd->tgt_dev->tgt_dev_flags)) {
@@ -1748,6 +1759,9 @@ static int scst_reserve_local(struct scst_cmd *cmd)
 out:
 	TRACE_EXIT_RES(res);
 	return res;
+
+out_completed:
+	cmd->completed = 1;
 
 out_done:
 	/* Report the result */
@@ -1777,6 +1791,16 @@ static int scst_release_local(struct scst_cmd *cmd)
 	rc = scst_check_local_events(cmd);
 	if (unlikely(rc != 0))
 		goto out_done;
+
+	if (!list_empty(&dev->dev_registrants_list)) {
+		if (scst_pr_crh_case(cmd))
+			goto out_completed;
+		else {
+			scst_set_cmd_error_status(cmd,
+				SAM_STAT_RESERVATION_CONFLICT);
+			goto out_done;
+		}
+	}
 
 	spin_lock_bh(&dev->dev_lock);
 
@@ -1811,11 +1835,226 @@ out:
 	TRACE_EXIT_RES(res);
 	return res;
 
+out_completed:
+	cmd->completed = 1;
+
 out_done:
 	res = SCST_EXEC_COMPLETED;
 	/* Report the result */
 	cmd->scst_cmd_done(cmd, SCST_CMD_STATE_DEFAULT, SCST_CONTEXT_SAME);
 	goto out;
+}
+
+/* No locks, no IRQ or IRQ-disabled context allowed */
+static int scst_persistent_reserve_in_local(struct scst_cmd *cmd)
+{
+	int rc;
+	struct scst_device *dev;
+	struct scst_tgt_dev *tgt_dev;
+	struct scst_session *session;
+	int action;
+	uint8_t *buffer;
+	int buffer_size;
+
+	TRACE_ENTRY();
+
+	if (scst_cmd_atomic(cmd))
+		goto out_need_thread;
+
+	dev = cmd->dev;
+	tgt_dev = cmd->tgt_dev;
+	session = cmd->sess;
+
+	rc = scst_check_local_events(cmd);
+	if (unlikely(rc != 0))
+		goto out_done;
+
+	if (dev->dev_reserved) {
+		TRACE_PR("PR command rejected, because device %s holds regular "
+			"reservation", dev->virt_name);
+		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
+		goto out_done;
+	}
+
+	if (dev->scsi_dev != NULL) {
+		PRINT_WARNING("PR commands for pass-through devices not "
+			"supported (device %s)", dev->virt_name);
+		scst_set_cmd_error(cmd,
+			SCST_LOAD_SENSE(scst_sense_invalid_opcode));
+		goto out_done;
+	}
+
+	buffer_size = scst_get_full_buf(cmd, &buffer);
+	if (unlikely(buffer_size == 0))
+		goto out_done;
+	else if (unlikely(buffer_size < 0))
+		goto out_err;
+
+	mutex_lock(&dev->dev_pr_mutex);
+
+	action = cmd->cdb[1] & 0x1f;
+
+	TRACE(TRACE_SCSI, "PR action %x for '%s' (LUN %llx) from '%s'", action,
+	    dev->virt_name, tgt_dev->lun, session->initiator_name);
+
+	switch (action) {
+	case PR_READ_KEYS:
+		scst_pr_read_keys(cmd, buffer, buffer_size);
+		break;
+	case PR_READ_RESERVATION:
+		scst_pr_read_reservation(cmd, buffer, buffer_size);
+		break;
+	case PR_REPORT_CAPS:
+		scst_pr_report_caps(cmd, buffer, buffer_size);
+		break;
+	case PR_READ_FULL_STATUS:
+		scst_pr_read_full_status(cmd, buffer, buffer_size);
+		break;
+	default:
+		PRINT_ERROR("Unsupported action %x", action);
+		mutex_unlock(&dev->dev_pr_mutex);
+		goto out_err;
+	}
+
+	mutex_unlock(&dev->dev_pr_mutex);
+
+out_compl:
+	cmd->completed = 1;
+	scst_put_full_buf(cmd, buffer);
+
+out_done:
+	cmd->scst_cmd_done(cmd, SCST_CMD_STATE_DEFAULT, SCST_CONTEXT_SAME);
+	TRACE_EXIT_RES(SCST_EXEC_COMPLETED);
+	return SCST_EXEC_COMPLETED;
+
+out_need_thread:
+	TRACE_EXIT_RES(SCST_EXEC_NEED_THREAD);
+	return SCST_EXEC_NEED_THREAD;
+
+out_err:
+	scst_set_cmd_error(cmd,
+		   SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
+	goto out_compl;
+}
+
+/* No locks, no IRQ or IRQ-disabled context allowed */
+static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
+{
+	int res = SCST_EXEC_COMPLETED;
+	int rc;
+	struct scst_device *dev;
+	struct scst_tgt_dev *tgt_dev;
+	struct scst_session *session;
+	int action;
+	uint8_t *buffer;
+	int buffer_size;
+
+	TRACE_ENTRY();
+
+	if (scst_cmd_atomic(cmd)) {
+		res = SCST_EXEC_NEED_THREAD;
+		goto out;
+	}
+
+	dev = cmd->dev;
+	tgt_dev = cmd->tgt_dev;
+	session = cmd->sess;
+
+	rc = scst_check_local_events(cmd);
+	if (unlikely(rc != 0))
+		goto out;
+
+	action = cmd->cdb[1] & 0x1f;
+
+	TRACE(TRACE_SCSI, "PR action %x for '%s' (LUN %llx) from '%s'", action,
+	    dev->virt_name, tgt_dev->lun, session->initiator_name);
+
+	if (dev->dev_reserved) {
+		TRACE_PR("PR command rejected, because device %s holds regular "
+			"reservation", dev->virt_name);
+		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
+		goto out;
+	}
+
+	/* Check scope */
+	if ((action != PR_REGISTER) && (action != PR_REGISTER_AND_IGNORE) &&
+	    (action != PR_CLEAR) && ((cmd->cdb[2] & 0x0f) >> 4) != SCOPE_LU) {
+		TRACE_PR("Scope must be SCOPE_LU for action %x", action);
+		scst_set_cmd_error(cmd,
+			SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
+		goto out;
+	}
+
+	/* Check SPEC_I_PT */
+	if ((action != PR_REGISTER) && ((buffer[20] >> 3) & 0x01)) {
+		TRACE_PR("SPEC_I_PT must be zero for action %x", action);
+		scst_set_cmd_error(cmd, SCST_LOAD_SENSE(
+					scst_sense_invalid_field_in_cdb));
+		goto out;
+	}
+
+	/* Check if tgt_dev already registered */
+	if ((action != PR_REGISTER) && (action != PR_REGISTER_AND_IGNORE) &&
+	    (tgt_dev->registrant == NULL)) {
+		TRACE_PR("'%s' not registered", cmd->sess->initiator_name);
+		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
+		goto out;
+	}
+
+	buffer_size = scst_get_full_buf(cmd, &buffer);
+	if (unlikely(buffer_size == 0))
+		goto out;
+
+	mutex_lock(&dev->dev_pr_mutex);
+
+	switch (action) {
+	case PR_REGISTER:
+		scst_pr_register(cmd, buffer, buffer_size);
+		break;
+	case PR_RESERVE:
+		scst_pr_reserve(cmd, buffer, buffer_size);
+		break;
+	case PR_RELEASE:
+		scst_pr_release(cmd, buffer, buffer_size);
+		break;
+	case PR_CLEAR:
+		scst_pr_clear(cmd, buffer, buffer_size);
+		break;
+	case PR_PREEMPT:
+		scst_pr_preempt(cmd, buffer, buffer_size);
+		break;
+	case PR_PREEMPT_AND_ABORT:
+		scst_pr_preempt_and_abort(cmd, buffer, buffer_size);
+		break;
+	case PR_REGISTER_AND_IGNORE:
+		scst_pr_register_and_ignore(cmd, buffer, buffer_size);
+		break;
+	case PR_REGISTER_AND_MOVE:
+		scst_pr_register_and_move(cmd, buffer, buffer_size);
+		break;
+	default:
+		scst_set_cmd_error(cmd,
+			SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
+		goto out_unlock;
+	}
+
+	if ((dev->handler->pr_cmds_notifications)
+			&& (SAM_STAT_GOOD == cmd->status))
+		res = SCST_EXEC_NOT_COMPLETED;
+
+out_unlock:
+	mutex_unlock(&dev->dev_pr_mutex);
+
+	scst_put_full_buf(cmd, buffer);
+
+out:
+	if (SCST_EXEC_COMPLETED == res) {
+		cmd->completed = 1;
+		cmd->scst_cmd_done(cmd, SCST_CMD_STATE_DEFAULT,
+				SCST_CONTEXT_SAME);
+	}
+	TRACE_EXIT_RES(res);
+	return res;
 }
 
 /* No locks, no IRQ or IRQ-disabled context allowed */
@@ -1843,6 +2082,14 @@ int scst_check_local_events(struct scst_cmd *cmd)
 	if (unlikely(test_bit(SCST_TGT_DEV_RESERVED,
 			      &tgt_dev->tgt_dev_flags))) {
 		if ((cmd->op_flags & SCST_REG_RESERVE_ALLOWED) == 0) {
+			scst_set_cmd_error_status(cmd,
+				SAM_STAT_RESERVATION_CONFLICT);
+			goto out_complete;
+		}
+	}
+
+	if (dev->pr_is_set) {
+		if (unlikely(!scst_pr_is_cmd_allowed(cmd))) {
 			scst_set_cmd_error_status(cmd,
 				SAM_STAT_RESERVATION_CONFLICT);
 			goto out_complete;
@@ -2191,6 +2438,12 @@ static int scst_do_local_exec(struct scst_cmd *cmd)
 	case RELEASE:
 	case RELEASE_10:
 		res = scst_release_local(cmd);
+		break;
+	case PERSISTENT_RESERVE_IN:
+		res = scst_persistent_reserve_in_local(cmd);
+		break;
+	case PERSISTENT_RESERVE_OUT:
+		res = scst_persistent_reserve_out_local(cmd);
 		break;
 	case REPORT_LUNS:
 		res = scst_report_luns_local(cmd);
@@ -5561,13 +5814,23 @@ static int scst_init_session(struct scst_session *sess)
 	TRACE_DBG("Adding sess %p to tgt->sess_list", sess);
 	list_add_tail(&sess->sess_list_entry, &sess->tgt->sess_list);
 
+	res = sess->tgt->tgtt->get_initiator_port_transport_id(sess,
+			&sess->transport_id);
+	if (res != 0) {
+		PRINT_ERROR("Unable to make initiator %s port transport id",
+			sess->initiator_name);
+		goto failed;
+	}
+
 	res = scst_sess_alloc_tgt_devs(sess);
 
 	/* Let's always create session's sysfs to simplify error recovery */
+
 	rc = scst_create_sess_sysfs(sess);
 	if (res == 0)
 		res = rc;
 
+failed:
 	mutex_unlock(&scst_mutex);
 
 	if (sess->init_result_fn) {
@@ -5623,7 +5886,7 @@ restart:
 }
 
 struct scst_session *scst_register_session(struct scst_tgt *tgt, int atomic,
-	const char *initiator_name, void *data,
+	const char *initiator_name, void *tgt_priv, void *data,
 	void (*result_fn) (struct scst_session *sess, void *data, int result))
 {
 	struct scst_session *sess;
@@ -5636,6 +5899,8 @@ struct scst_session *scst_register_session(struct scst_tgt *tgt, int atomic,
 		initiator_name);
 	if (sess == NULL)
 		goto out;
+
+	scst_sess_set_tgt_priv(sess, tgt_priv);
 
 	scst_sess_get(sess); /* one for registered session */
 	scst_sess_get(sess); /* one held until sess is inited */

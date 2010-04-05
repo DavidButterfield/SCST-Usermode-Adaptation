@@ -1351,8 +1351,25 @@ static void vdisk_exec_inquiry(struct scst_cmd *cmd)
 
 			num += 4;
 
-			/* Binary */
-			buf[num + 0] = 0x01;
+			/*
+			 * Relative target port identifier
+			 */
+			buf[num + 0] = 0x01; /* binary */
+			/* Relative target port id */
+			buf[num + 1] = 0x10 | 0x04;
+
+			*(__be16 *)(&buf[num + 4]) =
+				__cpu_to_be16(cmd->tgt->rel_tgt_id);
+
+			buf[num + 3] = 8;
+			num += buf[num + 3];
+
+			num += 4;
+
+			/*
+			 * IEEE id
+			 */
+			buf[num + 0] = 0x01; /* binary */
 
 			/* EUI-64 */
 			buf[num + 1] = 0x02;

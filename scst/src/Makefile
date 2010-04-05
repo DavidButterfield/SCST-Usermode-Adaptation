@@ -43,6 +43,7 @@ scst-y        += scst_proc.o
 #scst-y        += scst_sysfs.o
 scst-y        += scst_mem.o
 scst-y        += scst_debug.o
+scst-y        += scst_pres.o
 obj-$(CONFIG_SCST)   += scst.o dev_handlers/
 
 obj-$(BUILD_DEV) += $(DEV_HANDLERS_DIR)/
@@ -86,6 +87,7 @@ ifneq ($(MOD_VERS),)
 	install -m 644 Module.symvers $(INSTALL_DIR_H)
 endif
 	-/sbin/depmod -a $(KVER)
+	mkdir -p /var/lib/scst
 	@echo "****************************************************************"
 	@echo "*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*"
 	@echo "*!!                                                          !!*"

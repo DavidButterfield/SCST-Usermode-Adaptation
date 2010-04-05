@@ -35,6 +35,8 @@
 #include "scst_priv.h"
 #include "scst_mem.h"
 
+#include "scst_pres.h"
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 struct scsi_io_context {
 	unsigned int full_cdb_used:1;
@@ -159,17 +161,22 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0x00, "MMMMMMMMMMMMMMMM", "TEST UNIT READY",
 	 /* let's be HQ to don't look dead under high load */
 	 SCST_DATA_NONE, SCST_SMALL_TIMEOUT|SCST_IMPLICIT_HQ|
-			 SCST_REG_RESERVE_ALLOWED,
+			 SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|
+			 SCST_EXCL_ACCESS_ALLOWED,
 	 0, get_trans_len_none},
 	{0x01, " M              ", "REWIND",
 	 SCST_DATA_NONE, SCST_LONG_TIMEOUT, 0, get_trans_len_none},
 	{0x01, "O V OO OO       ", "REZERO UNIT",
-	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
+	 SCST_DATA_NONE, SCST_WRITE_EXCL_ALLOWED,
+	 0, get_trans_len_none},
 	{0x02, "VVVVVV  V       ", "REQUEST BLOCK ADDR",
 	 SCST_DATA_NONE, SCST_SMALL_TIMEOUT, 0, get_trans_len_none},
 	{0x03, "MMMMMMMMMMMMMMMM", "REQUEST SENSE",
 	 SCST_DATA_READ, SCST_SMALL_TIMEOUT|SCST_SKIP_UA|SCST_LOCAL_CMD|
-			 SCST_REG_RESERVE_ALLOWED,
+			 SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|
+			 SCST_EXCL_ACCESS_ALLOWED,
 	 4, get_trans_len_1},
 	{0x04, "M    O O        ", "FORMAT UNIT",
 	 SCST_DATA_WRITE, SCST_LONG_TIMEOUT|SCST_UNKNOWN_LENGTH|SCST_WRITE_MEDIUM,
@@ -177,16 +184,23 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0x04, "  O             ", "FORMAT",
 	 SCST_DATA_NONE, SCST_WRITE_MEDIUM, 0, get_trans_len_none},
 	{0x05, "VMVVVV  V       ", "READ BLOCK LIMITS",
-	 SCST_DATA_READ, SCST_SMALL_TIMEOUT|SCST_REG_RESERVE_ALLOWED,
+	 SCST_DATA_READ, SCST_SMALL_TIMEOUT|
+			 SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|
+			 SCST_EXCL_ACCESS_ALLOWED,
 	 0, get_trans_len_block_limit},
 	{0x07, "        O       ", "INITIALIZE ELEMENT STATUS",
 	 SCST_DATA_NONE, SCST_LONG_TIMEOUT, 0, get_trans_len_none},
 	{0x07, "OVV O  OV       ", "REASSIGN BLOCKS",
 	 SCST_DATA_NONE, SCST_WRITE_MEDIUM, 0, get_trans_len_none},
 	{0x08, "O               ", "READ(6)",
-	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED, 4, get_trans_len_1_256},
+	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 4, get_trans_len_1_256},
 	{0x08, " MV OO OV       ", "READ(6)",
-	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED, 2, get_trans_len_3},
+	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 2, get_trans_len_3},
 	{0x08, "         M      ", "GET MESSAGE(6)",
 	 SCST_DATA_READ, FLAG_NONE, 2, get_trans_len_3},
 	{0x08, "    O           ", "RECEIVE",
@@ -215,30 +229,41 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	 SCST_DATA_NONE, SCST_LONG_TIMEOUT|SCST_WRITE_MEDIUM,
 	 0, get_trans_len_none},
 	{0x0F, "VOVVVV  V       ", "READ REVERSE",
-	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED, 2, get_trans_len_3},
+	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 2, get_trans_len_3},
 	{0x10, "VM V V          ", "WRITE FILEMARKS",
 	 SCST_DATA_NONE, SCST_WRITE_MEDIUM, 0, get_trans_len_none},
 	{0x10, "  O O           ", "SYNCHRONIZE BUFFER",
 	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
 	{0x11, "VMVVVV          ", "SPACE",
-	 SCST_DATA_NONE, SCST_LONG_TIMEOUT, 0, get_trans_len_none},
+	 SCST_DATA_NONE, SCST_LONG_TIMEOUT|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 0, get_trans_len_none},
 	{0x12, "MMMMMMMMMMMMMMMM", "INQUIRY",
 	 SCST_DATA_READ, SCST_SMALL_TIMEOUT|SCST_IMPLICIT_HQ|SCST_SKIP_UA|
-			 SCST_REG_RESERVE_ALLOWED,
+			 SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|SCST_EXCL_ACCESS_ALLOWED,
 	 4, get_trans_len_1},
 	{0x13, "VOVVVV          ", "VERIFY(6)",
 	 SCST_DATA_NONE, SCST_TRANSFER_LEN_TYPE_FIXED|
-			 SCST_VERIFY_BYTCHK_MISMATCH_ALLOWED,
+			 SCST_VERIFY_BYTCHK_MISMATCH_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED,
 	 2, get_trans_len_3},
 	{0x14, "VOOVVV          ", "RECOVER BUFFERED DATA",
-	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED, 2, get_trans_len_3},
+	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 2, get_trans_len_3},
 	{0x15, "OMOOOOOOOOOOOOOO", "MODE SELECT(6)",
 	 SCST_DATA_WRITE, SCST_LOCAL_CMD, 4, get_trans_len_1},
 	{0x16, "MMMMMMMMMMMMMMMM", "RESERVE",
-	 SCST_DATA_NONE, SCST_SMALL_TIMEOUT|SCST_LOCAL_CMD,
+	 SCST_DATA_NONE, SCST_SMALL_TIMEOUT|SCST_LOCAL_CMD|
+			 SCST_WRITE_EXCL_ALLOWED|SCST_EXCL_ACCESS_ALLOWED,
 	 0, get_trans_len_none},
 	{0x17, "MMMMMMMMMMMMMMMM", "RELEASE",
-	 SCST_DATA_NONE, SCST_SMALL_TIMEOUT|SCST_LOCAL_CMD|SCST_REG_RESERVE_ALLOWED,
+	 SCST_DATA_NONE, SCST_SMALL_TIMEOUT|SCST_LOCAL_CMD|
+			 SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|SCST_EXCL_ACCESS_ALLOWED,
 	 0, get_trans_len_none},
 	{0x18, "OOOOOOOO        ", "COPY",
 	 SCST_DATA_WRITE, SCST_LONG_TIMEOUT, 2, get_trans_len_3},
@@ -271,12 +296,17 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0x24, "V   VVM         ", "SET WINDOW",
 	 SCST_DATA_WRITE, FLAG_NONE, 6, get_trans_len_3},
 	{0x25, "M   MM M        ", "READ CAPACITY",
-	 SCST_DATA_READ, SCST_IMPLICIT_HQ|SCST_REG_RESERVE_ALLOWED,
+	 SCST_DATA_READ, SCST_IMPLICIT_HQ|
+			 SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|
+			 SCST_EXCL_ACCESS_ALLOWED,
 	 0, get_trans_len_read_capacity},
 	{0x25, "      O         ", "GET WINDOW",
 	 SCST_DATA_READ, FLAG_NONE, 6, get_trans_len_3},
 	{0x28, "M   MMMM        ", "READ(10)",
-	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED, 7, get_trans_len_2},
+	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 7, get_trans_len_2},
 	{0x28, "         O      ", "GET MESSAGE(10)",
 	 SCST_DATA_READ, FLAG_NONE, 7, get_trans_len_2},
 	{0x29, "V   VV O        ", "READ GENERATION",
@@ -289,7 +319,9 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0x2A, "      O         ", "SEND(10)",
 	 SCST_DATA_WRITE, FLAG_NONE, 7, get_trans_len_2},
 	{0x2B, " O              ", "LOCATE",
-	 SCST_DATA_NONE, SCST_LONG_TIMEOUT, 0, get_trans_len_none},
+	 SCST_DATA_NONE, SCST_LONG_TIMEOUT|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 0, get_trans_len_none},
 	{0x2B, "        O       ", "POSITION TO ELEMENT",
 	 SCST_DATA_NONE, SCST_LONG_TIMEOUT, 0, get_trans_len_none},
 	{0x2B, "O   OO O        ", "SEEK(10)",
@@ -304,22 +336,27 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	 7, get_trans_len_2},
 	{0x2F, "O   OO O        ", "VERIFY(10)",
 	 SCST_DATA_NONE, SCST_TRANSFER_LEN_TYPE_FIXED|
-			 SCST_VERIFY_BYTCHK_MISMATCH_ALLOWED,
+			 SCST_VERIFY_BYTCHK_MISMATCH_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED,
 	 7, get_trans_len_2},
 	{0x33, "O   OO O        ", "SET LIMITS(10)",
 	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
 	{0x34, " O              ", "READ POSITION",
-	 SCST_DATA_READ, SCST_SMALL_TIMEOUT, 7, get_trans_len_read_pos},
+	 SCST_DATA_READ, SCST_SMALL_TIMEOUT|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 7, get_trans_len_read_pos},
 	{0x34, "      O         ", "GET DATA BUFFER STATUS",
 	 SCST_DATA_READ, FLAG_NONE, 7, get_trans_len_2},
 	{0x34, "O   OO O        ", "PRE-FETCH",
-	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
+	 SCST_DATA_NONE, SCST_WRITE_EXCL_ALLOWED,
+	 0, get_trans_len_none},
 	{0x35, "O   OO O        ", "SYNCHRONIZE CACHE",
 	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
 	{0x36, "O   OO O        ", "LOCK UNLOCK CACHE",
 	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
 	{0x37, "O      O        ", "READ DEFECT DATA(10)",
-	 SCST_DATA_READ, FLAG_NONE, 8, get_trans_len_1},
+	 SCST_DATA_READ, SCST_WRITE_EXCL_ALLOWED,
+	 8, get_trans_len_1},
 	{0x37, "        O       ", "INIT ELEMENT STATUS WRANGE",
 	 SCST_DATA_NONE, SCST_LONG_TIMEOUT, 0, get_trans_len_none},
 	{0x38, "    O  O        ", "MEDIUM SCAN",
@@ -349,7 +386,10 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0x43, "     O          ", "READ TOC/PMA/ATIP",
 	 SCST_DATA_READ, FLAG_NONE, 7, get_trans_len_2},
 	{0x44, " M              ", "REPORT DENSITY SUPPORT",
-	 SCST_DATA_READ, SCST_REG_RESERVE_ALLOWED, 7, get_trans_len_2},
+	 SCST_DATA_READ, SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|
+			 SCST_EXCL_ACCESS_ALLOWED,
+	 7, get_trans_len_2},
 	{0x44, "     O          ", "READ HEADER",
 	 SCST_DATA_READ, FLAG_NONE, 7, get_trans_len_2},
 	{0x45, "     O          ", "PLAY AUDIO(10)",
@@ -369,7 +409,10 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0x4C, "OOOOOOOOOOOOOOOO", "LOG SELECT",
 	 SCST_DATA_WRITE, SCST_SMALL_TIMEOUT, 7, get_trans_len_2},
 	{0x4D, "OOOOOOOOOOOOOOOO", "LOG SENSE",
-	 SCST_DATA_READ, SCST_SMALL_TIMEOUT|SCST_REG_RESERVE_ALLOWED,
+	 SCST_DATA_READ, SCST_SMALL_TIMEOUT|
+			 SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|
+			 SCST_EXCL_ACCESS_ALLOWED,
 	 7, get_trans_len_2},
 	{0x4E, "     O          ", "STOP PLAY/SCAN",
 	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
@@ -391,7 +434,8 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	 SCST_DATA_NONE, SCST_SMALL_TIMEOUT|SCST_LOCAL_CMD,
 	 0, get_trans_len_none},
 	{0x57, "OOOOOOOOOOOOOOOO", "RELEASE(10)",
-	 SCST_DATA_NONE, SCST_SMALL_TIMEOUT|SCST_LOCAL_CMD|SCST_REG_RESERVE_ALLOWED,
+	 SCST_DATA_NONE, SCST_SMALL_TIMEOUT|SCST_LOCAL_CMD|
+			 SCST_REG_RESERVE_ALLOWED,
 	 0, get_trans_len_none},
 	{0x58, "     O          ", "REPAIR TRACK",
 	 SCST_DATA_NONE, SCST_WRITE_MEDIUM, 0, get_trans_len_none},
@@ -404,9 +448,17 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0x5D, "     O          ", "SEND CUE SHEET",
 	 SCST_DATA_WRITE, FLAG_NONE, 6, get_trans_len_3},
 	{0x5E, "OOOOO OOOO      ", "PERSISTENT RESERV IN",
-	 SCST_DATA_READ, FLAG_NONE, 5, get_trans_len_4},
+	 SCST_DATA_READ, SCST_SMALL_TIMEOUT|
+			 SCST_LOCAL_CMD|
+			 SCST_WRITE_EXCL_ALLOWED|
+			 SCST_EXCL_ACCESS_ALLOWED,
+	 5, get_trans_len_4},
 	{0x5F, "OOOOO OOOO      ", "PERSISTENT RESERV OUT",
-	 SCST_DATA_WRITE, FLAG_NONE, 5, get_trans_len_4},
+	 SCST_DATA_WRITE, SCST_SMALL_TIMEOUT|
+			 SCST_LOCAL_CMD|
+			 SCST_WRITE_EXCL_ALLOWED|
+			 SCST_EXCL_ACCESS_ALLOWED,
+	 5, get_trans_len_4},
 
 	/* 16-bytes length CDB */
 	{0x80, "O   OO O        ", "XDWRITE EXTENDED",
@@ -422,11 +474,19 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0x84, "OOOOOOOOOOOOOOOO", "RECEIVE COPY RESULT",
 	 SCST_DATA_WRITE, FLAG_NONE, 10, get_trans_len_4},
 	{0x86, "OOOOOOOOOO      ", "ACCESS CONTROL IN",
-	 SCST_DATA_NONE, SCST_REG_RESERVE_ALLOWED, 0, get_trans_len_none},
+	 SCST_DATA_NONE, SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|
+			 SCST_EXCL_ACCESS_ALLOWED,
+	 0, get_trans_len_none},
 	{0x87, "OOOOOOOOOO      ", "ACCESS CONTROL OUT",
-	 SCST_DATA_NONE, SCST_REG_RESERVE_ALLOWED, 0, get_trans_len_none},
+	 SCST_DATA_NONE, SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|
+			 SCST_EXCL_ACCESS_ALLOWED,
+	 0, get_trans_len_none},
 	{0x88, "M   MMMM        ", "READ(16)",
-	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED, 10, get_trans_len_4},
+	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 10, get_trans_len_4},
 	{0x8A, "O   OO O        ", "WRITE(16)",
 	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|SCST_WRITE_MEDIUM,
 	 10, get_trans_len_4},
@@ -442,15 +502,20 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 			 SCST_VERIFY_BYTCHK_MISMATCH_ALLOWED,
 	 10, get_trans_len_4},
 	{0x90, "O   OO O        ", "PRE-FETCH(16)",
-	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
+	 SCST_DATA_NONE, SCST_WRITE_EXCL_ALLOWED,
+	 0, get_trans_len_none},
 	{0x91, "O   OO O        ", "SYNCHRONIZE CACHE(16)",
 	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
 	{0x91, " M              ", "SPACE(16)",
-	 SCST_DATA_NONE, SCST_LONG_TIMEOUT, 0, get_trans_len_none},
+	 SCST_DATA_NONE, SCST_LONG_TIMEOUT|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 0, get_trans_len_none},
 	{0x92, "O   OO O        ", "LOCK UNLOCK CACHE(16)",
 	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
 	{0x92, " O              ", "LOCATE(16)",
-	 SCST_DATA_NONE, SCST_LONG_TIMEOUT, 0, get_trans_len_none},
+	 SCST_DATA_NONE, SCST_LONG_TIMEOUT|
+			 SCST_WRITE_EXCL_ALLOWED,
+	 0, get_trans_len_none},
 	{0x93, "O    O          ", "WRITE SAME(16)",
 	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|SCST_WRITE_MEDIUM,
 	 10, get_trans_len_4},
@@ -464,14 +529,17 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0xA0, "VVVVVVVVVV  M   ", "REPORT LUNS",
 	 SCST_DATA_READ, SCST_SMALL_TIMEOUT|SCST_IMPLICIT_HQ|SCST_SKIP_UA|
 			 SCST_FULLY_LOCAL_CMD|SCST_LOCAL_CMD|
-			 SCST_REG_RESERVE_ALLOWED,
+			 SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|SCST_EXCL_ACCESS_ALLOWED,
 	 6, get_trans_len_4},
 	{0xA1, "     O          ", "BLANK",
 	 SCST_DATA_NONE, SCST_LONG_TIMEOUT, 0, get_trans_len_none},
 	{0xA3, "     O          ", "SEND KEY",
 	 SCST_DATA_WRITE, FLAG_NONE, 8, get_trans_len_2},
 	{0xA3, "OOOOO OOOO      ", "REPORT DEVICE IDENTIDIER",
-	 SCST_DATA_READ, SCST_REG_RESERVE_ALLOWED, 6, get_trans_len_4},
+	 SCST_DATA_READ, SCST_REG_RESERVE_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED|SCST_EXCL_ACCESS_ALLOWED,
+	 6, get_trans_len_4},
 	{0xA3, "            M   ", "MAINTENANCE(IN)",
 	 SCST_DATA_READ, FLAG_NONE, 6, get_trans_len_4},
 	{0xA4, "     O          ", "REPORT KEY",
@@ -508,7 +576,8 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	 6, get_trans_len_4},
 	{0xAF, "O   OO O        ", "VERIFY(12)",
 	 SCST_DATA_NONE, SCST_TRANSFER_LEN_TYPE_FIXED|
-			 SCST_VERIFY_BYTCHK_MISMATCH_ALLOWED,
+			 SCST_VERIFY_BYTCHK_MISMATCH_ALLOWED|
+			 SCST_WRITE_EXCL_ALLOWED,
 	 6, get_trans_len_4},
 #if 0 /* No need to support at all */
 	{0xB0, "    OO O        ", "SEARCH DATA HIGH(12)",
@@ -527,7 +596,8 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0xB6, "     M         ", "SET STREAMING",
 	 SCST_DATA_WRITE, FLAG_NONE, 9, get_trans_len_2},
 	{0xB7, "       O        ", "READ DEFECT DATA(12)",
-	 SCST_DATA_READ, FLAG_NONE, 9, get_trans_len_1},
+	 SCST_DATA_READ, SCST_WRITE_EXCL_ALLOWED,
+	 9, get_trans_len_1},
 	{0xB8, "        O       ", "READ ELEMENT STATUS",
 	 SCST_DATA_READ, FLAG_NONE, 7, get_trans_len_3_read_elem_stat},
 	{0xB9, "     O          ", "READ CD MSF",
@@ -1896,7 +1966,8 @@ restart:
 	return;
 }
 
-bool scst_is_relative_target_port_id_unique(uint16_t id, struct scst_tgt *t)
+bool scst_is_relative_target_port_id_unique(uint16_t id,
+	const struct scst_tgt *t)
 {
 	bool res = true;
 	struct scst_tgt_template *tgtt;
@@ -2766,6 +2837,8 @@ static struct scst_tgt_dev *scst_alloc_add_tgt_dev(struct scst_session *sess,
 	list_add_tail(&tgt_dev->sess_tgt_dev_list_entry,
 		      sess_tgt_dev_list_head);
 
+	scst_pr_init_tgt_dev(tgt_dev);
+
 out:
 	TRACE_EXIT();
 	return tgt_dev;
@@ -2823,6 +2896,7 @@ static void scst_free_tgt_dev(struct scst_tgt_dev *tgt_dev)
 	list_del(&tgt_dev->sess_tgt_dev_list_entry);
 
 	scst_clear_reservation(tgt_dev);
+	scst_pr_clear_tgt_dev(tgt_dev);
 	scst_free_all_UA(tgt_dev);
 
 	if (dev->handler && dev->handler->detach_tgt) {
@@ -4304,6 +4378,100 @@ out:
 }
 EXPORT_SYMBOL(scst_copy_sg);
 
+int scst_get_full_buf(struct scst_cmd *cmd, uint8_t **buf)
+{
+	int res = 0;
+
+	TRACE_ENTRY();
+
+	if (buf == NULL) {
+		res = -EINVAL;
+		goto out;
+	}
+
+	EXTRACHECKS_BUG_ON(cmd->sg_buff_vmallocated);
+
+	if (scst_get_buf_count(cmd) > 1) {
+		int len;
+		uint8_t *tmp_buf;
+		int full_size;
+
+		full_size = 0;
+		len = scst_get_buf_first(cmd, &tmp_buf);
+		while (len > 0) {
+			full_size += len;
+			scst_put_buf(cmd, tmp_buf);
+			len = scst_get_buf_next(cmd, &tmp_buf);
+		}
+
+		*buf = vmalloc(full_size);
+		if (*buf == NULL) {
+			TRACE(TRACE_OUT_OF_MEM, "vmalloc() failed for opcode "
+				"%x", cmd->cdb[0]);
+			res = -ENOMEM;
+			goto out;
+		}
+		cmd->sg_buff_vmallocated = 1;
+
+		if (scst_cmd_get_data_direction(cmd) == SCST_DATA_WRITE) {
+			uint8_t *buf_ptr;
+
+			buf_ptr = *buf;
+
+			len = scst_get_buf_first(cmd, &tmp_buf);
+			while (len > 0) {
+				memcpy(buf_ptr, tmp_buf, len);
+				buf_ptr += len;
+
+				scst_put_buf(cmd, tmp_buf);
+				len = scst_get_buf_next(cmd, &tmp_buf);
+			}
+		}
+		res = full_size;
+	} else
+		res = scst_get_buf_first(cmd, buf);
+
+out:
+	TRACE_EXIT_RES(res);
+	return res;
+}
+
+void scst_put_full_buf(struct scst_cmd *cmd, uint8_t *buf)
+{
+	TRACE_ENTRY();
+
+	if (buf == NULL)
+		goto out;
+
+	if (cmd->sg_buff_vmallocated) {
+		if (scst_cmd_get_data_direction(cmd) == SCST_DATA_READ) {
+			int len;
+			uint8_t *tmp_buf, *buf_p;
+
+			buf_p = buf;
+
+			len = scst_get_buf_first(cmd, &tmp_buf);
+			while (len > 0) {
+				memcpy(tmp_buf, buf_p, len);
+				buf_p += len;
+
+				scst_put_buf(cmd, tmp_buf);
+				len = scst_get_buf_next(cmd, &tmp_buf);
+			}
+
+		}
+
+		cmd->sg_buff_vmallocated = 0;
+
+		vfree(buf);
+	} else
+		scst_put_buf(cmd, buf);
+
+out:
+	TRACE_EXIT();
+	return;
+}
+
 static const int SCST_CDB_LENGTH[8] = { 6, 10, 10, -1, 16, 12, -1, -1 };
 
 #define SCST_CDB_GROUP(opcode)   ((opcode >> 5) & 0x7)
@@ -4411,14 +4579,16 @@ static int get_trans_len_prevent_allow_medium_removal(struct scst_cmd *cmd,
 	uint8_t off)
 {
 	if ((cmd->cdb[4] & 3) == 0)
-		cmd->op_flags |= SCST_REG_RESERVE_ALLOWED;
+		cmd->op_flags |= SCST_REG_RESERVE_ALLOWED |
+			SCST_WRITE_EXCL_ALLOWED | SCST_EXCL_ACCESS_ALLOWED;
 	return 0;
 }
 
 static int get_trans_len_start_stop(struct scst_cmd *cmd, uint8_t off)
 {
 	if ((cmd->cdb[4] & 0xF1) == 0x1)
-		cmd->op_flags |= SCST_REG_RESERVE_ALLOWED;
+		cmd->op_flags |= SCST_REG_RESERVE_ALLOWED |
+			SCST_WRITE_EXCL_ALLOWED | SCST_EXCL_ACCESS_ALLOWED;
 	return 0;
 }
 
@@ -4432,8 +4602,8 @@ static int get_trans_len_3_read_elem_stat(struct scst_cmd *cmd, uint8_t off)
 	cmd->bufflen |= ((u32)p[2]);
 
 	if ((cmd->cdb[6] & 0x2) == 0x2)
-		cmd->op_flags |= SCST_REG_RESERVE_ALLOWED;
-
+		cmd->op_flags |= SCST_REG_RESERVE_ALLOWED |
+			SCST_WRITE_EXCL_ALLOWED | SCST_EXCL_ACCESS_ALLOWED;
 	return 0;
 }
 

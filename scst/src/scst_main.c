@@ -32,6 +32,7 @@
 #include "scst.h"
 #include "scst_priv.h"
 #include "scst_mem.h"
+#include "scst_pres.h"
 
 #if defined(CONFIG_HIGHMEM4G) || defined(CONFIG_HIGHMEM64G)
 #warning "HIGHMEM kernel configurations are fully supported, but not\
@@ -195,6 +196,13 @@ int __scst_register_target_template(struct scst_tgt_template *vtt,
 	if (!vtt->xmit_response) {
 		PRINT_ERROR("Target driver %s must have "
 			"xmit_response() method.", vtt->name);
+		res = -EINVAL;
+		goto out_err;
+	}
+
+	if (!vtt->get_initiator_port_transport_id) {
+		PRINT_ERROR("Target driver %s must have "
+			"get_initiator_port_transport_id() method.", vtt->name);
 		res = -EINVAL;
 		goto out_err;
 	}
@@ -367,6 +375,7 @@ struct scst_tgt *scst_register(struct scst_tgt_template *vtt,
 		int len = strlen(target_name) +
 			strlen(SCST_DEFAULT_ACG_NAME) + 1 + 1;
 
+
 		tgt->default_group_name = kmalloc(len, GFP_KERNEL);
 		if (tgt->default_group_name == NULL) {
 			TRACE(TRACE_OUT_OF_MEM, "Allocation of default "
@@ -409,6 +418,14 @@ struct scst_tgt *scst_register(struct scst_tgt_template *vtt,
 		sprintf(tgt->tgt_name, "%s%s%d", vtt->name,
 			SCST_DEFAULT_TGT_NAME_SUFFIX, tgt_num++);
 	}
+
+	rc = gen_relative_target_port_id(&tgt->rel_tgt_id);
+	if (rc != 0)
+#ifdef CONFIG_SCST_PROC
+		goto out_free_def_name;
+#else
+		goto out_unlock_resume;
+#endif
 
 	tgt->default_acg = scst_alloc_add_acg(NULL, tgt->tgt_name);
 	if (tgt->default_acg == NULL)
@@ -991,6 +1008,8 @@ int scst_register_virtual_device(struct scst_dev_type *dev_handler,
 		goto out_free_del;
 	}
 
+	scst_pr_init_dev(dev);
+
 out_up:
 	mutex_unlock(&scst_mutex);
 
@@ -1046,6 +1065,8 @@ void scst_unregister_virtual_device(int id)
 				 dev_acg_dev_list_entry) {
 		scst_acg_remove_dev(acg_dev->acg, dev, true);
 	}
+
+	scst_pr_clear_dev(dev);
 
 	scst_assign_dev_handler(dev, &scst_null_devtype);
 
@@ -2042,6 +2063,10 @@ static int __init init_scst(void)
 
 #ifdef CONFIG_SCST_PROC
 	res = scst_proc_init_module();
+	if (res != 0)
+		goto out_thread_free;
+#else
+	res = scst_pr_check_pr_path();
 	if (res != 0)
 		goto out_thread_free;
 #endif

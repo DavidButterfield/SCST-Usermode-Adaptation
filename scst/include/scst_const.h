@@ -128,18 +128,20 @@ enum scst_cmd_queue_type {
  ** CDB flags
  *************************************************************/
 enum scst_cdb_flags {
-	SCST_TRANSFER_LEN_TYPE_FIXED =		0x001,
-	SCST_SMALL_TIMEOUT =			0x002,
-	SCST_LONG_TIMEOUT =			0x004,
-	SCST_UNKNOWN_LENGTH =			0x008,
-	SCST_INFO_VALID =			0x010, /* must be single bit */
-	SCST_VERIFY_BYTCHK_MISMATCH_ALLOWED =	0x020,
-	SCST_IMPLICIT_HQ =			0x040,
-	SCST_SKIP_UA =				0x080,
-	SCST_WRITE_MEDIUM =			0x100,
-	SCST_LOCAL_CMD =			0x200,
-	SCST_FULLY_LOCAL_CMD =			0x400,
-	SCST_REG_RESERVE_ALLOWED =		0x800,
+	SCST_TRANSFER_LEN_TYPE_FIXED =		0x0001,
+	SCST_SMALL_TIMEOUT =			0x0002,
+	SCST_LONG_TIMEOUT =			0x0004,
+	SCST_UNKNOWN_LENGTH =			0x0008,
+	SCST_INFO_VALID =			0x0010, /* must be single bit */
+	SCST_VERIFY_BYTCHK_MISMATCH_ALLOWED =	0x0020,
+	SCST_IMPLICIT_HQ =			0x0040,
+	SCST_SKIP_UA =				0x0080,
+	SCST_WRITE_MEDIUM =			0x0100,
+	SCST_LOCAL_CMD =			0x0200,
+	SCST_FULLY_LOCAL_CMD =			0x0400,
+	SCST_REG_RESERVE_ALLOWED =		0x0800,
+	SCST_WRITE_EXCL_ALLOWED =		0x1000,
+	SCST_EXCL_ACCESS_ALLOWED =		0x2000,
 };
 
 /*************************************************************
@@ -188,6 +190,9 @@ enum scst_cdb_flags {
 #define scst_sense_invalid_field_in_cdb		ILLEGAL_REQUEST, 0x24, 0
 #define scst_sense_invalid_field_in_parm_list	ILLEGAL_REQUEST, 0x26, 0
 #define scst_sense_parameter_value_invalid	ILLEGAL_REQUEST, 0x26, 2
+#define scst_sense_invalid_release		ILLEGAL_REQUEST, 0x26, 4
+#define scst_sense_parameter_list_length_invalid \
+						ILLEGAL_REQUEST, 0x1A, 0
 #define scst_sense_reset_UA			UNIT_ATTENTION,  0x29, 0
 #define scst_sense_nexus_loss_UA		UNIT_ATTENTION,  0x29, 0x7
 #define scst_sense_saving_params_unsup		ILLEGAL_REQUEST, 0x39, 0
@@ -202,6 +207,9 @@ enum scst_cdb_flags {
 #define scst_sense_invalid_message		ILLEGAL_REQUEST, 0x49, 0
 #define scst_sense_cleared_by_another_ini_UA	UNIT_ATTENTION,  0x2F, 0
 #define scst_sense_capacity_data_changed	UNIT_ATTENTION,  0x2A, 0x9
+#define scst_sense_reservation_preempted	UNIT_ATTENTION,  0x2A, 0x03
+#define scst_sense_reservation_released		UNIT_ATTENTION,  0x2A, 0x04
+#define scst_sense_registrations_preempted	UNIT_ATTENTION,  0x2A, 0x05
 #define scst_sense_reported_luns_data_changed	UNIT_ATTENTION,  0x3F, 0xE
 #define scst_sense_inquery_data_changed		UNIT_ATTENTION,  0x3F, 0x3
 
@@ -307,6 +315,16 @@ enum scst_cdb_flags {
 #define SCST_CONTR_MODE_DESCR_SENSE 1
 
 /*************************************************************
+ ** TransportID protocol identifiers
+ *************************************************************/
+
+#define SCSI_TRANSPORTID_PROTOCOLID_FCP2	0
+#define SCSI_TRANSPORTID_PROTOCOLID_SPI5	1
+#define SCSI_TRANSPORTID_PROTOCOLID_SRP		4
+#define SCSI_TRANSPORTID_PROTOCOLID_ISCSI	5
+#define SCSI_TRANSPORTID_PROTOCOLID_SAS		6
+
+/*************************************************************
  ** Misc SCSI constants
  *************************************************************/
 #define SCST_SENSE_ASC_UA_RESET      0x29
@@ -367,6 +385,10 @@ enum scst_cdb_flags {
  ** Misc constants
  *************************************************************/
 #define SCST_SYSFS_BLOCK_SIZE			PAGE_SIZE
+
+#define SCST_PR_DIR				"/var/lib/scst"
+
+#define TID_COMMON_SIZE				24
 
 #define SCST_SYSFS_KEY_MARK			"[key]"
 
