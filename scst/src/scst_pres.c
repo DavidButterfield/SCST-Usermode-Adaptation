@@ -273,7 +273,7 @@ static struct scst_tgt_dev *scst_pr_find_tgt_dev(struct scst_device *dev,
 
 static struct scst_dev_registrant *scst_pr_add_registrant(
 	struct scst_device *dev, const uint8_t *transport_id,
-	const uint16_t rel_tgt_id, const char *initiator_name, 
+	const uint16_t rel_tgt_id, const char *initiator_name,
 	uint64_t key, bool aptpl, struct scst_tgt_dev *tgt_dev)
 {
 	struct scst_dev_registrant *reg = NULL;
@@ -813,7 +813,7 @@ static void scst_pr_remove_device_files(struct scst_tgt_dev *tgt_dev)
 	set_fs(KERNEL_DS);
 
 	res = path_lookup(dev->pr_file_name, 0, &nd);
-	if (!res) 
+	if (!res)
 		scst_pr_vfs_unlink_and_put(&nd);
 	else
 		TRACE_PR("Unable to lookup file '%s' - error %d",
@@ -925,7 +925,7 @@ static int scst_pr_sync_device_file(struct scst_tgt_dev *tgt_dev)
 			if (res != sizeof(reg->key))
 				goto write_error;
 
-			res = vfs_write(file, (char *)&reg->rel_tgt_id, 
+			res = vfs_write(file, (char *)&reg->rel_tgt_id,
 					sizeof(reg->rel_tgt_id), &pos);
 			if (res != sizeof(reg->rel_tgt_id))
 				goto write_error;
@@ -968,7 +968,7 @@ write_error_close:
 		int rc;
 
 		rc = path_lookup(dev->pr_file_name, 0,	&nd);
-		if (!rc) 
+		if (!rc)
 			scst_pr_vfs_unlink_and_put(&nd);
 		else
 			TRACE_PR("Unable to lookup '%s' - error %d",
@@ -1135,7 +1135,7 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 
 		tgt_dev = scst_pr_find_tgt_dev(dev, transport_id);
 		scst_pr_add_registrant(dev, sess->transport_id,
-			sess->tgt->rel_tgt_id, sess->initiator_name, 
+			sess->tgt->rel_tgt_id, sess->initiator_name,
 			action_key, aptpl, tgt_dev);
 
 		offset += tid_size(transport_id);
@@ -1179,7 +1179,7 @@ static void scst_pr_unregister(struct scst_device *dev,
 /* Called with dev_pr_mutex locked, no IRQ */
 void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 {
-	int aptpl, spec_i_pt;
+	int aptpl, spec_i_pt, all_tg_pt;
 	uint64_t key, action_key;
 	struct scst_device *dev = cmd->dev;
 	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
@@ -1190,6 +1190,7 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 
 	aptpl = buffer[20] & 0x01;
 	spec_i_pt = (buffer[20] >> 3) & 0x01;
+	all_tg_pt = (buffer[20] >> 2) & 0x01;
 	key = parse_key(&buffer[0]);
 	action_key = parse_key(&buffer[8]);
 
@@ -1197,6 +1198,13 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 		TRACE_PR("Invalid buffer size %d", buffer_size);
 		scst_set_cmd_error(cmd,
 			SCST_LOAD_SENSE(scst_sense_parameter_list_length_invalid));
+		goto out;
+	}
+
+	if (all_tg_pt) {
+		TRACE_PR("%s", "ALL_TG_PT not supported");
+		scst_set_cmd_error(cmd,
+			SCST_LOAD_SENSE(scst_sense_invalid_field_in_parm_list));
 		goto out;
 	}
 
@@ -1279,7 +1287,7 @@ out:
 void scst_pr_register_and_ignore(struct scst_cmd *cmd, uint8_t *buffer,
 	int buffer_size)
 {
-	int aptpl;
+	int aptpl, all_tg_pt;
 	uint64_t action_key;
 	struct scst_dev_registrant *reg = NULL;
 	struct scst_device *dev = cmd->dev;
@@ -1289,12 +1297,20 @@ void scst_pr_register_and_ignore(struct scst_cmd *cmd, uint8_t *buffer,
 	TRACE_ENTRY();
 
 	aptpl = buffer[20] & 0x01;
+	all_tg_pt = (buffer[20] >> 2) & 0x01;
 	action_key = parse_key(&buffer[8]);
 
 	if (buffer_size != 24) {
 		TRACE_PR("Invalid buffer size %d", buffer_size);
 		scst_set_cmd_error(cmd,
 			SCST_LOAD_SENSE(scst_sense_parameter_list_length_invalid));
+		goto out;
+	}
+
+	if (all_tg_pt) {
+		TRACE_PR("%s", "ALL_TG_PT not supported");
+		scst_set_cmd_error(cmd,
+			SCST_LOAD_SENSE(scst_sense_invalid_field_in_parm_list));
 		goto out;
 	}
 
