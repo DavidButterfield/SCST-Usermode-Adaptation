@@ -1051,8 +1051,11 @@ void scst_pr_clear_dev(struct scst_device *dev)
 	TRACE_ENTRY();
 
 	list_for_each_entry_safe(reg, tmp_reg, &dev->dev_registrants_list,
-			dev_registrants_list_entry)
+			dev_registrants_list_entry) {
+		if (scst_pr_is_holder(dev, reg))
+			scst_pr_clear_holder(dev);
 		scst_pr_remove_registrant(dev, reg);
+	}
 
 	kfree(dev->pr_file_name);
 	kfree(dev->pr_file_name1);
