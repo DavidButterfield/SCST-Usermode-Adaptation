@@ -381,9 +381,9 @@ mptstm_probe(struct pci_dev *pdev, const struct pci_device_id *id)
     atomic_set(&tgt->sess_count, 0);
     init_waitqueue_head(&tgt->waitQ);
 
-    tgt->scst_tgt = scst_register(&tgt_template, MYNAM);
+    tgt->scst_tgt = scst_register_target(&tgt_template, MYNAM);
     if (tgt->scst_tgt == NULL) {
-	    PRINT_ERROR(MYNAM ": scst_register() "
+	    PRINT_ERROR(MYNAM ": scst_register_target() "
 			"failed for host %p", pdev);
 
 	    ret = -ENODEV;
@@ -399,7 +399,7 @@ mptstm_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	    PRINT_ERROR("Not enough memory to register "
 			    "target driver %s entry %s in /proc",
 			    tgt_template.name, name);
-	    scst_unregister(tgt->scst_tgt);
+	    scst_unregister_target(tgt->scst_tgt);
 	    ret = -ENOMEM;
 	    goto out;
     }
@@ -437,7 +437,7 @@ static struct mpt_pci_driver mptstm_driver = {
  *
  * this function is intended to detect the target adapters that are present in
  * the system. Each found adapter should be registered by calling
- * scst_register(). The function should return a value >= 0 to signify
+ * scst_register_target(). The function should return a value >= 0 to signify
  * the number of detected target adapters. A negative value should be
  * returned whenever there is an error.
  */

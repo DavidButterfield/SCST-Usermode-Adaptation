@@ -2111,9 +2111,9 @@ static void mvst_register_tgt_handler(struct mvs_info *mvi)
 	INIT_LIST_HEAD(&tgt->sess_list);
 	init_waitqueue_head(&tgt->waitQ);
 
-	tgt->scst_tgt = scst_register(&tgt_template, MVST_NAME);
+	tgt->scst_tgt = scst_register_target(&tgt_template, MVST_NAME);
 	if (!tgt->scst_tgt) {
-		PRINT_ERROR("mvst tgt(%ld): scst_register() "
+		PRINT_ERROR("mvst tgt(%ld): scst_register_target() "
 			    "failed for host %ld(%p)", mvi->instance,
 			    mvi->host_no, mvi);
 		kfree(tgt);
@@ -2140,11 +2140,11 @@ static void mvst_unregister_tgt_handler(struct mvs_info *mvi)
 
 	TRACE_DBG("Shutting down host %ld(%ld,%p)",
 		  mvi->host_no, mvi->instance, mvi);
-	scst_unregister(tgt->scst_tgt);
+	scst_unregister_target(tgt->scst_tgt);
 	mvi->flags &= ~MVF_TARGET_MODE_ENABLE;
 	/*
 	 * Free of tgt happens via callback mvst_target_release
-	 * called from scst_unregister, so we shouldn't touch it again
+	 * called from scst_unregister_target, so we shouldn't touch it again
 	 */
 	tgt = NULL;
 }
@@ -2339,11 +2339,12 @@ static void mvst_host_action(struct mvs_info *mvi,
 
 		TRACE_DBG("Shutting down host %ld(%ld,%p)",
 			  mvi->host_no, mvi->instance, mvi);
-		scst_unregister(tgt->scst_tgt);
+		scst_unregister_target(tgt->scst_tgt);
 		mvi->flags &= ~MVF_TARGET_MODE_ENABLE;
 		/*
 		 * Free of tgt happens via callback mvst_target_release
-		 * called from scst_unregister, so we shouldn't touch it again
+		 * called from scst_unregister_target, so we shouldn't touch
+		 * it again
 		 */
 		tgt = NULL;
 		break;

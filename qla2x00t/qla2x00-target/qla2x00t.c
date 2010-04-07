@@ -5011,12 +5011,12 @@ static int q2t_add_target(scsi_qla_host_t *ha)
 	if (q2t_get_target_name(ha, &wwn) != 0)
 		goto out_free;
 
-	tgt->scst_tgt = scst_register(&tgt2x_template, wwn);
+	tgt->scst_tgt = scst_register_target(&tgt2x_template, wwn);
 
 	kfree(wwn);
 
 	if (!tgt->scst_tgt) {
-		PRINT_ERROR("qla2x00t(%ld): scst_register() "
+		PRINT_ERROR("qla2x00t(%ld): scst_register_target() "
 			    "failed for host %ld(%p)", ha->instance,
 			    ha->host_no, ha);
 		res = -ENOMEM;
@@ -5084,10 +5084,10 @@ static int q2t_remove_target(scsi_qla_host_t *ha)
 	}
 
 	TRACE_DBG("Unregistering target for host %ld(%p)", ha->host_no, ha);
-	scst_unregister(ha->tgt->scst_tgt);
+	scst_unregister_target(ha->tgt->scst_tgt);
 	/*
 	 * Free of tgt happens via callback q2t_target_release
-	 * called from scst_unregister, so we shouldn't touch
+	 * called from scst_unregister_target, so we shouldn't touch
 	 * it again.
 	 */
 

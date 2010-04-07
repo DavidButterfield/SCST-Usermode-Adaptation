@@ -2303,20 +2303,20 @@ static inline int scst_register_target_template(struct scst_tgt_template *vtt)
 void scst_unregister_target_template(struct scst_tgt_template *vtt);
 
 /*
- * Registers and returns a target
+ * Registers a target.
+ *
  * Returns pointer to new target structure on success or NULL otherwise.
  *
- * If parameter "target_name" isn't NULL, then security group with name
- * "Default_##target_name", if created, will be used as the default
- * instead of "Default" one for all initiators not assigned to any other group.
+ * Parameter "target_name" isn't required, but very much desired. It should be,
+ * for instance, a target port name, or iSCSI target name.
  */
 struct scst_tgt *scst_register_target(struct scst_tgt_template *vtt,
 	const char *target_name);
 
 /*
- * Unregisters target adapter
+ * Unregisters target
  */
-void scst_unregister(struct scst_tgt *tgt);
+void scst_unregister_target(struct scst_tgt *tgt);
 
 /*
  * Registers and returns a session

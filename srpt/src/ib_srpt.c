@@ -2919,8 +2919,8 @@ static int srpt_detect(struct scst_tgt_template *tp)
 /**
  * srpt_release() - SCST release callback function.
  *
- * Callback function called by the SCST core from scst_unregister() to free up
- * the resources associated with device scst_tgt.
+ * Callback function called by the SCST core from scst_unregister_target() to
+ * free up the resources associated with device scst_tgt.
  */
 static int srpt_release(struct scst_tgt *scst_tgt)
 {
@@ -3097,7 +3097,7 @@ static void srpt_add_one(struct ib_device *device)
 	if (!sdev)
 		return;
 
-	sdev->scst_tgt = scst_register(&srpt_template, NULL);
+	sdev->scst_tgt = scst_register_target(&srpt_template, NULL);
 	if (!sdev->scst_tgt) {
 		PRINT_ERROR("SCST registration failed for %s.",
 			    sdev->device->name);
@@ -3246,7 +3246,7 @@ err_dev:
 	device_unregister(&sdev->dev);
 #endif
 unregister_tgt:
-	scst_unregister(sdev->scst_tgt);
+	scst_unregister_target(sdev->scst_tgt);
 free_dev:
 	kfree(sdev);
 
@@ -3306,7 +3306,7 @@ static void srpt_remove_one(struct ib_device *device)
 	 * such that no new SRP_LOGIN_REQ information units can arrive while
 	 * destroying the SCST target.
 	 */
-	scst_unregister(sdev->scst_tgt);
+	scst_unregister_target(sdev->scst_tgt);
 	sdev->scst_tgt = NULL;
 
 	srpt_free_ioctx_ring(sdev, sdev->ioctx_ring,

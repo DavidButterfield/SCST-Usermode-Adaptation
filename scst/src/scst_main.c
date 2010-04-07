@@ -323,7 +323,7 @@ void scst_unregister_target_template(struct scst_tgt_template *vtt)
 restart:
 	list_for_each_entry(tgt, &vtt->tgt_list, tgt_list_entry) {
 		mutex_unlock(&scst_mutex);
-		scst_unregister(tgt);
+		scst_unregister_target(tgt);
 		mutex_lock(&scst_mutex);
 		goto restart;
 	}
@@ -349,7 +349,7 @@ out_err_up:
 }
 EXPORT_SYMBOL(scst_unregister_target_template);
 
-struct scst_tgt *scst_register(struct scst_tgt_template *vtt,
+struct scst_tgt *scst_register_target(struct scst_tgt_template *vtt,
 	const char *target_name)
 {
 	struct scst_tgt *tgt;
@@ -490,7 +490,7 @@ out_err:
 		vtt->name, rc);
 	goto out;
 }
-EXPORT_SYMBOL(scst_register);
+EXPORT_SYMBOL(scst_register_target);
 
 static inline int test_sess_list(struct scst_tgt *tgt)
 {
@@ -501,7 +501,7 @@ static inline int test_sess_list(struct scst_tgt *tgt)
 	return res;
 }
 
-void scst_unregister(struct scst_tgt *tgt)
+void scst_unregister_target(struct scst_tgt *tgt)
 {
 	struct scst_session *sess;
 	struct scst_tgt_template *vtt = tgt->tgtt;
@@ -566,7 +566,7 @@ again:
 	TRACE_EXIT();
 	return;
 }
-EXPORT_SYMBOL(scst_unregister);
+EXPORT_SYMBOL(scst_unregister_target);
 
 static int scst_susp_wait(bool interruptible)
 {
