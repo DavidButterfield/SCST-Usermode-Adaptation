@@ -1593,7 +1593,7 @@ int mvst_send_cmd_to_scst(struct mvs_info *mvi,
 			}
 
 			sess->scst_sess = scst_register_session(
-				tgt->scst_tgt, SCST_ATOMIC, name, sess,
+				tgt->scst_tgt, SCST_ATOMIC, name, sess, sess,
 				mvst_alloc_session_done);
 			kfree(name);
 		}
@@ -1606,7 +1606,6 @@ int mvst_send_cmd_to_scst(struct mvs_info *mvi,
 			res = -EFAULT;
 			goto out_free_sess;
 		}
-		scst_sess_set_tgt_priv(sess->scst_sess, sess);
 
 		/* add session data to host data structure */
 		list_add(&sess->sess_entry, &tgt->sess_list);

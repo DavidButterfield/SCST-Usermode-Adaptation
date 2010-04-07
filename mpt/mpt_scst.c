@@ -592,8 +592,6 @@ mpt_alloc_session_done(struct scst_session *scst_sess, void *data, int result)
 
 	TRACE_ENTRY();
 	if (result == 0) {
-		scst_sess_set_tgt_priv(scst_sess, sess);
-
 		while (!list_empty(&sess->delayed_cmds)) {
 			cmd = list_entry(sess->delayed_cmds.next,
 					 typeof(*cmd), delayed_cmds_entry);
@@ -979,7 +977,8 @@ stmapp_tgt_command(MPT_STM_PRIV *priv, u32 reply_word)
 		INIT_LIST_HEAD(&sess->delayed_cmds);
 
 		sess->scst_sess = scst_register_session(tgt->scst_tgt, 1,
-							"", sess, mpt_alloc_session_done);
+							"", sess, sess,
+							mpt_alloc_session_done);
 		if (sess->scst_sess == NULL) {
 			PRINT_ERROR(MYNAM ": scst_register_session failed %p",
 				    tgt);
@@ -990,7 +989,6 @@ stmapp_tgt_command(MPT_STM_PRIV *priv, u32 reply_word)
 		__set_bit(MPT_SESS_INITING, &sess->sess_flags);
 
 		tgt->sess[init_index] = sess;
-		scst_sess_set_tgt_priv(sess->scst_sess, sess);
 
 		cmd->sess = sess;
 		list_add_tail(&cmd->delayed_cmds_entry, &sess->delayed_cmds);

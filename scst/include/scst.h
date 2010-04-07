@@ -2303,14 +2303,14 @@ static inline int scst_register_target_template(struct scst_tgt_template *vtt)
 void scst_unregister_target_template(struct scst_tgt_template *vtt);
 
 /*
- * Registers and returns target adapter
- * Returns new target structure on success or NULL otherwise.
+ * Registers and returns a target
+ * Returns pointer to new target structure on success or NULL otherwise.
  *
  * If parameter "target_name" isn't NULL, then security group with name
  * "Default_##target_name", if created, will be used as the default
  * instead of "Default" one for all initiators not assigned to any other group.
  */
-struct scst_tgt *scst_register(struct scst_tgt_template *vtt,
+struct scst_tgt *scst_register_target(struct scst_tgt_template *vtt,
 	const char *target_name);
 
 /*
@@ -2330,12 +2330,16 @@ void scst_unregister(struct scst_tgt *tgt);
  *   initiator_name - remote initiator's name, any NULL-terminated string,
  *      e.g. iSCSI name, which used as the key to found appropriate access
  *      control group. Could be NULL, then the default target's LUNs are used.
- *   data - any target driver supplied data
- *   result_fn - pointer to the function that will be
- *      asynchronously called when session initialization finishes.
+ *   tgt_priv - target's private data, the same as set by function
+ *	scst_sess_set_tgt_priv()
+ *   result_fn_data - any target driver supplied data, which will be sent
+ *	later as "data" parameter to result_fn()
+ *   result_fn - pointer to the function that will be asynchronously called
+ *	when the session initialization finishes.
  *      Can be NULL. Parameters:
  *       - sess - session
- *	 - data - target driver supplied to scst_register_session() data
+ *	 - data - target driver supplied to scst_register_session()
+ *		  result_fn_data
  *       - result - session initialization result, 0 on success or
  *                  appropriate error code otherwise
  *
@@ -2345,7 +2349,7 @@ void scst_unregister(struct scst_tgt *tgt);
  *       scst_register_session() is called from atomic context, will be
  *       done in SCST thread context. In this case scst_register_session()
  *       will return not completely initialized session, but the target
- *       driver can supply commands to this session via scst_rx_cmd().
+ *       driver can send commands to this session via scst_rx_cmd().
  *       Those commands processing will be delayed inside SCST until
  *       the session initialization is finished, then their processing
  *       will be restarted. The target driver will be notified about
@@ -2359,7 +2363,7 @@ void scst_unregister(struct scst_tgt *tgt);
  *       inside result_fn(), it will NOT be called automatically.
  */
 struct scst_session *scst_register_session(struct scst_tgt *tgt, int atomic,
-	const char *initiator_name, void *tgt_priv, void *data,
+	const char *initiator_name, void *tgt_priv, void *result_fn_data,
 	void (*result_fn) (struct scst_session *sess, void *data, int result));
 
 /*

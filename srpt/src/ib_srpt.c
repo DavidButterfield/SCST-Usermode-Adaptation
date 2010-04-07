@@ -2087,7 +2087,7 @@ static int srpt_cm_req_recv(struct ib_cm_id *cm_id,
 
 	BUG_ON(!sdev->scst_tgt);
 	ch->scst_sess = scst_register_session(sdev->scst_tgt, 0, ch->sess_name,
-					      NULL, NULL);
+					      ch, NULL, NULL);
 	if (!ch->scst_sess) {
 		rej->reason = cpu_to_be32(SRP_LOGIN_REJ_INSUFFICIENT_RESOURCES);
 		TRACE_DBG("%s", "Failed to create scst sess");
@@ -2096,8 +2096,6 @@ static int srpt_cm_req_recv(struct ib_cm_id *cm_id,
 
 	TRACE_DBG("Establish connection sess=%p name=%s cm_id=%p",
 		  ch->scst_sess, ch->sess_name, ch->cm_id);
-
-	scst_sess_set_tgt_priv(ch->scst_sess, ch);
 
 	/* create srp_login_response */
 	rsp->opcode = SRP_LOGIN_RSP;

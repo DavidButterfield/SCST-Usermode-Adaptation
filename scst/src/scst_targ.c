@@ -5886,7 +5886,7 @@ restart:
 }
 
 struct scst_session *scst_register_session(struct scst_tgt *tgt, int atomic,
-	const char *initiator_name, void *tgt_priv, void *data,
+	const char *initiator_name, void *tgt_priv, void *result_fn_data,
 	void (*result_fn) (struct scst_session *sess, void *data, int result))
 {
 	struct scst_session *sess;
@@ -5906,7 +5906,7 @@ struct scst_session *scst_register_session(struct scst_tgt *tgt, int atomic,
 	scst_sess_get(sess); /* one held until sess is inited */
 
 	if (atomic) {
-		sess->reg_sess_data = data;
+		sess->reg_sess_data = result_fn_data;
 		sess->init_result_fn = result_fn;
 		spin_lock_irqsave(&scst_mgmt_lock, flags);
 		TRACE_DBG("Adding sess %p to scst_sess_init_list", sess);

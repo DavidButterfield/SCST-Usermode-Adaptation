@@ -625,8 +625,7 @@ static struct q2t_sess *q2t_create_sess(scsi_qla_host_t *ha, fc_port_t *fcport,
 
 	/* Let's do the session creation async'ly */
 	sess->scst_sess = scst_register_session(tgt->scst_tgt, 1, wwn_str,
-		sess, q2t_alloc_session_done);
-
+				sess, sess, q2t_alloc_session_done);
 	if (sess->scst_sess == NULL) {
 		PRINT_CRIT_ERROR("qla2x00t(%ld): scst_register_session() "
 			"failed for host %ld (wwn %s, loop_id %d), all "
@@ -634,7 +633,6 @@ static struct q2t_sess *q2t_create_sess(scsi_qla_host_t *ha, fc_port_t *fcport,
 			ha->host_no, wwn_str, fcport->loop_id);
 		goto out_free_sess_wwn;
 	}
-	scst_sess_set_tgt_priv(sess->scst_sess, sess);
 
 	spin_lock_irq(&ha->hardware_lock);
 	TRACE_MGMT_DBG("Adding sess %p to tgt %p", sess, tgt);

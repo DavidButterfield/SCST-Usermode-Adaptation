@@ -214,7 +214,8 @@ static int ft_sess_create(struct ft_tport *tport, struct fc_rport_priv *rdata,
 
 	ft_format_wwn(name, sizeof(name), rdata->ids.port_name);
 	FT_SESS_DBG("register %s\n", name);
-	scst_sess = scst_register_session(tport->tgt, 0, name, NULL, NULL);
+	scst_sess = scst_register_session(tport->tgt, 0, name, sess, NULL,
+					  NULL);
 	if (!scst_sess) {
 		kfree(sess);
 		return FC_SPP_RESP_RES;		/* out of resources */
@@ -236,7 +237,6 @@ static int ft_sess_create(struct ft_tport *tport, struct fc_rport_priv *rdata,
 	sess->params = fcp_parm;
 
 	rdata->prli_count++;
-	scst_sess_set_tgt_priv(scst_sess, sess);
 	return 0;
 }
 

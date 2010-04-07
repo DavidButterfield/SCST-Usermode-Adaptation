@@ -288,7 +288,7 @@ alloc_ini(bus_chan_t *bc, uint64_t iid)
              GET(7), GET(6), GET(5) , GET(4), GET(3), GET(2), GET(1), GET(0));
     #undef GET
 
-    nptr->ini_scst_sess = scst_register_session(bc->scst_tgt, 0, ini_name, NULL, NULL);
+    nptr->ini_scst_sess = scst_register_session(bc->scst_tgt, 0, ini_name, NULL, NULL, NULL);
     if (!nptr->ini_scst_sess) {
         Eprintk("cannot register SCST session\n");
         kfree(nptr);
