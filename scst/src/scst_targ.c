@@ -1976,6 +1976,10 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		goto out;
 	}
 
+	buffer_size = scst_get_full_buf(cmd, &buffer);
+	if (unlikely(buffer_size == 0))
+		goto out;
+
 	/* Check scope */
 	if ((action != PR_REGISTER) && (action != PR_REGISTER_AND_IGNORE) &&
 	    (action != PR_CLEAR) && ((cmd->cdb[2] & 0x0f) >> 4) != SCOPE_LU) {
@@ -2000,10 +2004,6 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
 		goto out;
 	}
-
-	buffer_size = scst_get_full_buf(cmd, &buffer);
-	if (unlikely(buffer_size == 0))
-		goto out;
 
 	mutex_lock(&dev->dev_pr_mutex);
 
