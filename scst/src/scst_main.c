@@ -419,14 +419,6 @@ struct scst_tgt *scst_register(struct scst_tgt_template *vtt,
 			SCST_DEFAULT_TGT_NAME_SUFFIX, tgt_num++);
 	}
 
-	rc = gen_relative_target_port_id(&tgt->rel_tgt_id);
-	if (rc != 0)
-#ifdef CONFIG_SCST_PROC
-		goto out_free_def_name;
-#else
-		goto out_unlock_resume;
-#endif
-
 	tgt->default_acg = scst_alloc_add_acg(NULL, tgt->tgt_name);
 	if (tgt->default_acg == NULL)
 		goto out_free_tgt_name;
