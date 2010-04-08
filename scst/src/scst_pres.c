@@ -289,19 +289,24 @@ static struct scst_dev_registrant *scst_pr_add_registrant(
 	reg = kzalloc(sizeof(*reg), GFP_KERNEL);
 	if (reg == NULL) {
 		PRINT_ERROR("%s", "Unable to allocate registration record");
-		goto error;
+		goto out;
 	}
 
 	reg->transport_id = kzalloc(tid_size(transport_id), GFP_KERNEL);
 	if (reg->transport_id == NULL) {
 		PRINT_ERROR("%s", "Unable to allocate initiator port "
 			"transport id");
-		goto error;
+		goto out_free;
 	}
 	memcpy(reg->transport_id, transport_id, tid_size(transport_id));
 
-	if (initiator_name)
+	if (initiator_name) {
 		reg->initiator_name = kstrdup(initiator_name, GFP_KERNEL);
+		if (reg->initiator_name == NULL) {
+			PRINT_ERROR("%s", "Unable to allocate initiator name");
+			goto out_tid_free;
+		}
+	}
 
 	reg->rel_tgt_id = rel_tgt_id;
 	reg->key = key;
@@ -316,9 +321,17 @@ static struct scst_dev_registrant *scst_pr_add_registrant(
 	list_add_tail(&reg->dev_registrants_list_entry,
 		&dev->dev_registrants_list);
 
-error:
+out:
 	TRACE_EXIT();
 	return reg;
+
+out_tid_free:
+	kfree(reg->transport_id);
+
+out_free:
+	kfree(reg);
+	reg = NULL;
+	goto out;
 }
 
 static void scst_pr_remove_registrant(struct scst_device *dev,
@@ -1064,8 +1077,10 @@ void scst_pr_clear_dev(struct scst_device *dev)
 	return;
 }
 
-void scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev)
+int scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev)
 {
+	int res = 0;
+
 	TRACE_ENTRY();
 
 	tgt_dev->registrant = scst_pr_find_registrant(
@@ -1078,10 +1093,17 @@ void scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev)
 			kfree(tgt_dev->registrant->initiator_name);
 		tgt_dev->registrant->initiator_name =
 			kstrdup(tgt_dev->sess->initiator_name, GFP_KERNEL);
+		if (tgt_dev->registrant->initiator_name == NULL) {
+			PRINT_ERROR("Unable to dup for registrant initiator "
+				"name %s", tgt_dev->sess->initiator_name);
+			res = -ENOMEM;
+			goto out;
+		}
 	}
 
-	TRACE_EXIT();
-	return;
+out:
+	TRACE_EXIT_RES(res);
+	return res;
 }
 
 void scst_pr_clear_tgt_dev(struct scst_tgt_dev *tgt_dev)

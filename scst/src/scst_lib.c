@@ -643,8 +643,8 @@ static void scst_free_all_UA(struct scst_tgt_dev *tgt_dev);
 static void scst_release_space(struct scst_cmd *cmd);
 static void scst_unblock_cmds(struct scst_device *dev);
 static void scst_clear_reservation(struct scst_tgt_dev *tgt_dev);
-static struct scst_tgt_dev *scst_alloc_add_tgt_dev(struct scst_session *sess,
-	struct scst_acg_dev *acg_dev);
+static int scst_alloc_add_tgt_dev(struct scst_session *sess,
+	struct scst_acg_dev *acg_dev, struct scst_tgt_dev **out_tgt_dev);
 static void scst_tgt_retry_timer_fn(unsigned long arg);
 
 #ifdef CONFIG_SCST_DEBUG_TM
@@ -1531,7 +1531,7 @@ static void scst_check_reassign_sess(struct scst_session *sess)
 {
 	struct scst_acg *acg, *old_acg;
 	struct scst_acg_dev *acg_dev;
-	int i;
+	int i, rc;
 	struct list_head *shead;
 	struct scst_tgt_dev *tgt_dev;
 	bool luns_changed = false;
@@ -1583,8 +1583,10 @@ retry_add:
 		TRACE_MGMT_DBG("sess %p: Allocing new tgt_dev for LUN %lld",
 			sess, (unsigned long long)acg_dev->lun);
 
-		tgt_dev = scst_alloc_add_tgt_dev(sess, acg_dev);
-		if (tgt_dev == NULL) {
+		rc = scst_alloc_add_tgt_dev(sess, acg_dev, &tgt_dev);
+		if (rc == -EPERM)
+			continue;
+		else if (rc != 0) {
 			add_failed = true;
 			break;
 		}
@@ -2713,14 +2715,15 @@ void scst_tgt_dev_stop_threads(struct scst_tgt_dev *tgt_dev)
  * scst_mutex supposed to be held, there must not be parallel activity in this
  * session.
  */
-static struct scst_tgt_dev *scst_alloc_add_tgt_dev(struct scst_session *sess,
-	struct scst_acg_dev *acg_dev)
+static int scst_alloc_add_tgt_dev(struct scst_session *sess,
+	struct scst_acg_dev *acg_dev, struct scst_tgt_dev **out_tgt_dev)
 {
+	int res = 0;
 	int ini_sg, ini_unchecked_isa_dma, ini_use_clustering;
 	struct scst_tgt_dev *tgt_dev;
 	struct scst_device *dev = acg_dev->dev;
 	struct list_head *sess_tgt_dev_list_head;
-	int rc, i, sl;
+	int i, sl;
 	uint8_t sense_buffer[SCST_STANDARD_SENSE_LEN];
 
 	TRACE_ENTRY();
@@ -2731,8 +2734,9 @@ static struct scst_tgt_dev *scst_alloc_add_tgt_dev(struct scst_session *sess,
 	tgt_dev = kmem_cache_zalloc(scst_tgtd_cachep, GFP_KERNEL);
 #endif
 	if (tgt_dev == NULL) {
-		TRACE(TRACE_OUT_OF_MEM, "%s",
-		      "Allocation of scst_tgt_dev failed");
+		TRACE(TRACE_OUT_OF_MEM, "%s", "Allocation of scst_tgt_dev "
+			"failed");
+		res = -ENOMEM;
 		goto out;
 	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 17)
@@ -2811,17 +2815,34 @@ static struct scst_tgt_dev *scst_alloc_add_tgt_dev(struct scst_session *sess,
 		dev->d_sense, SCST_LOAD_SENSE(scst_sense_reset_UA));
 	scst_alloc_set_UA(tgt_dev, sense_buffer, sl, 0);
 
-	rc = scst_tgt_dev_setup_threads(tgt_dev);
-	if (rc != 0)
-		goto out_free;
+	if (sess->tgt->tgtt->get_initiator_port_transport_id == NULL) {
+		if (!list_empty(&dev->dev_registrants_list)) {
+			PRINT_WARNING("Initiators from target %s can't connect "
+				"to device %s, because the device has PR "
+				"registrants and the target doesn't support "
+				"Persistent Reservations", sess->tgt->tgtt->name,
+				dev->virt_name);
+			res = -EPERM;
+			goto out_free;
+		}
+		dev->not_pr_supporting_tgt_devs_num++;
+	}
+
+	res = scst_pr_init_tgt_dev(tgt_dev);
+	if (res != 0)
+		goto out_dec_free;
+
+	res = scst_tgt_dev_setup_threads(tgt_dev);
+	if (res != 0)
+		goto out_pr_clear;
 
 	if (dev->handler && dev->handler->attach_tgt) {
 		TRACE_DBG("Calling dev handler's attach_tgt(%p)", tgt_dev);
-		rc = dev->handler->attach_tgt(tgt_dev);
+		res = dev->handler->attach_tgt(tgt_dev);
 		TRACE_DBG("%s", "Dev handler's attach_tgt() returned");
-		if (rc != 0) {
+		if (res != 0) {
 			PRINT_ERROR("Device handler's %s attach_tgt() "
-			    "failed: %d", dev->handler->name, rc);
+			    "failed: %d", dev->handler->name, res);
 			goto out_stop_threads;
 		}
 	}
@@ -2837,20 +2858,25 @@ static struct scst_tgt_dev *scst_alloc_add_tgt_dev(struct scst_session *sess,
 	list_add_tail(&tgt_dev->sess_tgt_dev_list_entry,
 		      sess_tgt_dev_list_head);
 
-	scst_pr_init_tgt_dev(tgt_dev);
+	*out_tgt_dev = tgt_dev;
 
 out:
-	TRACE_EXIT();
-	return tgt_dev;
+	TRACE_EXIT_RES(res);
+	return res;
 
 out_stop_threads:
 	scst_tgt_dev_stop_threads(tgt_dev);
 
+out_pr_clear:
+	scst_pr_clear_tgt_dev(tgt_dev);
+
+out_dec_free:
+	if (tgt_dev->sess->tgt->tgtt->get_initiator_port_transport_id == NULL)
+		dev->not_pr_supporting_tgt_devs_num--;
+
 out_free:
 	scst_free_all_UA(tgt_dev);
-
 	kmem_cache_free(scst_tgtd_cachep, tgt_dev);
-	tgt_dev = NULL;
 	goto out;
 }
 
@@ -2895,6 +2921,9 @@ static void scst_free_tgt_dev(struct scst_tgt_dev *tgt_dev)
 
 	list_del(&tgt_dev->sess_tgt_dev_list_entry);
 
+	if (tgt_dev->sess->tgt->tgtt->get_initiator_port_transport_id == NULL)
+		dev->not_pr_supporting_tgt_devs_num--;
+
 	scst_clear_reservation(tgt_dev);
 	scst_pr_clear_tgt_dev(tgt_dev);
 	scst_free_all_UA(tgt_dev);
@@ -2927,11 +2956,11 @@ int scst_sess_alloc_tgt_devs(struct scst_session *sess)
 
 	list_for_each_entry(acg_dev, &sess->acg->acg_dev_list,
 			acg_dev_list_entry) {
-		tgt_dev = scst_alloc_add_tgt_dev(sess, acg_dev);
-		if (tgt_dev == NULL) {
-			res = -ENOMEM;
+		res = scst_alloc_add_tgt_dev(sess, acg_dev, &tgt_dev);
+		if (res == -EPERM)
+			continue;
+		else if (res != 0)
 			goto out_free;
-		}
 	}
 
 out:
@@ -2996,11 +3025,12 @@ int scst_acg_add_dev(struct scst_acg *acg, struct scst_device *dev,
 	list_add_tail(&acg_dev->dev_acg_dev_list_entry, &dev->dev_acg_dev_list);
 
 	list_for_each_entry(sess, &acg->acg_sess_list, acg_sess_list_entry) {
-		tgt_dev = scst_alloc_add_tgt_dev(sess, acg_dev);
-		if (tgt_dev == NULL) {
-			res = -ENOMEM;
+		res = scst_alloc_add_tgt_dev(sess, acg_dev, &tgt_dev);
+		if (res == -EPERM)
+			continue;
+		else if (res != 0)
 			goto out_free;
-		}
+
 		list_add_tail(&tgt_dev->extra_tgt_dev_list_entry,
 			      &tmp_tgt_dev_list);
 	}

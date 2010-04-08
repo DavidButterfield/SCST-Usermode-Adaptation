@@ -838,7 +838,7 @@ struct scst_tgt_template {
 	 *
 	 * Returns 0 on success or negative error code otherwise.
 	 *
-	 * MUST HAVE, because it's required for Persistent Reservations.
+	 * SHOULD HAVE, because it's required for Persistent Reservations.
 	 */
 	int (*get_initiator_port_transport_id) (struct scst_session *sess,
 		uint8_t **transport_id);
@@ -2006,10 +2006,15 @@ struct scst_device {
 	/* List of dev's registrants */
 	struct list_head dev_registrants_list;
 
-	/*
-	 * Reference to registrant - persistent reservation holder
-	 */
+	/* Reference to registrant - persistent reservation holder */
 	struct scst_dev_registrant *pr_holder;
+
+	/*
+	 * Count of connected tgt_devs from transports, which don't support
+	 * PRs, i.e. don't have get_initiator_port_transport_id(). Protected
+	 * by scst_mutex.
+	 */
+	int not_pr_supporting_tgt_devs_num;
 
 	/* Persist through power loss files */
 	char *pr_file_name;

@@ -57,7 +57,7 @@ int scst_pr_check_pr_path(void);
 void scst_pr_init_dev(struct scst_device *dev);
 void scst_pr_clear_dev(struct scst_device *dev);
 
-void scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev);
+int scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev);
 void scst_pr_clear_tgt_dev(struct scst_tgt_dev *tgt_dev);
 
 bool scst_pr_crh_case(struct scst_cmd *cmd);

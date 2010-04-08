@@ -1869,6 +1869,15 @@ static int scst_persistent_reserve_in_local(struct scst_cmd *cmd)
 	if (unlikely(rc != 0))
 		goto out_done;
 
+	if (unlikely(dev->not_pr_supporting_tgt_devs_num != 0)) {
+		PRINT_WARNING("Persistent Reservation command %x refused for "
+			"device %s, because the device has not supporting PR "
+			"transports connected", cmd->cdb[0], dev->virt_name);
+		scst_set_cmd_error(cmd,
+				   SCST_LOAD_SENSE(scst_sense_invalid_opcode));
+		goto out_done;
+	}
+
 	if (dev->dev_reserved) {
 		TRACE_PR("PR command rejected, because device %s holds regular "
 			"reservation", dev->virt_name);
@@ -1965,6 +1974,15 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 	rc = scst_check_local_events(cmd);
 	if (unlikely(rc != 0))
 		goto out_done;
+
+	if (unlikely(dev->not_pr_supporting_tgt_devs_num != 0)) {
+		PRINT_WARNING("Persistent Reservation command %x refused for "
+			"device %s, because the device has not supporting PR "
+			"transports connected", cmd->cdb[0], dev->virt_name);
+		scst_set_cmd_error(cmd,
+				   SCST_LOAD_SENSE(scst_sense_invalid_opcode));
+		goto out_done;
+	}
 
 	action = cmd->cdb[1] & 0x1f;
 
@@ -5822,12 +5840,14 @@ static int scst_init_session(struct scst_session *sess)
 	TRACE_DBG("Adding sess %p to tgt->sess_list", sess);
 	list_add_tail(&sess->sess_list_entry, &sess->tgt->sess_list);
 
-	res = sess->tgt->tgtt->get_initiator_port_transport_id(sess,
-			&sess->transport_id);
-	if (res != 0) {
-		PRINT_ERROR("Unable to make initiator %s port transport id",
-			sess->initiator_name);
-		goto failed;
+	if (sess->tgt->tgtt->get_initiator_port_transport_id != NULL) {
+		res = sess->tgt->tgtt->get_initiator_port_transport_id(sess,
+				&sess->transport_id);
+		if (res != 0) {
+			PRINT_ERROR("Unable to make initiator %s port "
+				"transport id", sess->initiator_name);
+			goto failed;
+		}
 	}
 
 	res = scst_sess_alloc_tgt_devs(sess);

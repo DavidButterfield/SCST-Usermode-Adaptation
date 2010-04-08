@@ -200,9 +200,9 @@ int __scst_register_target_template(struct scst_tgt_template *vtt,
 		goto out_err;
 	}
 
-	if (!vtt->get_initiator_port_transport_id) {
-		PRINT_ERROR("Target driver %s must have "
-			"get_initiator_port_transport_id() method.", vtt->name);
+	if (vtt->get_initiator_port_transport_id == NULL) {
+		PRINT_WARNING("Target driver %s doesn't support Persistent "
+			"Reservations", vtt->name);
 		res = -EINVAL;
 		goto out_err;
 	}
