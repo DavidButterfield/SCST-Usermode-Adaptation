@@ -4384,11 +4384,6 @@ int scst_get_full_buf(struct scst_cmd *cmd, uint8_t **buf)
 
 	TRACE_ENTRY();
 
-	if (buf == NULL) {
-		res = -EINVAL;
-		goto out;
-	}
-
 	EXTRACHECKS_BUG_ON(cmd->sg_buff_vmallocated);
 
 	if (scst_get_buf_count(cmd) > 1) {

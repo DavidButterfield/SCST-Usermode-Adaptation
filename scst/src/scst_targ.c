@@ -1885,10 +1885,11 @@ static int scst_persistent_reserve_in_local(struct scst_cmd *cmd)
 	}
 
 	buffer_size = scst_get_full_buf(cmd, &buffer);
-	if (unlikely(buffer_size == 0))
+	if (unlikely(buffer_size <= 0)) {
+		if (buffer_size < 0)
+			scst_set_busy(cmd);
 		goto out_done;
-	else if (unlikely(buffer_size < 0))
-		goto out_err;
+	}
 
 	mutex_lock(&dev->dev_pr_mutex);
 
@@ -1916,14 +1917,15 @@ static int scst_persistent_reserve_in_local(struct scst_cmd *cmd)
 		goto out_err;
 	}
 
+out_unlock:
 	mutex_unlock(&dev->dev_pr_mutex);
 
-out_compl:
 	cmd->completed = 1;
 	scst_put_full_buf(cmd, buffer);
 
 out_done:
 	cmd->scst_cmd_done(cmd, SCST_CMD_STATE_DEFAULT, SCST_CONTEXT_SAME);
+
 	TRACE_EXIT_RES(SCST_EXEC_COMPLETED);
 	return SCST_EXEC_COMPLETED;
 
@@ -1934,7 +1936,7 @@ out_need_thread:
 out_err:
 	scst_set_cmd_error(cmd,
 		   SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
-	goto out_compl;
+	goto out_unlock;
 }
 
 /* No locks, no IRQ or IRQ-disabled context allowed */
@@ -1962,7 +1964,7 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 
 	rc = scst_check_local_events(cmd);
 	if (unlikely(rc != 0))
-		goto out;
+		goto out_done;
 
 	action = cmd->cdb[1] & 0x1f;
 
@@ -1973,12 +1975,15 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		TRACE_PR("PR command rejected, because device %s holds regular "
 			"reservation", dev->virt_name);
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
-		goto out;
+		goto out_done;
 	}
 
 	buffer_size = scst_get_full_buf(cmd, &buffer);
-	if (unlikely(buffer_size == 0))
-		goto out;
+	if (unlikely(buffer_size <= 0)) {
+		if (buffer_size < 0)
+			scst_set_busy(cmd);
+		goto out_done;
+	}
 
 	/* Check scope */
 	if ((action != PR_REGISTER) && (action != PR_REGISTER_AND_IGNORE) &&
@@ -1986,7 +1991,7 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		TRACE_PR("Scope must be SCOPE_LU for action %x", action);
 		scst_set_cmd_error(cmd,
 			SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
-		goto out;
+		goto out_put_full_buf;
 	}
 
 	/* Check SPEC_I_PT */
@@ -1994,7 +1999,7 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		TRACE_PR("SPEC_I_PT must be zero for action %x", action);
 		scst_set_cmd_error(cmd, SCST_LOAD_SENSE(
 					scst_sense_invalid_field_in_cdb));
-		goto out;
+		goto out_put_full_buf;
 	}
 
 	/* Check if tgt_dev already registered */
@@ -2002,7 +2007,7 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 	    (tgt_dev->registrant == NULL)) {
 		TRACE_PR("'%s' not registered", cmd->sess->initiator_name);
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
-		goto out;
+		goto out_put_full_buf;
 	}
 
 	mutex_lock(&dev->dev_pr_mutex);
@@ -2038,21 +2043,24 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		goto out_unlock;
 	}
 
-	if ((dev->handler->pr_cmds_notifications)
-			&& (SAM_STAT_GOOD == cmd->status))
+	if ((dev->handler->pr_cmds_notifications) &&
+	    (SAM_STAT_GOOD == cmd->status))
 		res = SCST_EXEC_NOT_COMPLETED;
 
 out_unlock:
 	mutex_unlock(&dev->dev_pr_mutex);
 
+out_put_full_buf:
 	scst_put_full_buf(cmd, buffer);
 
-out:
+out_done:
 	if (SCST_EXEC_COMPLETED == res) {
 		cmd->completed = 1;
 		cmd->scst_cmd_done(cmd, SCST_CMD_STATE_DEFAULT,
 				SCST_CONTEXT_SAME);
 	}
+
+out:
 	TRACE_EXIT_RES(res);
 	return res;
 }
