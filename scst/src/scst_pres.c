@@ -153,11 +153,11 @@ static inline void scst_pr_set_holder(struct scst_device *dev,
 	struct scst_dev_registrant *holder, uint8_t scope, uint8_t type)
 {
 	dev->pr_is_set = 1;
+	dev->pr_scope = scope;
+	dev->pr_type = type;
 	if (dev->pr_type != TYPE_EXCLUSIVE_ACCESS_ALL &&
 	    dev->pr_type != TYPE_WRITE_EXCLUSIVE_ALL)
 		dev->pr_holder = holder;
-	dev->pr_scope = scope;
-	dev->pr_type = type;
 }
 
 static bool scst_pr_is_holder(struct scst_device *dev,
