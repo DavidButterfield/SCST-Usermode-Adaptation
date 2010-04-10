@@ -61,6 +61,8 @@
 #define isblank(c)		((c) == ' ' || (c) == '\t')
 #endif
 
+static void scst_pr_clear_holder(struct scst_device *dev);
+
 static inline int tid_size(const uint8_t *tid)
 {
 	sBUG_ON(tid == NULL);
@@ -346,7 +348,8 @@ static void scst_pr_remove_registrant(struct scst_device *dev,
 
 	list_del(&reg->dev_registrants_list_entry);
 
-	sBUG_ON(dev->pr_is_set && list_empty(&dev->dev_registrants_list));
+	if (scst_pr_is_holder(dev, reg))
+		scst_pr_clear_holder(dev);
 
 	if (reg->tgt_dev)
 		reg->tgt_dev->registrant = NULL;
@@ -1097,8 +1100,6 @@ void scst_pr_clear_dev(struct scst_device *dev)
 
 	list_for_each_entry_safe(reg, tmp_reg, &dev->dev_registrants_list,
 			dev_registrants_list_entry) {
-		if (scst_pr_is_holder(dev, reg))
-			scst_pr_clear_holder(dev);
 		scst_pr_remove_registrant(dev, reg);
 	}
 
@@ -1205,27 +1206,24 @@ out:
 static void scst_pr_unregister(struct scst_device *dev,
 	struct scst_dev_registrant *reg)
 {
-	bool clear_holder;
+	bool is_holder;
 
 	TRACE_ENTRY();
 
 	TRACE_PR("Unregistering key '%0llx'", reg->key);
 
-	clear_holder = scst_pr_is_holder(dev, reg);
+	is_holder = scst_pr_is_holder(dev, reg);
 
 	scst_pr_remove_registrant(dev, reg);
 
-	if (clear_holder) {
-		scst_pr_clear_holder(dev);
-		if (!dev->pr_is_set) {
-			/* A registration just released */
-			switch (dev->pr_type) {
-			case TYPE_WRITE_EXCLUSIVE_REGONLY:
-			case TYPE_EXCLUSIVE_ACCESS_REGONLY:
-				scst_pr_send_ua(dev, reg, 0,
-					SCST_LOAD_SENSE(scst_sense_reservation_released));
-				break;
-			}
+	if (is_holder && !dev->pr_is_set) {
+		/* A registration just released */
+		switch (dev->pr_type) {
+		case TYPE_WRITE_EXCLUSIVE_REGONLY:
+		case TYPE_EXCLUSIVE_ACCESS_REGONLY:
+			scst_pr_send_ua(dev, reg, 0,
+				SCST_LOAD_SENSE(scst_sense_reservation_released));
+			break;
 		}
 	}
 
@@ -1751,8 +1749,6 @@ void scst_pr_clear(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 
 	list_for_each_entry_safe(r, t, &dev->dev_registrants_list,
 					dev_registrants_list_entry) {
-		if (scst_pr_is_holder(dev, r))
-			scst_pr_clear_holder(dev);
 		scst_pr_remove_registrant(dev, reg);
 	}
 
