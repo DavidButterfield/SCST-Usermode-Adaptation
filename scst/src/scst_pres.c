@@ -1207,18 +1207,20 @@ static void scst_pr_unregister(struct scst_device *dev,
 	struct scst_dev_registrant *reg)
 {
 	bool is_holder;
+	uint8_t pr_type;
 
 	TRACE_ENTRY();
 
 	TRACE_PR("Unregistering key '%0llx'", reg->key);
 
 	is_holder = scst_pr_is_holder(dev, reg);
+	pr_type = dev->pr_type;
 
 	scst_pr_remove_registrant(dev, reg);
 
 	if (is_holder && !dev->pr_is_set) {
 		/* A registration just released */
-		switch (dev->pr_type) {
+		switch (pr_type) {
 		case TYPE_WRITE_EXCLUSIVE_REGONLY:
 		case TYPE_EXCLUSIVE_ACCESS_REGONLY:
 			scst_pr_send_ua(dev, reg, 0,
@@ -1635,6 +1637,7 @@ void scst_pr_release(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
 	struct scst_dev_registrant *reg;
 	struct scst_session *sess = cmd->sess;
+	uint8_t cur_pr_type;
 
 	TRACE_ENTRY();
 
@@ -1682,11 +1685,13 @@ void scst_pr_release(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 		goto out;
 	}
 
+	cur_pr_type = dev->pr_type; /* scst_pr_clear_holder() will clear it */
+
 	scst_pr_clear_holder(dev);
 
 	if (!dev->pr_is_set) {
 		/* A registration just released */
-		switch (dev->pr_type) {
+		switch (cur_pr_type) {
 		case TYPE_WRITE_EXCLUSIVE_REGONLY:
 		case TYPE_EXCLUSIVE_ACCESS_REGONLY:
 		case TYPE_WRITE_EXCLUSIVE:
