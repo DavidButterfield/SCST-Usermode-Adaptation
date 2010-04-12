@@ -2025,10 +2025,19 @@ bool scst_pr_is_cmd_allowed(struct scst_cmd *cmd)
 		break;
 
 	case TYPE_WRITE_EXCLUSIVE_REGONLY:
-	case TYPE_EXCLUSIVE_ACCESS_REGONLY:
 	case TYPE_WRITE_EXCLUSIVE_ALL:
+		if (reg)
+			allowed = true;
+		else
+			allowed = (cmd->op_flags & SCST_WRITE_EXCL_ALLOWED) != 0;
+		break;
+
+	case TYPE_EXCLUSIVE_ACCESS_REGONLY:
 	case TYPE_EXCLUSIVE_ACCESS_ALL:
-		allowed = (reg != NULL);
+		if (reg)
+			allowed = true;
+		else
+			allowed = (cmd->op_flags & SCST_EXCL_ACCESS_ALLOWED) != 0;
 		break;
 
 	default:
