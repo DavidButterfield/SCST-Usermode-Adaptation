@@ -344,8 +344,6 @@ static void scst_pr_remove_registrant(struct scst_device *dev,
 	TRACE_PR("Remove registration record: initiator '%s' key '%016llx'",
 		reg->initiator_name, reg->key);
 
-	sBUG_ON(dev->pr_holder == reg);
-
 	list_del(&reg->dev_registrants_list_entry);
 
 	if (scst_pr_is_holder(dev, reg))
