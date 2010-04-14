@@ -197,7 +197,9 @@ static void scst_pr_dump_registrants(struct scst_device *dev)
 		list_for_each_entry(reg, &dev->dev_registrants_list,
 					dev_registrants_list_entry) {
 			TRACE_PR("[%d] initiator '%s' key '%016llx'", i++,
-				reg->initiator_name, reg->key);
+				debug_transport_id_to_initiator_name(
+					reg->transport_id),
+				reg->key);
 		}
 	}
 
@@ -211,7 +213,9 @@ static void scst_pr_dump_reservation(struct scst_device *dev)
 		struct scst_dev_registrant *holder = dev->pr_holder;
 		if (holder != NULL)
 			TRACE_PR("Reservation '%s' key '%016llx' scope %x "
-				"type %x", holder ? holder->initiator_name : "*",
+				"type %x",
+				holder ? debug_transport_id_to_initiator_name(
+						holder->transport_id) : "*",
 				holder->key, dev->pr_scope, dev->pr_type);
 		else {
 			/*
@@ -275,8 +279,8 @@ static struct scst_tgt_dev *scst_pr_find_tgt_dev(struct scst_device *dev,
 
 static struct scst_dev_registrant *scst_pr_add_registrant(
 	struct scst_device *dev, const uint8_t *transport_id,
-	const uint16_t rel_tgt_id, const char *initiator_name,
-	uint64_t key, bool aptpl, struct scst_tgt_dev *tgt_dev)
+	const uint16_t rel_tgt_id, uint64_t key, bool aptpl,
+	struct scst_tgt_dev *tgt_dev)
 {
 	struct scst_dev_registrant *reg = NULL;
 
@@ -285,8 +289,8 @@ static struct scst_dev_registrant *scst_pr_add_registrant(
 	sBUG_ON(dev == NULL);
 	sBUG_ON(transport_id == NULL);
 
-	TRACE_PR("Registering dev %p transport_id %p initiator_name '%s' "
-		"tgt_dev %p", dev, transport_id, initiator_name, tgt_dev);
+	TRACE_PR("Registering dev %p transport_id %p tgt_dev %p",
+		dev, transport_id, tgt_dev);
 
 	reg = kzalloc(sizeof(*reg), GFP_KERNEL);
 	if (reg == NULL) {
@@ -301,14 +305,6 @@ static struct scst_dev_registrant *scst_pr_add_registrant(
 		goto out_free;
 	}
 	memcpy(reg->transport_id, transport_id, tid_size(transport_id));
-
-	if (initiator_name) {
-		reg->initiator_name = kstrdup(initiator_name, GFP_KERNEL);
-		if (reg->initiator_name == NULL) {
-			PRINT_ERROR("%s", "Unable to allocate initiator name");
-			goto out_tid_free;
-		}
-	}
 
 	reg->rel_tgt_id = rel_tgt_id;
 	reg->key = key;
@@ -327,9 +323,6 @@ out:
 	TRACE_EXIT();
 	return reg;
 
-out_tid_free:
-	kfree(reg->transport_id);
-
 out_free:
 	kfree(reg);
 	reg = NULL;
@@ -342,7 +335,8 @@ static void scst_pr_remove_registrant(struct scst_device *dev,
 	TRACE_ENTRY();
 
 	TRACE_PR("Remove registration record: initiator '%s' key '%016llx'",
-		reg->initiator_name, reg->key);
+		debug_transport_id_to_initiator_name(reg->transport_id),
+		reg->key);
 
 	list_del(&reg->dev_registrants_list_entry);
 
@@ -353,9 +347,6 @@ static void scst_pr_remove_registrant(struct scst_device *dev,
 		reg->tgt_dev->registrant = NULL;
 
 	kfree(reg->transport_id);
-	if (reg->initiator_name)
-		kfree(reg->initiator_name);
-
 	kfree(reg);
 
 	TRACE_EXIT();
@@ -378,7 +369,9 @@ static void scst_pr_send_ua(struct scst_device *dev,
 		if (reg != issuer && reg->marked == marked) {
 			TRACE_PR("Set sense [%x %x %x]: initiator '%s' key "
 				"'%016llx'", ua[2], ua[12], ua[13],
-				reg->initiator_name, reg->key);
+				debug_transport_id_to_initiator_name(
+					reg->transport_id),
+				reg->key);
 			if (reg->tgt_dev)
 				scst_check_set_UA(reg->tgt_dev, ua, sizeof(ua), 0);
 		}
@@ -405,12 +398,16 @@ static void scst_pr_abort_marked(struct scst_device *dev, struct scst_cmd *cmd)
 	list_for_each_entry(reg, &dev->dev_registrants_list,
 				dev_registrants_list_entry) {
 		TRACE_PR("Abort commands: initiator '%s' key '0x%016llx' "
-			"session", reg->initiator_name, reg->key);
+			"session", debug_transport_id_to_initiator_name(
+					reg->transport_id),
+			 reg->key);
 
 		if (reg->tgt_dev == NULL) {
 			TRACE_PR("Registered record for initiator '%s' key "
 				"'0x%016llx' have no attached target device",
-				reg->initiator_name, reg->key);
+				debug_transport_id_to_initiator_name(
+					reg->transport_id),
+				reg->key);
 			continue;
 		}
 
@@ -474,7 +471,10 @@ static void scst_pr_mark_registrants(struct scst_device *dev,
 				dev_registrants_list_entry) {
 		if (reg != issuer && reg->key == key) {
 			TRACE_PR("Mark registered record: initiator '%s' key "
-				"'%016llx'", reg->initiator_name, key);
+				"'%016llx'",
+				debug_transport_id_to_initiator_name(
+					reg->transport_id),
+				key);
 			reg->marked = 1;
 		}
 	}
@@ -493,7 +493,10 @@ static void scst_pr_remove_registrants_marked(struct scst_device *dev)
 					dev_registrants_list_entry) {
 		if (reg->marked) {
 			TRACE_PR("Remove registration record: initiator '%s' "
-				"'%016llx'", reg->initiator_name, reg->key);
+				"'%016llx'",
+				debug_transport_id_to_initiator_name(
+					reg->transport_id),
+				reg->key);
 			scst_pr_remove_registrant(dev, reg);
 		}
 	}
@@ -673,7 +676,7 @@ static int scst_pr_do_load_device_file(struct scst_device *dev,
 		 * attaching to a tgt_dev. The attachment will be done in
 		 * scst_pr_init_tgt_dev.
 		 */
-		reg = scst_pr_add_registrant(dev, tid, rel_tgt_id, NULL, key,
+		reg = scst_pr_add_registrant(dev, tid, rel_tgt_id, key,
 			0, NULL);
 
 		if (is_holder)
@@ -958,6 +961,8 @@ static int scst_pr_sync_device_file(struct scst_tgt_dev *tgt_dev)
 	if (res != sizeof(sign))
 		goto write_error;
 
+	res = 0;
+
 	filp_close(file, NULL);
 
 out_set_fs:
@@ -1118,21 +1123,9 @@ int scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev)
 		tgt_dev->dev, tgt_dev->sess->transport_id,
 		tgt_dev->sess->tgt->rel_tgt_id, 0);
 
-	if (tgt_dev->registrant != NULL) {
+	if (tgt_dev->registrant != NULL)
 		tgt_dev->registrant->tgt_dev = tgt_dev;
-		if (tgt_dev->registrant->initiator_name)
-			kfree(tgt_dev->registrant->initiator_name);
-		tgt_dev->registrant->initiator_name =
-			kstrdup(tgt_dev->sess->initiator_name, GFP_KERNEL);
-		if (tgt_dev->registrant->initiator_name == NULL) {
-			PRINT_ERROR("Unable to dup for registrant initiator "
-				"name %s", tgt_dev->sess->initiator_name);
-			res = -ENOMEM;
-			goto out;
-		}
-	}
 
-out:
 	TRACE_EXIT_RES(res);
 	return res;
 }
@@ -1191,8 +1184,8 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 
 		tgt_dev = scst_pr_find_tgt_dev(dev, transport_id);
 		scst_pr_add_registrant(dev, sess->transport_id,
-			sess->tgt->rel_tgt_id, sess->initiator_name,
-			action_key, aptpl, tgt_dev);
+			sess->tgt->rel_tgt_id, action_key, aptpl,
+			tgt_dev);
 
 		offset += tid_size(transport_id);
 	}
@@ -1297,15 +1290,16 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 			}
 
 			scst_pr_add_registrant(dev, sess->transport_id,
-				sess->tgt->rel_tgt_id, sess->initiator_name,
-				action_key, aptpl, tgt_dev);
+				sess->tgt->rel_tgt_id, action_key, aptpl,
+				tgt_dev);
 		} else
 			TRACE_PR("%s", "Doing nothing - action_key is zero");
 	} else {
 		if (reg->key != key) {
 			TRACE_PR("Initiator '%s' key '%0llx' already "
 				"registered - reservation key mismatch",
-				reg->initiator_name, reg->key);
+				debug_transport_id_to_initiator_name(
+					reg->transport_id), reg->key);
 			scst_set_cmd_error_status(cmd,
 				SAM_STAT_RESERVATION_CONFLICT);
 			goto out;
@@ -1387,8 +1381,8 @@ void scst_pr_register_and_ignore(struct scst_cmd *cmd, uint8_t *buffer,
 			"register", sess->initiator_name);
 		if (action_key) {
 			scst_pr_add_registrant(dev, sess->transport_id,
-				sess->tgt->rel_tgt_id, sess->initiator_name,
-				action_key, aptpl, cmd->tgt_dev);
+				sess->tgt->rel_tgt_id, action_key, aptpl,
+				cmd->tgt_dev);
 		} else
 			TRACE_PR("%s", "Doing nothing, action_key is zero");
 	} else {
@@ -1458,7 +1452,9 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 	reg = tgt_dev->registrant;
 
 	if (!scst_pr_is_holder(dev, reg)) {
-		TRACE_PR("'%s' is not holder", reg->initiator_name);
+		TRACE_PR("'%s' is not holder",
+			debug_transport_id_to_initiator_name(
+				reg->transport_id));
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
 		goto out;
 	}
@@ -1517,8 +1513,7 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 
 	if (tgt_dev_move->registrant == NULL) {
 		scst_pr_add_registrant(dev, transport_id_move,
-			tgt_dev_move->sess->tgt->rel_tgt_id,
-			tgt_dev_move->sess->initiator_name, action_key,
+			tgt_dev_move->sess->tgt->rel_tgt_id, action_key,
 			aptpl, tgt_dev_move);
 	} else
 		tgt_dev_move->registrant->key = action_key;

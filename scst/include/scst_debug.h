@@ -207,6 +207,8 @@ do {									\
 		TRACE_DBG_FLAG(TRACE_MGMT_DEBUG|TRACE_SPECIAL, args)
 #define TRACE_PR(args...)		TRACE_DBG_FLAG(TRACE_PRES, args)
 
+const char *debug_transport_id_to_initiator_name(const uint8_t *transport_id);
+
 #define TRACE_BUFFER(message, buff, len)				\
 do {									\
 	if (trace_flag & TRACE_BUFF) {					\

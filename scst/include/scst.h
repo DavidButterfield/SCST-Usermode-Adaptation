@@ -1867,7 +1867,6 @@ struct scst_dev_registrant {
 	uint8_t *transport_id;
 	bool marked:1;
 	uint16_t rel_tgt_id;
-	const char *initiator_name;
 	uint64_t key;
 	struct scst_tgt_dev *tgt_dev;
 	struct list_head dev_registrants_list_entry;
