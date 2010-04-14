@@ -994,13 +994,17 @@ int scst_register_virtual_device(struct scst_dev_type *dev_handler,
 		goto out_free_del;
 	}
 
-	rc = scst_assign_dev_handler(dev, dev_handler);
+	rc = scst_pr_init_dev(dev);
 	if (rc != 0) {
 		res = rc;
 		goto out_free_del;
 	}
 
-	scst_pr_init_dev(dev);
+	rc = scst_assign_dev_handler(dev, dev_handler);
+	if (rc != 0) {
+		res = rc;
+		goto out_pr_clear_dev;
+	}
 
 out_up:
 	mutex_unlock(&scst_mutex);
@@ -1017,6 +1021,9 @@ out:
 
 	TRACE_EXIT_RES(res);
 	return res;
+
+out_pr_clear_dev:
+	scst_pr_clear_dev(dev);
 
 out_free_del:
 	list_del(&dev->dev_list_entry);

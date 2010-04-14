@@ -1870,6 +1870,7 @@ struct scst_dev_registrant {
 	uint64_t key;
 	struct scst_tgt_dev *tgt_dev;
 	struct list_head dev_registrants_list_entry;
+	struct list_head aux_list_entry;
 };
 
 struct scst_device {

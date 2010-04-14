@@ -54,7 +54,7 @@
 int scst_pr_check_pr_path(void);
 #endif
 
-void scst_pr_init_dev(struct scst_device *dev);
+int scst_pr_init_dev(struct scst_device *dev);
 void scst_pr_clear_dev(struct scst_device *dev);
 
 int scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev);
