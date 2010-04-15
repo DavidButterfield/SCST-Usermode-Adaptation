@@ -68,16 +68,24 @@ static inline int tid_size(const uint8_t *tid)
 	sBUG_ON(tid == NULL);
 
 	if ((tid[0] & 0x0f) == SCSI_TRANSPORTID_PROTOCOLID_ISCSI)
-		return ((uint16_t *)(tid))[1] + 4;
+		return be16_to_cpu((uint16_t)tid[2]) + 4;
 	else
 		return TID_COMMON_SIZE;
 }
 
-/*
- * Return 0 if tid's is not equal
- * If tid's are equal return 1
- */
-static inline bool tid_equal(const uint8_t *tid_a, const uint8_t *tid_b)
+/* Secures tid by setting 0 in the last byte of NULL-terminated tid's */
+static inline void tid_secure(uint8_t *tid)
+{
+	if ((tid[0] & 0x0f) == SCSI_TRANSPORTID_PROTOCOLID_ISCSI) {
+		int len = be16_to_cpu((uint16_t)tid[2]);
+		tid[len + 4 - 1] = '\0';
+	}
+
+	return;
+}
+
+/* Returns false if tid's are not equal, true otherwise */
+static bool tid_equal(const uint8_t *tid_a, const uint8_t *tid_b)
 {
 	int len;
 
@@ -90,59 +98,57 @@ static inline bool tid_equal(const uint8_t *tid_a, const uint8_t *tid_b)
 	}
 
 	if ((tid_a[0] & 0x0f) == SCSI_TRANSPORTID_PROTOCOLID_ISCSI) {
-		uint8_t tid_a_fmt, tid_b_fmt;
-		int tid_a_len;
-		int tid_b_len;
-
-		TRACE_DBG("%s", "iSCSI protocol ID");
-
-		tid_a_fmt = tid_a[0] & 0xc0;
-		tid_b_fmt = tid_b[0] & 0xc0;
+		const uint8_t tid_a_fmt = tid_a[0] & 0xc0;
+		const uint8_t tid_b_fmt = tid_b[0] & 0xc0;
+		int tid_a_len, tid_a_max = be16_to_cpu((uint16_t)tid_a[2]);
+		int tid_b_len, tid_b_max = be16_to_cpu((uint16_t)tid_b[2]);
 
 		tid_a += 4;
 		tid_b += 4;
 
-		if (tid_a_fmt == tid_b_fmt) {
-			tid_a_len = strlen((char *)tid_a);
-			tid_b_len = strlen((char *)tid_b);
-		}
-		else {
-			if (tid_a_fmt == 0x00)
-				tid_a_len = strlen((char *)tid_a);
-			else if (tid_a_fmt == 0x40) {
-				uint8_t *p = strchr(tid_a, ',');
-
+		if (tid_a_fmt == 0x00)
+			tid_a_len = strnlen(tid_a, tid_a_max);
+		else if (tid_a_fmt == 0x40) {
+			if (tid_a_fmt != tid_b_fmt) {
+				uint8_t *p = strnchr(tid_a, tid_a_max, ',');
 				if (p == NULL)
-					goto error_malformed;
+					goto out_error;
 				tid_a_len = p - tid_a;
+
+				sBUG_ON(tid_a_len > tid_a_max);
+				sBUG_ON(tid_a_len < 0);
 			} else
-				goto error_format;
+				tid_a_len = strnlen(tid_a, tid_a_max);
+		} else
+			goto out_error;
 
-			if (tid_b_fmt == 0x00)
-				tid_b_len = strlen((char *)tid_b);
-			else if (tid_b_fmt == 0x40) {
-				uint8_t *p = strchr(tid_b, ',');
-
+		if (tid_b_fmt == 0x00)
+			tid_b_len = strnlen(tid_b, tid_b_max);
+		else if (tid_b_fmt == 0x40) {
+			if (tid_a_fmt != tid_b_fmt) {
+				uint8_t *p = strnchr(tid_b, tid_b_max, ',');
 				if (p == NULL)
-					goto error_malformed;
+					goto out_error;
 				tid_b_len = p - tid_b;
+
+				sBUG_ON(tid_b_len > tid_b_max);
+				sBUG_ON(tid_b_len < 0);
 			} else
-				goto error_format;
-		}
+				tid_b_len = strnlen(tid_b, tid_b_max);
+		} else
+			goto out_error;
+
 		if (tid_a_len != tid_b_len)
 			return false;
+
 		len = tid_a_len;
 	} else
 		len = TID_COMMON_SIZE;
 
-	return memcmp(tid_a, tid_b, len) == 0;
+	return (memcmp(tid_a, tid_b, len) == 0);
 
-error_malformed:
-	PRINT_ERROR("%s", "Invalid initiator port transport id format");
-	return false;
-
-error_format:
-	PRINT_ERROR("%s", "Invalid protocol ID format");
+out_error:
+	PRINT_ERROR("%s", "Invalid initiator port transport id");
 	return false;
 }
 
@@ -1179,6 +1185,8 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 			goto out;
 		}
 
+		tid_secure(transport_id);
+
 		/* Reject the PR command if it contains a registered I_T */
 		tgt_dev = scst_pr_find_tgt_dev(dev, transport_id);
 		if ((tgt_dev != NULL) && (tgt_dev->registrant != NULL)) {
@@ -1453,7 +1461,8 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 	struct scst_tgt_dev *tgt_dev_move = NULL;
 	struct scst_session *sess = cmd->sess;
 	struct scst_dev_registrant *reg, *reg_move;
-	const uint8_t *transport_id = NULL, *transport_id_move = NULL;
+	const uint8_t *transport_id = NULL;
+	uint8_t *transport_id_move = NULL;
 	uint16_t rel_tgt_id_move;
 
 	TRACE_ENTRY();
@@ -1524,6 +1533,8 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 			SCST_LOAD_SENSE(scst_sense_invalid_field_in_parm_list));
 		goto out;
 	}
+
+	tid_secure(transport_id_move);
 
 	tgt_dev_move = scst_pr_find_tgt_dev(dev, transport_id_move);
 	if (tgt_dev_move == NULL) {
