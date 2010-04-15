@@ -39,6 +39,7 @@
 #include <linux/sched.h>
 #include <linux/version.h>
 #include <asm/div64.h>
+#include <asm/unaligned.h>
 
 #define LOG_PREFIX			"dev_vdisk"
 
@@ -1358,8 +1359,8 @@ static void vdisk_exec_inquiry(struct scst_cmd *cmd)
 			/* Relative target port id */
 			buf[num + 1] = 0x10 | 0x04;
 
-			*(__be16 *)(&buf[num + 4]) =
-				__cpu_to_be16(cmd->tgt->rel_tgt_id);
+			put_unaligned(cpu_to_be16(cmd->tgt->rel_tgt_id),
+				(__be16 *)&buf[num + 4]);
 
 			buf[num + 3] = 8;
 			num += buf[num + 3];
