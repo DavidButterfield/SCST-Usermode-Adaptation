@@ -3514,15 +3514,8 @@ int iscsi_get_initiator_port_transport_id(struct scst_session *scst_sess,
 	tr_id[0] = 0x40 | SCSI_TRANSPORTID_PROTOCOLID_ISCSI;
 	((uint16_t *)tr_id)[1] = tr_id_size - 4;
 
-	/*
-	 * Add debug feature to simplify testing
-	 */
-#ifdef CONFIG_SCST_SKIP_SID
-	#warning In this mode SID is always zero
-	sprintf(&tr_id[4], "%s,i,0x%llx", sess->initiator_name, 0LL);
-#else
 	sprintf(&tr_id[4], "%s,i,0x%llx", sess->initiator_name, sid.id64);
-#endif
+
 	*transport_id = tr_id;
 
 	TRACE_DBG("Create tid '%s'", &tr_id[4]);
