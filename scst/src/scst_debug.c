@@ -136,7 +136,8 @@ const char *debug_transport_id_to_initiator_name(const uint8_t *transport_id)
 	 * corrupted in the debug logs because of the race for this
 	 * buffer.
 	 */
-	static char name_bufs[NR_CPUS][256];
+#define SIZEOF_NAME_BUF 256
+	static char name_bufs[NR_CPUS][SIZEOF_NAME_BUF];
 	char *name_buf;
 	unsigned long flags;
 
@@ -150,16 +151,16 @@ const char *debug_transport_id_to_initiator_name(const uint8_t *transport_id)
 	 * To prevent external racing with us users from accidentally
 	 * missing their NULL terminator.
 	 */
-	memset(name_buf, 0, sizeof(name_buf));
+	memset(name_buf, 0, SIZEOF_NAME_BUF);
 	smp_mb();
 
 	switch (transport_id[0] & 0x0f) {
 	case SCSI_TRANSPORTID_PROTOCOLID_ISCSI:
-		scnprintf(name_buf, sizeof(name_buf), "%s",
+		scnprintf(name_buf, SIZEOF_NAME_BUF, "%s",
 			&transport_id[4]);
 		break;
 	case SCSI_TRANSPORTID_PROTOCOLID_FCP2:
-		scnprintf(name_buf, sizeof(name_buf),
+		scnprintf(name_buf, SIZEOF_NAME_BUF,
 			"%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
 			transport_id[8], transport_id[9],
 			transport_id[10], transport_id[11],
@@ -167,12 +168,12 @@ const char *debug_transport_id_to_initiator_name(const uint8_t *transport_id)
 			transport_id[14], transport_id[15]);
 		break;
 	case SCSI_TRANSPORTID_PROTOCOLID_SPI5:
-		scnprintf(name_buf, sizeof(name_buf),
+		scnprintf(name_buf, SIZEOF_NAME_BUF,
 			"%x:%x", be16_to_cpu((uint16_t)transport_id[2]),
 			be16_to_cpu((uint16_t)transport_id[6]));
 		break;
 	case SCSI_TRANSPORTID_PROTOCOLID_SRP:
-		scnprintf(name_buf, sizeof(name_buf),
+		scnprintf(name_buf, SIZEOF_NAME_BUF,
 			"%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x"
 			"%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
 			transport_id[8], transport_id[9],
@@ -185,7 +186,7 @@ const char *debug_transport_id_to_initiator_name(const uint8_t *transport_id)
 			transport_id[22], transport_id[23]);
 		break;
 	case SCSI_TRANSPORTID_PROTOCOLID_SAS:
-		scnprintf(name_buf, sizeof(name_buf),
+		scnprintf(name_buf, SIZEOF_NAME_BUF,
 			"%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
 			transport_id[4], transport_id[5],
 			transport_id[6], transport_id[7],
@@ -193,7 +194,7 @@ const char *debug_transport_id_to_initiator_name(const uint8_t *transport_id)
 			transport_id[10], transport_id[11]);
 		break;
 	default:
-		scnprintf(name_buf, sizeof(name_buf),
+		scnprintf(name_buf, SIZEOF_NAME_BUF,
 			"(Not known protocol ID %x)", transport_id[0] & 0x0f);
 		break;
 	}
@@ -201,6 +202,7 @@ const char *debug_transport_id_to_initiator_name(const uint8_t *transport_id)
 	spin_unlock_irqrestore(&trace_buf_lock, flags);
 
 	return name_buf;
+#undef SIZEOF_NAME_BUF
 }
 
 #endif /* CONFIG_SCST_DEBUG */
