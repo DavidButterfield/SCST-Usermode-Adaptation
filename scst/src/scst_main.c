@@ -1666,6 +1666,7 @@ static void scst_stop_all_threads(void)
 	return;
 }
 
+/* It does NOT stop ran threads on error! */
 static int scst_start_all_threads(int num)
 {
 	int res;

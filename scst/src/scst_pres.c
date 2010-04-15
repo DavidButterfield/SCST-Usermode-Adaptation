@@ -1004,7 +1004,6 @@ int scst_pr_check_pr_path(void)
 {
 	int res;
 	struct nameidata nd;
-	struct dentry *dentry;
 	mm_segment_t old_fs = get_fs();
 
 	TRACE_ENTRY();
@@ -1012,37 +1011,11 @@ int scst_pr_check_pr_path(void)
 	set_fs(KERNEL_DS);
 
 	res = path_lookup(SCST_PR_DIR, 0, &nd);
-	if (res) {
-		TRACE_DBG("Unable to find %s - create", SCST_PR_DIR);
-
-		res = path_lookup(SCST_PR_DIR, LOOKUP_PARENT, &nd);
-		if (res) {
-			PRINT_ERROR("path_lookup failed (%d)", res);
-			goto out_setfs;
-		}
-
-		dentry = lookup_create(&nd, 1);
-		res = PTR_ERR(dentry);
-		if (IS_ERR(dentry))
-			goto out_unlock;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 25)
-		res = vfs_mkdir(nd.dentry->d_inode, dentry, 0755);
-#else
-		res = vfs_mkdir(nd.path.dentry->d_inode, dentry, 0755);
-#endif
-		if (res)
-			PRINT_ERROR("Unable to create config directory %s",
-				SCST_PR_DIR);
-
-		dput(dentry);
-
-out_unlock:
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 25)
-		mutex_unlock(&nd.dentry->d_inode->i_mutex);
-#else
-		mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
-#endif
+	if (res != 0) {
+		PRINT_ERROR("Unable to find %s (err %d), you should create "
+			"this directory manually or reinstall SCST",
+			SCST_PR_DIR, res);
+		goto out_setfs;
 	}
 
 	scst_pr_path_put(&nd);
