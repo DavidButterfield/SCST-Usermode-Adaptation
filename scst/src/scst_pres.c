@@ -625,7 +625,7 @@ static int scst_pr_do_load_device_file(struct scst_device *dev,
 			"(expected %016llx)", version, SCST_PR_FILE_VERSION);
 		goto out_close;
 	}
-	pos += sizeof(sign);
+	pos += sizeof(version);
 
 	while (data_size < file_size) {
 		uint8_t *tid;
