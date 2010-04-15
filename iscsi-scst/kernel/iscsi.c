@@ -22,6 +22,7 @@
 #include <net/tcp.h>
 #include <scsi/scsi.h>
 #include <asm/byteorder.h>
+#include <asm/unaligned.h>
 
 #include "iscsi.h"
 #include "digest.h"
@@ -3512,7 +3513,8 @@ int iscsi_get_initiator_port_transport_id(struct scst_session *scst_sess,
 	}
 
 	tr_id[0] = 0x40 | SCSI_TRANSPORTID_PROTOCOLID_ISCSI;
-	((uint16_t *)tr_id)[1] = tr_id_size - 4;
+	put_unaligned(cpu_to_be16(tr_id_size - 4),
+		(uint16_t *)&tr_id[2]);
 
 	sprintf(&tr_id[4], "%s,i,0x%llx", sess->initiator_name, sid.id64);
 
