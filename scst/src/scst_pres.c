@@ -68,7 +68,7 @@ static inline int tid_size(const uint8_t *tid)
 	sBUG_ON(tid == NULL);
 
 	if ((tid[0] & 0x0f) == SCSI_TRANSPORTID_PROTOCOLID_ISCSI)
-		return be16_to_cpu((uint16_t)tid[2]) + 4;
+		return be16_to_cpu(get_unaligned((__be16 *)&tid[2])) + 4;
 	else
 		return TID_COMMON_SIZE;
 }
@@ -77,8 +77,8 @@ static inline int tid_size(const uint8_t *tid)
 static inline void tid_secure(uint8_t *tid)
 {
 	if ((tid[0] & 0x0f) == SCSI_TRANSPORTID_PROTOCOLID_ISCSI) {
-		int len = be16_to_cpu((uint16_t)tid[2]);
-		tid[len + 4 - 1] = '\0';
+		int size = tid_size(tid);
+		tid[size - 1] = '\0';
 	}
 
 	return;
@@ -100,8 +100,8 @@ static bool tid_equal(const uint8_t *tid_a, const uint8_t *tid_b)
 	if ((tid_a[0] & 0x0f) == SCSI_TRANSPORTID_PROTOCOLID_ISCSI) {
 		const uint8_t tid_a_fmt = tid_a[0] & 0xc0;
 		const uint8_t tid_b_fmt = tid_b[0] & 0xc0;
-		int tid_a_len, tid_a_max = be16_to_cpu((uint16_t)tid_a[2]);
-		int tid_b_len, tid_b_max = be16_to_cpu((uint16_t)tid_b[2]);
+		int tid_a_len, tid_a_max = tid_size(tid_a) - 4;
+		int tid_b_len, tid_b_max = tid_size(tid_b) - 4;
 
 		tid_a += 4;
 		tid_b += 4;
