@@ -3512,15 +3512,21 @@ int iscsi_get_initiator_port_transport_id(struct scst_session *scst_sess,
 		goto out;
 	}
 
+#ifdef CONFIG_SCST_ISCSI_SKIP_ISID
+	tr_id[0] = 0x0 | SCSI_TRANSPORTID_PROTOCOLID_ISCSI;
+	tr_id_size = sprintf(&tr_id[4], "%s", sess->initiator_name) + 1;
+	tr_id_size = (tr_id_size + 3) & -4;
+#else
 	tr_id[0] = 0x40 | SCSI_TRANSPORTID_PROTOCOLID_ISCSI;
+	sprintf(&tr_id[4], "%s,i,0x%llx", sess->initiator_name, sid.id64);
+#endif
+
 	put_unaligned(cpu_to_be16(tr_id_size - 4),
 		(__be16 *)&tr_id[2]);
 
-	sprintf(&tr_id[4], "%s,i,0x%llx", sess->initiator_name, sid.id64);
-
 	*transport_id = tr_id;
 
-	TRACE_DBG("Create tid '%s'", &tr_id[4]);
+	TRACE_DBG("Created tid '%s'", &tr_id[4]);
 
 out:
 	TRACE_EXIT_RES(res);
@@ -3721,6 +3727,12 @@ static int __init iscsi_init(void)
 		"not enabled in your kernel. ISCSI-SCST will be working with "
 		"not the best performance. Refer README file for details.");
 #endif
+#endif
+
+#ifdef CONFIG_SCST_ISCSI_SKIP_ISID
+	PRINT_WARNING("%s", "CONFIG_SCST_ISCSI_SKIP_ISID defined: identifying "
+		"initiators only by names and ignoring ISID part in "
+		"TransportIDs");
 #endif
 
 	ctr_major = register_chrdev(0, ctr_name, &ctr_fops);
