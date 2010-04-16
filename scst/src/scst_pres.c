@@ -1145,7 +1145,8 @@ void scst_pr_clear_tgt_dev(struct scst_tgt_dev *tgt_dev)
 
 /* Called with dev_pr_mutex locked, no IRQ */
 static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
-	uint8_t *buffer, int buffer_size, bool aptpl)
+	uint8_t *buffer, int buffer_size, bool aptpl,
+	struct list_head *rollback_list)
 {
 	int res = 0;
 	int offset, ext_size;
@@ -1155,7 +1156,6 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 	struct scst_tgt_dev *tgt_dev;
 	struct scst_dev_registrant *reg;
 	uint8_t *transport_id;
-	LIST_HEAD(rollback_list);
 
 	action_key = get_unaligned((__be64 *)&buffer[8]);
 
@@ -1210,21 +1210,15 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 		if (reg == NULL) {
 			scst_set_busy(cmd);
 			res = -ENOMEM;
-			goto out_rollback;
+			goto out;
 		}
 
-		list_add_tail(&reg->aux_list_entry, &rollback_list);
+		list_add_tail(&reg->aux_list_entry, rollback_list);
 
 		offset += tid_size(transport_id);
 	}
 out:
 	return res;
-
-out_rollback:
-       list_for_each_entry(reg, &rollback_list, aux_list_entry) {
-	       scst_pr_remove_registrant(dev, reg);
-	}
-	goto out;
 }
 
 /* Called with dev_pr_mutex locked, no IRQ */
@@ -1267,6 +1261,7 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
 	struct scst_session *sess = cmd->sess;
 	struct scst_dev_registrant *reg;
+	LIST_HEAD(rollback_list);
 
 	TRACE_ENTRY();
 
@@ -1315,9 +1310,10 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 			if (spec_i_pt) {
 				int rc;
 				rc = scst_pr_register_with_spec_i_pt(cmd,
-					buffer, buffer_size, aptpl);
+					buffer, buffer_size, aptpl,
+					&rollback_list);
 				if (rc != 0)
-					goto out;
+					goto out_rollback;
 			}
 
 			reg = scst_pr_add_registrant(dev, sess->transport_id,
@@ -1325,7 +1321,7 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 				tgt_dev);
 			if (reg == NULL) {
 				scst_set_busy(cmd);
-				goto out;
+				goto out_rollback;
 			}
 		} else
 			TRACE_PR("%s", "Doing nothing - action_key is zero");
@@ -1365,6 +1361,12 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 out:
 	TRACE_EXIT();
 	return;
+
+out_rollback:
+	list_for_each_entry(reg, &rollback_list, aux_list_entry) {
+	       scst_pr_remove_registrant(dev, reg);
+	}
+	goto out;
 }
 
 /* Called with dev_pr_mutex locked, no IRQ */
