@@ -537,7 +537,7 @@ static inline void scst_pr_path_put(struct nameidata *nd)
 static int scst_pr_do_load_device_file(struct scst_device *dev,
 	const char *file_name)
 {
-	int res = 0;
+	int res = 0, rc;
 	struct file *file = NULL;
 	struct inode *inode;
 	char *buf = NULL;
@@ -565,7 +565,7 @@ static int scst_pr_do_load_device_file(struct scst_device *dev,
 	inode = file->f_dentry->d_inode;
 
 	if (S_ISREG(inode->i_mode))
-		/* Nothing to do*/;
+		/* Nothing to do */;
 	else if (S_ISBLK(inode->i_mode))
 		inode = inode->i_bdev->bd_inode;
 	else {
@@ -590,10 +590,11 @@ static int scst_pr_do_load_device_file(struct scst_device *dev,
 	}
 
 	pos = 0;
-	res = vfs_read(file, buf, file_size, &pos);
-	if (res != file_size) {
+	rc = vfs_read(file, buf, file_size, &pos);
+	if (rc != file_size) {
 		PRINT_ERROR("Unable to read file '%s' - error %d", file_name,
-			res);
+			rc);
+		res = rc;
 		goto out_close;
 	}
 
@@ -723,6 +724,8 @@ int scst_pr_load_device_file(struct scst_device *dev)
 
 	res = scst_pr_do_load_device_file(dev, dev->pr_file_name1);
 
+	scst_pr_dump_registrants(dev);
+
 out:
 	TRACE_EXIT_RES(res);
 	return res;
@@ -769,7 +772,7 @@ static int scst_pr_copy_file(const char *src, const char *dest)
 	inode = file_src->f_dentry->d_inode;
 
 	if (S_ISREG(inode->i_mode))
-		/* Nothing to do*/;
+		/* Nothing to do */;
 	else if (S_ISBLK(inode->i_mode))
 		inode = inode->i_bdev->bd_inode;
 	else {

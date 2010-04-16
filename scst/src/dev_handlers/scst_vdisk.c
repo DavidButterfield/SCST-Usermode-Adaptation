@@ -642,7 +642,7 @@ static int vdisk_get_file_size(const char *filename, bool blockio,
 	}
 
 	if (S_ISREG(inode->i_mode))
-		/* Nothing to do*/;
+		/* Nothing to do */;
 	else if (S_ISBLK(inode->i_mode))
 		inode = inode->i_bdev->bd_inode;
 	else {
