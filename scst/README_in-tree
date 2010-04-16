@@ -1215,6 +1215,34 @@ IMPORTANT: Some disk and partition table management utilities don't support
 	   work with files on such file system.
 
 
+Persistent Reservations
+-----------------------
+
+SCST implements Persistent Reservations with full set of capabilities,
+including "Persistence Through Power Loss".
+
+The "Persistence Through Power Loss" data are saved in /var/lib/scst
+with files with names the same as the names of the corresponding
+devices. Also this directory contains backup versions of those files
+with suffix ".1". Those backup files are used in case of power or other
+failure to prevent Persistent Reservation information from corruption
+during update.
+
+The Persistent Reservations available on all transports implementing
+get_initiator_port_transport_id() callback. Transports not implementing
+this callback will act in one of 2 possible scenarios ("all or
+nothing"):
+
+1. If a device has such transport connected and doesn't have persistent
+reservations, it will refuse Persistent Reservations commands as if it
+doesn't support them.
+
+2. If a device has persistent reservations, all initiators newly
+connecting via such transports will not see this device. After all
+persistent reservations from this device are released, upon reconnect
+the initiators will see it.
+
+
 Caching
 -------
 

@@ -229,9 +229,9 @@ static void scst_pr_dump_reservation(struct scst_device *dev)
 	return;
 }
 
-static struct scst_dev_registrant *scst_pr_find_registrant(
+static struct scst_dev_registrant *scst_pr_find_not_used_registrant(
 	struct scst_device *dev, const uint8_t *transport_id,
-	const uint16_t rel_tgt_id, uint64_t key)
+	const uint16_t rel_tgt_id)
 {
 	struct scst_dev_registrant *reg, *reg_found = NULL;
 
@@ -239,19 +239,11 @@ static struct scst_dev_registrant *scst_pr_find_registrant(
 
 	list_for_each_entry(reg, &dev->dev_registrants_list,
 				dev_registrants_list_entry) {
-		EXTRACHECKS_BUG_ON(reg->transport_id == NULL);
-
-		if (reg->rel_tgt_id == rel_tgt_id &&
-		    tid_equal(reg->transport_id, transport_id)) {
-			if (key != 0) {
-				if (reg->key == key) {
-					reg_found = reg;
-					break;
-				}
-			} else {
-				reg_found = reg;
-				break;
-			}
+		if ((reg->rel_tgt_id == rel_tgt_id) &&
+		    tid_equal(reg->transport_id, transport_id) &&
+		    (reg->tgt_dev == NULL)) {
+			reg_found = reg;
+			break;
 		}
 	}
 
@@ -259,22 +251,32 @@ static struct scst_dev_registrant *scst_pr_find_registrant(
 	return reg_found;
 }
 
-static struct scst_tgt_dev *scst_pr_find_tgt_dev(struct scst_device *dev,
-	const uint8_t *transport_id, const uint16_t rel_tgt_id)
+static struct scst_tgt_dev *scst_pr_find_tgt_dev_not_registered_first(
+	struct scst_device *dev, const uint8_t *transport_id,
+	const uint16_t rel_tgt_id, struct scst_tgt_dev *exclude_tgt_dev)
 {
 	struct scst_tgt_dev *tgt_dev, *tgt_dev_found = NULL;
+	struct scst_tgt_dev *tgt_dev_found_reg = NULL;
 
 	TRACE_ENTRY();
 
 	list_for_each_entry(tgt_dev, &dev->dev_tgt_dev_list,
 				dev_tgt_dev_list_entry) {
-		if ((rel_tgt_id == 0 ||
-		     tgt_dev->sess->tgt->rel_tgt_id == rel_tgt_id) &&
-		    tid_equal(tgt_dev->sess->transport_id, transport_id)) {
-			tgt_dev_found = tgt_dev;
-			break;
+		if ((tgt_dev->sess->tgt->rel_tgt_id == rel_tgt_id) &&
+		    tid_equal(tgt_dev->sess->transport_id, transport_id) &&
+		    (tgt_dev != exclude_tgt_dev)) {
+			if (tgt_dev->registrant != NULL) {
+				if (tgt_dev_found_reg == NULL)
+					tgt_dev_found_reg = tgt_dev;
+			} else {
+				tgt_dev_found = tgt_dev;
+				break;
+			}
 		}
 	}
+
+	if (tgt_dev_found == NULL)
+		tgt_dev_found = tgt_dev_found_reg;
 
 	TRACE_EXIT_HRES(tgt_dev_found);
 	return tgt_dev_found;
@@ -1122,12 +1124,14 @@ int scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev)
 
 	TRACE_ENTRY();
 
-	tgt_dev->registrant = scst_pr_find_registrant(
+	tgt_dev->registrant = scst_pr_find_not_used_registrant(
 		tgt_dev->dev, tgt_dev->sess->transport_id,
-		tgt_dev->sess->tgt->rel_tgt_id, 0);
+		tgt_dev->sess->tgt->rel_tgt_id);
 
-	if (tgt_dev->registrant != NULL)
+	if (tgt_dev->registrant != NULL) {
+		sBUG_ON(tgt_dev->registrant->tgt_dev != NULL);
 		tgt_dev->registrant->tgt_dev = tgt_dev;
+	}
 
 	TRACE_EXIT_RES(res);
 	return res;
@@ -1188,8 +1192,9 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 		tid_secure(transport_id);
 
 		/* Reject if the command contains a registered I_T nexus */
-		tgt_dev = scst_pr_find_tgt_dev(dev, transport_id,
-				sess->tgt->rel_tgt_id);
+		tgt_dev = scst_pr_find_tgt_dev_not_registered_first(dev,
+				transport_id, sess->tgt->rel_tgt_id,
+				cmd->tgt_dev);
 		if ((tgt_dev != NULL) && (tgt_dev->registrant != NULL)) {
 			scst_set_cmd_error(cmd,
 				SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
@@ -1204,8 +1209,9 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 	while (offset < ext_size) {
 		transport_id = &buffer[28 + offset];
 
-		tgt_dev = scst_pr_find_tgt_dev(dev, transport_id,
-				sess->tgt->rel_tgt_id);
+		tgt_dev = scst_pr_find_tgt_dev_not_registered_first(dev,
+				transport_id, sess->tgt->rel_tgt_id,
+				cmd->tgt_dev);
 
 		reg = scst_pr_add_registrant(dev, transport_id,
 			sess->tgt->rel_tgt_id, action_key, aptpl,
@@ -1540,8 +1546,8 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 
 	tid_secure(transport_id_move);
 
-	tgt_dev_move = scst_pr_find_tgt_dev(dev, transport_id_move,
-				rel_tgt_id_move);
+	tgt_dev_move = scst_pr_find_tgt_dev_not_registered_first(dev,
+				transport_id_move, rel_tgt_id_move, tgt_dev);
 	if (tgt_dev_move == NULL) {
 		TRACE_PR("%s", "Unable to find target device for new record");
 		scst_set_cmd_error(cmd,

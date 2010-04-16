@@ -2012,9 +2012,19 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		goto out_put_full_buf;
 	}
 
-	/* Check SPEC_I_PT */
-	if ((action != PR_REGISTER) && ((buffer[20] >> 3) & 0x01)) {
+	/* Check SPEC_I_PT (PR_REGISTER_AND_MOVE has another format) */
+	if ((action != PR_REGISTER) && (action != PR_REGISTER_AND_MOVE) &&
+	    ((buffer[20] >> 3) & 0x01)) {
 		TRACE_PR("SPEC_I_PT must be zero for action %x", action);
+		scst_set_cmd_error(cmd, SCST_LOAD_SENSE(
+					scst_sense_invalid_field_in_cdb));
+		goto out_put_full_buf;
+	}
+
+	/* Check ALL_TG_PT (PR_REGISTER_AND_MOVE has another format) */
+	if ((action != PR_REGISTER) && (action != PR_REGISTER_AND_IGNORE) &&
+	    (action != PR_REGISTER_AND_MOVE) && ((buffer[20] >> 2) & 0x01)) {
+		TRACE_PR("ALL_TG_PT must be zero for action %x", action);
 		scst_set_cmd_error(cmd, SCST_LOAD_SENSE(
 					scst_sense_invalid_field_in_cdb));
 		goto out_put_full_buf;
