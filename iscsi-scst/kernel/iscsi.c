@@ -3514,7 +3514,7 @@ int iscsi_get_initiator_port_transport_id(struct scst_session *scst_sess,
 
 #ifdef CONFIG_SCST_ISCSI_SKIP_ISID
 	tr_id[0] = 0x0 | SCSI_TRANSPORTID_PROTOCOLID_ISCSI;
-	tr_id_size = sprintf(&tr_id[4], "%s", sess->initiator_name) + 1;
+	tr_id_size = 4 + sprintf(&tr_id[4], "%s", sess->initiator_name) + 1;
 	tr_id_size = (tr_id_size + 3) & -4;
 #else
 	tr_id[0] = 0x40 | SCSI_TRANSPORTID_PROTOCOLID_ISCSI;
