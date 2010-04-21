@@ -46,6 +46,10 @@
 #include <linux/mount.h>
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
+#include <linux/writeback.h>
+#endif
+
 #include "scst.h"
 #include "scst_const.h"
 #include "scst_priv.h"
@@ -536,6 +540,17 @@ static inline void scst_pr_path_put(struct nameidata *nd)
 #endif
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
+static int scst_pr_vfs_fsync(struct file *file, loff_t loff, loff_t len)
+{
+	int res;
+
+	res = sync_page_range(file->f_dentry->d_inode, file->f_mapping,
+			loff, len);
+	return res;
+}
+#endif
+
 static int scst_pr_do_load_device_file(struct scst_device *dev,
 	const char *file_name)
 {
@@ -807,7 +822,11 @@ static int scst_pr_copy_file(const char *src, const char *dest)
 		goto out_skip;
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
+	res = scst_pr_vfs_fsync(file_dest, 0, file_size);
+#else
 	res = vfs_fsync(file_dest, file_dest->f_path.dentry, 0);
+#endif
 	if (res != 0) {
 		PRINT_ERROR("fsync() of the backup PR file failed: %d", res);
 		goto out_skip;
@@ -961,7 +980,11 @@ static int scst_pr_sync_device_file(struct scst_tgt_dev *tgt_dev)
 		}
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
+	res = scst_pr_vfs_fsync(file, 0, pos);
+#else
 	res = vfs_fsync(file, file->f_path.dentry, 0);
+#endif
 	if (res != 0) {
 		PRINT_ERROR("fsync() of the PR file failed: %d", res);
 		goto write_error_close;
@@ -972,6 +995,16 @@ static int scst_pr_sync_device_file(struct scst_tgt_dev *tgt_dev)
 	res = vfs_write(file, (char *)&sign, sizeof(sign), &pos);
 	if (res != sizeof(sign))
 		goto write_error;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
+	res = scst_pr_vfs_fsync(file, 0, sizeof(sign));
+#else
+	res = vfs_fsync(file, file->f_path.dentry, 0);
+#endif
+	if (res != 0) {
+		PRINT_ERROR("fsync() of the PR file failed: %d", res);
+		goto write_error_close;
+	}
 
 	res = 0;
 
