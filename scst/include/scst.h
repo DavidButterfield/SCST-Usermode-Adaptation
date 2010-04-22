@@ -1865,7 +1865,6 @@ struct scst_mgmt_cmd {
 /* List entry for *dev_registrants_list */
 struct scst_dev_registrant {
 	uint8_t *transport_id;
-	bool marked:1;
 	uint16_t rel_tgt_id;
 	uint64_t key;
 	struct scst_tgt_dev *tgt_dev;

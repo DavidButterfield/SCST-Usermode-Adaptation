@@ -255,6 +255,59 @@ static struct scst_dev_registrant *scst_pr_find_not_used_registrant(
 	return reg_found;
 }
 
+static void scst_pr_find_registrants_list_all(struct scst_device *dev,
+	struct scst_dev_registrant *exclude_reg, struct list_head *list)
+{
+	struct scst_dev_registrant *reg;
+
+	TRACE_ENTRY();
+
+	TRACE_PR("Find all registered records except: device '%s' "
+		"with exclude reg key '%016llx'",
+		dev->virt_name, exclude_reg->key);
+
+	list_for_each_entry(reg, &dev->dev_registrants_list,
+				dev_registrants_list_entry) {
+		if (reg == exclude_reg)
+			continue;
+		TRACE_PR("Add registered record to list: "
+			"initiator '%s' key '%016llx'",
+			debug_transport_id_to_initiator_name(
+				reg->transport_id),
+			reg->key);
+		list_add_tail(&reg->aux_list_entry, list);
+	}
+
+	TRACE_EXIT();
+	return;
+}
+
+static void scst_pr_find_registrants_list_key(struct scst_device *dev,
+	uint64_t key, struct list_head *list)
+{
+	struct scst_dev_registrant *reg;
+
+	TRACE_ENTRY();
+
+	TRACE_PR("Find registered records for: device '%s' with key '%016llx'",
+		dev->virt_name, key);
+
+	list_for_each_entry(reg, &dev->dev_registrants_list,
+				dev_registrants_list_entry) {
+		if (reg->key == key) {
+			TRACE_PR("Add registered record to list: "
+				"initiator '%s' key '%016llx'",
+				debug_transport_id_to_initiator_name(
+					reg->transport_id),
+				key);
+			list_add_tail(&reg->aux_list_entry, list);
+		}
+	}
+
+	TRACE_EXIT();
+	return;
+}
+
 static struct scst_tgt_dev *scst_pr_find_tgt_dev_not_registered_first(
 	struct scst_device *dev, const uint8_t *transport_id,
 	const uint16_t rel_tgt_id, struct scst_tgt_dev *exclude_tgt_dev)
@@ -317,7 +370,6 @@ static struct scst_dev_registrant *scst_pr_add_registrant(
 
 	reg->rel_tgt_id = rel_tgt_id;
 	reg->key = key;
-	reg->marked = 0;
 	reg->tgt_dev = tgt_dev;
 
 	dev->pr_aptpl = aptpl;
@@ -362,28 +414,40 @@ static void scst_pr_remove_registrant(struct scst_device *dev,
 	return;
 }
 
-static void scst_pr_send_ua(struct scst_device *dev,
-	struct scst_dev_registrant *issuer, int marked,
+static void scst_pr_send_ua_reg(struct scst_device *dev,
+	struct scst_dev_registrant *reg,
 	int key, int asc, int ascq)
 {
 	static uint8_t ua[SCST_STANDARD_SENSE_LEN];
-	struct scst_dev_registrant *reg;
 
 	TRACE_ENTRY();
 
 	scst_set_sense(ua, sizeof(ua), dev->d_sense, key, asc, ascq);
 
+	TRACE_PR("Set sense [%x %x %x]: initiator '%s' key "
+		"'%016llx'", ua[2], ua[12], ua[13],
+		debug_transport_id_to_initiator_name(
+			reg->transport_id), reg->key);
+
+	if (reg->tgt_dev)
+		scst_check_set_UA(reg->tgt_dev, ua, sizeof(ua), 0);
+
+	TRACE_EXIT();
+	return;
+}
+
+static void scst_pr_send_ua_all(struct scst_device *dev,
+	struct scst_dev_registrant *exclude_reg,
+	int key, int asc, int ascq)
+{
+	struct scst_dev_registrant *reg;
+
+	TRACE_ENTRY();
+
 	list_for_each_entry(reg, &dev->dev_registrants_list,
 				dev_registrants_list_entry) {
-		if (reg != issuer && reg->marked == marked) {
-			TRACE_PR("Set sense [%x %x %x]: initiator '%s' key "
-				"'%016llx'", ua[2], ua[12], ua[13],
-				debug_transport_id_to_initiator_name(
-					reg->transport_id),
-				reg->key);
-			if (reg->tgt_dev)
-				scst_check_set_UA(reg->tgt_dev, ua, sizeof(ua), 0);
-		}
+		if (reg != exclude_reg)
+			scst_pr_send_ua_reg(dev, reg, key, asc, ascq);
 	}
 
 	TRACE_EXIT();
@@ -392,51 +456,47 @@ static void scst_pr_send_ua(struct scst_device *dev,
 
 /*
  * lock sess_list_lock
- * abort tasks for all marked registrants,
+ * abort tasks for all registrants from list,
  * e.g. for all registered initiator's sessions
  * abort all cmds
  */
-static void scst_pr_abort_marked(struct scst_device *dev, struct scst_cmd *cmd)
+static void scst_pr_abort_reg(struct scst_device *dev,
+	struct scst_cmd *exclude_cmd, struct scst_dev_registrant *reg)
 {
-	struct scst_dev_registrant *reg;
-	struct scst_session *sess = cmd->sess;
+	struct scst_session *sess = exclude_cmd->sess;
 	struct scst_cmd *sess_cmd;
 
 	TRACE_ENTRY();
 
-	list_for_each_entry(reg, &dev->dev_registrants_list,
-				dev_registrants_list_entry) {
-		TRACE_PR("Abort commands: initiator '%s' key '0x%016llx' "
-			"session", debug_transport_id_to_initiator_name(
-					reg->transport_id),
-			 reg->key);
+	TRACE_PR("Abort commands for: initiator '%s' key '0x%016llx' "
+		"session", debug_transport_id_to_initiator_name(
+				reg->transport_id), reg->key);
 
-		if (reg->tgt_dev == NULL) {
-			TRACE_PR("Registered record for initiator '%s' key "
-				"'0x%016llx' have no attached target device",
-				debug_transport_id_to_initiator_name(
-					reg->transport_id),
-				reg->key);
-			continue;
-		}
-
-		spin_lock_irq(&sess->sess_list_lock);
-		list_for_each_entry(sess_cmd, &sess->sess_cmd_list,
-					sess_cmd_list_entry) {
-			if ((sess_cmd->tgt_dev == reg->tgt_dev) &&
-			    (sess_cmd != cmd)) {
-				TRACE_PR("Abort cmd '%s'", sess_cmd->op_name);
-				/*
-				 * ToDo: dev handlers should be notified
-				 * somehow about the abortion to abort
-				 * faster.
-				 */
-				scst_abort_cmd(sess_cmd, NULL, 0, 0);
-			}
-		}
-		spin_unlock_irq(&sess->sess_list_lock);
+	if (reg->tgt_dev == NULL) {
+		TRACE_PR("Registered record for initiator '%s' key "
+			"'0x%016llx' have no attached target device",
+			debug_transport_id_to_initiator_name(
+				reg->transport_id),
+			reg->key);
+		goto out;
 	}
 
+	spin_lock_irq(&sess->sess_list_lock);
+	list_for_each_entry(sess_cmd, &sess->sess_cmd_list,
+				sess_cmd_list_entry) {
+		if ((sess_cmd->tgt_dev == reg->tgt_dev) &&
+		    (sess_cmd != exclude_cmd)) {
+			TRACE_PR("Abort cmd '%s'", sess_cmd->op_name);
+			/*
+			 * ToDo: dev handlers should be notified
+			 * somehow about the abortion to abort
+			 * faster.
+			 */
+			scst_abort_cmd(sess_cmd, NULL, 0, 0);
+		}
+	}
+	spin_unlock_irq(&sess->sess_list_lock);
+out:
 	TRACE_EXIT();
 	return;
 }
@@ -461,54 +521,6 @@ static void scst_pr_clear_holder(struct scst_device *dev)
 	}
 
 	dev->pr_holder = NULL;
-
-	TRACE_EXIT();
-	return;
-}
-
-static void scst_pr_mark_registrants(struct scst_device *dev,
-	struct scst_dev_registrant *issuer, uint64_t key)
-{
-	struct scst_dev_registrant *reg;
-
-	TRACE_ENTRY();
-
-	TRACE_PR("Mark registered records: device '%s' with key '%016llx'",
-	    dev->virt_name, key);
-
-	list_for_each_entry(reg, &dev->dev_registrants_list,
-				dev_registrants_list_entry) {
-		if (reg != issuer && reg->key == key) {
-			TRACE_PR("Mark registered record: initiator '%s' key "
-				"'%016llx'",
-				debug_transport_id_to_initiator_name(
-					reg->transport_id),
-				key);
-			reg->marked = 1;
-		}
-	}
-
-	TRACE_EXIT();
-	return;
-}
-
-static void scst_pr_remove_registrants_marked(struct scst_device *dev)
-{
-	struct scst_dev_registrant *reg, *tmp_reg;
-
-	TRACE_ENTRY();
-
-	list_for_each_entry_safe(reg, tmp_reg, &dev->dev_registrants_list,
-					dev_registrants_list_entry) {
-		if (reg->marked) {
-			TRACE_PR("Remove registration record: initiator '%s' "
-				"'%016llx'",
-				debug_transport_id_to_initiator_name(
-					reg->transport_id),
-				reg->key);
-			scst_pr_remove_registrant(dev, reg);
-		}
-	}
 
 	TRACE_EXIT();
 	return;
@@ -1284,7 +1296,7 @@ static void scst_pr_unregister(struct scst_device *dev,
 		switch (pr_type) {
 		case TYPE_WRITE_EXCLUSIVE_REGONLY:
 		case TYPE_EXCLUSIVE_ACCESS_REGONLY:
-			scst_pr_send_ua(dev, reg, 0,
+			scst_pr_send_ua_all(dev, NULL,
 				SCST_LOAD_SENSE(scst_sense_reservation_released));
 			break;
 		}
@@ -1794,7 +1806,7 @@ void scst_pr_release(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 		case TYPE_EXCLUSIVE_ACCESS_REGONLY:
 		case TYPE_WRITE_EXCLUSIVE:
 		case TYPE_EXCLUSIVE_ACCESS:
-			scst_pr_send_ua(dev, reg, 0,
+			scst_pr_send_ua_all(dev, reg,
 				SCST_LOAD_SENSE(scst_sense_reservation_released));
 			break;
 		}
@@ -1850,14 +1862,14 @@ void scst_pr_clear(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 		goto out;
 	}
 
+	scst_pr_send_ua_all(dev, NULL,
+		SCST_LOAD_SENSE(scst_sense_reservation_preempted));
+
 	list_for_each_entry_safe(r, t, &dev->dev_registrants_list,
 					dev_registrants_list_entry) {
 		scst_pr_remove_registrant(dev, r);
 	}
 
-	scst_pr_send_ua(dev, reg, 0,
-		SCST_LOAD_SENSE(scst_sense_reservation_preempted));
-
 	dev->pr_generation++;
 
 	scst_pr_dump_registrants(dev);
@@ -1868,16 +1880,16 @@ out:
 	return;
 }
 
-/* Called with dev_pr_mutex locked, no IRQ */
-void scst_pr_preempt(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
+static void scst_pr_do_preempt(struct scst_cmd *cmd, uint8_t *buffer,
+	int buffer_size, bool abort)
 {
 	uint64_t key, action_key;
 	int scope, type;
 	struct scst_device *dev = cmd->dev;
 	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
-	struct scst_dev_registrant *reg;
+	struct scst_dev_registrant *reg, *r, *rt;
 	struct scst_session *sess = cmd->sess;
-	int marked = 0;
+	LIST_HEAD(preempt_list);
 
 	TRACE_ENTRY();
 
@@ -1900,95 +1912,8 @@ void scst_pr_preempt(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 		goto out;
 	}
 
-	TRACE_PR("Preempt: initiator '%s' key '%016llx' action_key '%016llx' "
-		"scope %x type %x", sess->initiator_name, key, action_key,
-		scope, type);
-
-	/* We already checked reg is not NULL */
-	reg = tgt_dev->registrant;
-	if (reg->key != key) {
-		TRACE_PR("Initiator's '%s' key '%016llx' mismatch",
-			sess->initiator_name, key);
-		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
-		goto out;
-	}
-
-	if (!dev->pr_is_set)
-		goto skip;
-
-	if (dev->pr_type == TYPE_WRITE_EXCLUSIVE_ALL ||
-	    dev->pr_type == TYPE_EXCLUSIVE_ACCESS_ALL) {
-		if (action_key == 0)
-			scst_pr_set_holder(dev, reg, scope, type);
-		marked = 1;
-		scst_pr_mark_registrants(dev, reg, action_key);
-	} else {
-		if (action_key == 0) {
-			scst_set_cmd_error(cmd, SCST_LOAD_SENSE(
-				scst_sense_invalid_field_in_parm_list));
-			goto out;
-		}
-		if (dev->pr_holder && dev->pr_holder->key == action_key)
-			scst_pr_set_holder(dev, reg, scope, type);
-		marked = 1;
-		scst_pr_mark_registrants(dev, reg, action_key);
-	}
-
-	if (marked) {
-		scst_pr_send_ua(dev, reg, 1,
-			SCST_LOAD_SENSE(scst_sense_registrations_preempted));
-		scst_pr_remove_registrants_marked(dev);
-	}
-
-skip:
-	dev->pr_generation++;
-
-	scst_pr_dump_registrants(dev);
-	scst_pr_dump_reservation(dev);
-
-out:
-	TRACE_EXIT();
-	return;
-}
-
-/*
- * Called with dev_pr_mutex locked, no IRQ. Expects session_list_lock
- * not locked
- */
-void scst_pr_preempt_and_abort(struct scst_cmd *cmd, uint8_t *buffer,
-	int buffer_size)
-{
-	uint64_t key, action_key;
-	int scope, type;
-	struct scst_device *dev = cmd->dev;
-	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
-	struct scst_session *sess = cmd->sess;
-	struct scst_dev_registrant *reg;
-	bool marked = 0;
-
-	TRACE_ENTRY();
-
-	key = get_unaligned((__be64 *)&buffer[0]);
-	action_key = get_unaligned((__be64 *)&buffer[8]);
-	scope = (cmd->cdb[2] & 0x0f) >> 4;
-	type = cmd->cdb[2] & 0x0f;
-
-	if (buffer_size != 24) {
-		TRACE_PR("Invalid buffer size %d", buffer_size);
-		scst_set_cmd_error(cmd,
-			SCST_LOAD_SENSE(scst_sense_parameter_list_length_invalid));
-		goto out;
-	}
-
-	if ((PR_TYPE_SHIFT_MASK & (1 << type)) == 0) {
-		TRACE_PR("Invalid reservation type %d", type);
-		scst_set_cmd_error(cmd,
-			SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
-		goto out;
-	}
-
-	TRACE_PR("Preempt and abort: initiator '%s' key '%016llx' "
-		"action_key '%016llx' scope %x type %x",
+	TRACE_PR("Preempt%s: initiator '%s' key '%016llx' action_key '%016llx' "
+		"scope %x type %x", abort ? " and abort" : "",
 		sess->initiator_name, key, action_key, scope, type);
 
 	/* We already checked reg is not NULL */
@@ -2000,36 +1925,127 @@ void scst_pr_preempt_and_abort(struct scst_cmd *cmd, uint8_t *buffer,
 		goto out;
 	}
 
-	if (!dev->pr_is_set)
-		goto skip;
+	if (!dev->pr_is_set) {
+		scst_pr_find_registrants_list_key(dev, action_key,
+			&preempt_list);
+		if (list_empty(&preempt_list))
+			goto out_error;
+		list_for_each_entry_safe(r, rt, &preempt_list, aux_list_entry) {
+			if (r != reg)
+				scst_pr_send_ua_reg(dev, r, SCST_LOAD_SENSE(
+					scst_sense_registrations_preempted));
+			scst_pr_remove_registrant(dev, r);
+		}
+		goto done;
+	}
 
 	if (dev->pr_type == TYPE_WRITE_EXCLUSIVE_ALL ||
-		dev->pr_type == TYPE_EXCLUSIVE_ACCESS_ALL) {
-		if (action_key == 0)
+	    dev->pr_type == TYPE_EXCLUSIVE_ACCESS_ALL) {
+		if (action_key == 0) {
+			scst_pr_find_registrants_list_all(dev, reg,
+				&preempt_list);
+			list_for_each_entry_safe(r, rt, &preempt_list,
+					aux_list_entry) {
+				if (r != reg)
+					scst_pr_send_ua_reg(dev, r,
+						SCST_LOAD_SENSE(
+						scst_sense_registrations_preempted));
+				scst_pr_remove_registrant(dev, r);
+			}
 			scst_pr_set_holder(dev, reg, scope, type);
-		marked = 1;
-		scst_pr_mark_registrants(dev, reg, action_key);
-	} else {
+		} else {
+			scst_pr_find_registrants_list_key(dev, action_key,
+				&preempt_list);
+			if (list_empty(&preempt_list))
+				goto out_error;
+			list_for_each_entry_safe(r, rt, &preempt_list,
+					aux_list_entry) {
+				if (r != reg)
+					scst_pr_send_ua_reg(dev, r,
+						SCST_LOAD_SENSE(
+						scst_sense_registrations_preempted));
+				scst_pr_remove_registrant(dev, r);
+			}
+		}
+		goto done;
+	}
+
+	sBUG_ON(dev->pr_holder == NULL);
+
+	if (dev->pr_holder->key != action_key) {
 		if (action_key == 0) {
 			scst_set_cmd_error(cmd, SCST_LOAD_SENSE(
 				scst_sense_invalid_field_in_parm_list));
 			goto out;
+		} else {
+			scst_pr_find_registrants_list_key(dev, action_key,
+				&preempt_list);
+			if (list_empty(&preempt_list))
+				goto out_error;
+			list_for_each_entry_safe(r, rt, &preempt_list,
+					aux_list_entry) {
+				if (r != reg)
+					scst_pr_send_ua_reg(dev, r,
+						SCST_LOAD_SENSE(
+						scst_sense_registrations_preempted));
+				scst_pr_remove_registrant(dev, r);
+			}
+			goto done;
 		}
-		if ((dev->pr_holder) && (dev->pr_holder->key == action_key))
-			scst_pr_set_holder(dev, reg, scope, type);
-		marked = 1;
-		scst_pr_mark_registrants(dev, reg, action_key);
 	}
 
-	if (marked) {
-		scst_pr_abort_marked(dev, cmd);
-		scst_pr_send_ua(dev, reg, 1,
-			SCST_LOAD_SENSE(scst_sense_registrations_preempted));
-		scst_pr_remove_registrants_marked(dev);
+	scst_pr_find_registrants_list_key(dev, action_key,
+		&preempt_list);
+
+	list_for_each_entry_safe(r, rt, &preempt_list, aux_list_entry) {
+		if (abort)
+			scst_pr_abort_reg(dev, cmd, r);
+		if (r != reg)
+			scst_pr_send_ua_reg(dev, r, SCST_LOAD_SENSE(
+				scst_sense_registrations_preempted));
+		scst_pr_remove_registrant(dev, r);
 	}
-skip:
+
+	scst_pr_set_holder(dev, reg, scope, type);
+
+done:
 	dev->pr_generation++;
+
+	scst_pr_dump_registrants(dev);
+	scst_pr_dump_reservation(dev);
+
 out:
+	TRACE_EXIT();
+	return;
+
+out_error:
+	TRACE_PR("Invalid key '%016llx'", action_key);
+	scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
+	goto out;
+}
+
+/* Called with dev_pr_mutex locked, no IRQ */
+void scst_pr_preempt(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
+{
+	TRACE_ENTRY();
+
+	scst_pr_do_preempt(cmd, buffer, buffer_size, false);
+
+	TRACE_EXIT();
+	return;
+}
+
+/*
+ * Called with dev_pr_mutex locked, no IRQ. Expects session_list_lock
+ * not locked
+ */
+void scst_pr_preempt_and_abort(struct scst_cmd *cmd, uint8_t *buffer,
+	int buffer_size)
+{
+	TRACE_ENTRY();
+
+	scst_pr_do_preempt(cmd, buffer, buffer_size, true);
+
 	TRACE_EXIT();
 	return;
 }
