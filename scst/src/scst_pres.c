@@ -1205,7 +1205,6 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 	uint64_t action_key;
 	struct scst_device *dev = cmd->dev;
 	struct scst_session *sess = cmd->sess;
-	struct scst_tgt_dev *tgt_dev;
 	struct scst_dev_registrant *reg;
 	uint8_t *transport_id;
 
@@ -1233,20 +1232,7 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 			res = -EINVAL;
 			goto out;
 		}
-
 		tid_secure(transport_id);
-
-		/* Reject if the command contains a registered I_T nexus */
-		tgt_dev = scst_pr_find_tgt_dev_not_registered_first(dev,
-				transport_id, sess->tgt->rel_tgt_id,
-				cmd->tgt_dev);
-		if ((tgt_dev != NULL) && (tgt_dev->registrant != NULL)) {
-			scst_set_cmd_error(cmd,
-				SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
-			res = -EINVAL;
-			goto out;
-		}
-
 		offset += tid_size(transport_id);
 	}
 
@@ -1254,21 +1240,50 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 	while (offset < ext_size) {
 		transport_id = &buffer[28 + offset];
 
-		tgt_dev = scst_pr_find_tgt_dev_not_registered_first(dev,
-				transport_id, sess->tgt->rel_tgt_id,
-				cmd->tgt_dev);
+		if ((transport_id[0] & 0x0f) == SCSI_TRANSPORTID_PROTOCOLID_ISCSI &&
+		    (transport_id[0] & 0xc0) == 0) {
+			struct scst_tgt_dev *t;
+			list_for_each_entry(t, &dev->dev_tgt_dev_list,
+					dev_tgt_dev_list_entry) {
+				if (!tid_equal(t->sess->transport_id,
+						transport_id))
+					continue;
+				if (t->registrant == NULL) {
+					reg = scst_pr_add_registrant(dev,
+						t->sess->transport_id,
+						sess->tgt->rel_tgt_id,
+						action_key, aptpl, t);
+					if (reg == NULL) {
+						scst_set_busy(cmd);
+						res = -ENOMEM;
+						goto out;
+					}
+					list_add_tail(&reg->aux_list_entry,
+						rollback_list);
+				} else
+					t->registrant->key = action_key;
+			}
+		} else {
+			struct scst_tgt_dev *tgt_dev;
+			tgt_dev = scst_pr_find_tgt_dev_not_registered_first(
+					dev, transport_id,
+					sess->tgt->rel_tgt_id, cmd->tgt_dev);
+			if (tgt_dev->registrant == NULL) {
+				reg = scst_pr_add_registrant(dev,
+					tgt_dev->sess->transport_id,
+					sess->tgt->rel_tgt_id, action_key,
+					aptpl, tgt_dev);
+				if (reg == NULL) {
+					scst_set_busy(cmd);
+					res = -ENOMEM;
+					goto out;
+				}
+				list_add_tail(&reg->aux_list_entry,
+					rollback_list);
+			} else
+				tgt_dev->registrant->key = action_key;
 
-		reg = scst_pr_add_registrant(dev, transport_id,
-			sess->tgt->rel_tgt_id, action_key, aptpl,
-			tgt_dev);
-		if (reg == NULL) {
-			scst_set_busy(cmd);
-			res = -ENOMEM;
-			goto out;
 		}
-
-		list_add_tail(&reg->aux_list_entry, rollback_list);
-
 		offset += tid_size(transport_id);
 	}
 out:
@@ -1370,12 +1385,19 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 					goto out_rollback;
 			}
 
-			reg = scst_pr_add_registrant(dev, sess->transport_id,
-				sess->tgt->rel_tgt_id, action_key, aptpl,
-				tgt_dev);
-			if (reg == NULL) {
-				scst_set_busy(cmd);
-				goto out_rollback;
+			/*
+			 * tgt_dev can be among TIDs for
+			 * scst_pr_register_with_spec_i_pt()
+			 */
+			if (tgt_dev->registrant == NULL) {
+				reg = scst_pr_add_registrant(dev,
+					sess->transport_id,
+					sess->tgt->rel_tgt_id,
+					action_key, aptpl, tgt_dev);
+				if (reg == NULL) {
+					scst_set_busy(cmd);
+					goto out_rollback;
+				}
 			}
 		} else
 			TRACE_PR("%s", "Doing nothing - action_key is zero");
