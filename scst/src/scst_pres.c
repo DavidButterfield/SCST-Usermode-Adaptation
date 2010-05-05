@@ -1258,10 +1258,13 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 						res = -ENOMEM;
 						goto out;
 					}
-					list_add_tail(&reg->aux_list_entry,
-						rollback_list);
-				} else
-					t->registrant->key = action_key;
+				} else {
+					reg = t->registrant;
+					reg->rollback_key = reg->key;
+					reg->key = action_key;
+				}
+				list_add_tail(&reg->aux_list_entry,
+					rollback_list);
 			}
 		} else {
 			struct scst_tgt_dev *tgt_dev;
@@ -1278,11 +1281,13 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 					res = -ENOMEM;
 					goto out;
 				}
-				list_add_tail(&reg->aux_list_entry,
-					rollback_list);
-			} else
-				tgt_dev->registrant->key = action_key;
-
+			} else {
+				reg = tgt_dev->registrant;
+				reg->rollback_key = reg->key;
+				reg->key = action_key;
+			}
+			list_add_tail(&reg->aux_list_entry,
+				rollback_list);
 		}
 		offset += tid_size(transport_id);
 	}
@@ -1329,7 +1334,7 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	struct scst_device *dev = cmd->dev;
 	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
 	struct scst_session *sess = cmd->sess;
-	struct scst_dev_registrant *reg;
+	struct scst_dev_registrant *reg, *treg;
 	LIST_HEAD(rollback_list);
 
 	TRACE_ENTRY();
@@ -1435,12 +1440,22 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	scst_pr_dump_registrants(dev);
 
 out:
+	list_for_each_entry(reg, &rollback_list, aux_list_entry) {
+		reg->rollback_key = 0;
+	}
+
 	TRACE_EXIT();
 	return;
 
 out_rollback:
-	list_for_each_entry(reg, &rollback_list, aux_list_entry) {
-	       scst_pr_remove_registrant(dev, reg);
+	list_for_each_entry_safe(reg, treg, &rollback_list, aux_list_entry) {
+		list_del(&reg->aux_list_entry);
+		if (reg->rollback_key == 0)
+			scst_pr_remove_registrant(dev, reg);
+		else {
+			reg->key = reg->rollback_key;
+			reg->rollback_key = 0;
+		}
 	}
 	goto out;
 }
