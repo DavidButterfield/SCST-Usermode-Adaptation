@@ -3511,11 +3511,8 @@ struct scst_trace_log {
 	const char *token;
 };
 
-/*
- * Main SCST mutex. All targets, devices and dev_types management is done
- * under this mutex.
- */
 extern struct mutex scst_mutex;
+extern bool iscsi_tid_name_only;
 
 #ifdef CONFIG_SCST_PROC
 

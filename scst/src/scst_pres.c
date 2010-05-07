@@ -65,6 +65,15 @@
 #define isblank(c)		((c) == ' ' || (c) == '\t')
 #endif
 
+/*
+ * Experimental hack to support CONFIG_SCST_ISCSI_SKIP_ISID. ISCSI-SCST sets
+ * this variable if CONFIG_SCST_ISCSI_SKIP_ISID defined, then tid_equal()
+ * uses it to perform for iSCSI TransportIDs only initiator names comparison
+ * ignoring the ISID part.
+ */
+bool iscsi_tid_name_only = false;
+EXPORT_SYMBOL(iscsi_tid_name_only);
+
 static void scst_pr_clear_holder(struct scst_device *dev);
 
 static inline int tid_size(const uint8_t *tid)
@@ -113,7 +122,7 @@ static bool tid_equal(const uint8_t *tid_a, const uint8_t *tid_b)
 		if (tid_a_fmt == 0x00)
 			tid_a_len = strnlen(tid_a, tid_a_max);
 		else if (tid_a_fmt == 0x40) {
-			if (tid_a_fmt != tid_b_fmt) {
+			if ((tid_a_fmt != tid_b_fmt) || iscsi_tid_name_only) {
 				uint8_t *p = strnchr(tid_a, tid_a_max, ',');
 				if (p == NULL)
 					goto out_error;
@@ -129,7 +138,7 @@ static bool tid_equal(const uint8_t *tid_a, const uint8_t *tid_b)
 		if (tid_b_fmt == 0x00)
 			tid_b_len = strnlen(tid_b, tid_b_max);
 		else if (tid_b_fmt == 0x40) {
-			if (tid_a_fmt != tid_b_fmt) {
+			if ((tid_a_fmt != tid_b_fmt) || iscsi_tid_name_only) {
 				uint8_t *p = strnchr(tid_b, tid_b_max, ',');
 				if (p == NULL)
 					goto out_error;

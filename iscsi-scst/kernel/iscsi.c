@@ -3773,6 +3773,12 @@ static int __init iscsi_init(void)
 	if (err != 0)
 		goto out_thr;
 
+#ifdef CONFIG_SCST_ISCSI_SKIP_ISID
+	iscsi_tid_name_only = true;
+#else
+	iscsi_tid_name_only = false;
+#endif
+
 out:
 	return err;
 
