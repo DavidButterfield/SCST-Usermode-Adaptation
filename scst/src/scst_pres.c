@@ -2043,6 +2043,14 @@ static void scst_pr_do_preempt(struct scst_cmd *cmd, uint8_t *buffer,
 		scst_pr_remove_registrant(dev, r);
 	}
 
+	if (dev->pr_type != type || dev->pr_scope != scope)
+		list_for_each_entry(r, &dev->dev_registrants_list,
+					dev_registrants_list_entry) {
+			if (r != reg)
+				scst_pr_send_ua_reg(dev, r, SCST_LOAD_SENSE(
+					scst_sense_reservation_released));
+		}
+
 	scst_pr_set_holder(dev, reg, scope, type);
 
 done:
