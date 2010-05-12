@@ -1601,6 +1601,24 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 	/* We already checked reg is not NULL */
 	reg = tgt_dev->registrant;
 
+	if (reg->key != key) {
+		TRACE_PR("Key '%016llx' not equal to reservation holder "
+			"key '%016llx'", key, reg->key);
+		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
+		goto out;
+	}
+
+	if (!dev->pr_is_set) {
+		TRACE_PR("%s", "There must be a PR");
+		scst_set_cmd_error(cmd,
+			SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
+		goto out;
+	}
+
+	/*
+	 * This check also required by table "PERSISTENT RESERVE OUT service
+	 * actions that are allowed in the presence of various reservations".
+	 */
 	if (!scst_pr_is_holder(dev, reg)) {
 		TRACE_PR("'%s' is not holder",
 			debug_transport_id_to_initiator_name(
@@ -1609,15 +1627,8 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 		goto out;
 	}
 
-	if (reg->key != key) {
-		TRACE_PR("Key '%016llx' not equal to reservation holder "
-			"key '%016llx'", key, reg->key);
-		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
-		goto out;
-	}
-
 	if (action_key == 0) {
-		TRACE_PR("%s", "Action key must be non zero");
+		TRACE_PR("%s", "Action key must be non-zero");
 		scst_set_cmd_error(cmd,
 			SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
 		goto out;
@@ -1649,13 +1660,6 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 	TRACE_PR("Register and move: on initiator '%s' move to initiator '%s' "
 		"key '%016llx'", sess->initiator_name,
 		tgt_dev_move->sess->initiator_name, action_key);
-
-	if (!dev->pr_is_set) {
-		TRACE_PR("%s", "There must be a PR");
-		scst_set_cmd_error(cmd,
-			SCST_LOAD_SENSE(scst_sense_invalid_field_in_cdb));
-		goto out;
-	}
 
 	if (dev->pr_type == TYPE_WRITE_EXCLUSIVE_ALL ||
 	    dev->pr_type == TYPE_EXCLUSIVE_ACCESS_ALL) {
@@ -1760,6 +1764,11 @@ void scst_pr_reserve(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 		scst_pr_set_holder(dev, reg, scope, type);
 	else {
 		if (!scst_pr_is_holder(dev, reg)) {
+			/*
+			 * This check also required by table "PERSISTENT
+			 * RESERVE OUT service actions that are allowed in the
+			 * presence of various reservations".
+			 */
 			TRACE_PR("Only holder can override - initiator "
 				"'%s' is not holder", sess->initiator_name);
 			scst_set_cmd_error_status(cmd,

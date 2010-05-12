@@ -1996,6 +1996,20 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		goto out_done;
 	}
 
+	/*
+	 * Check if tgt_dev already registered. Also by this check we make
+	 * sure that table "PERSISTENT RESERVE OUT service actions that are
+	 * allowed in the presence of various reservations" is honored.
+	 * REGISTER AND MOVE and RESERVE will be additionally checked for
+	 * conflicts later.
+	 */
+	if ((action != PR_REGISTER) && (action != PR_REGISTER_AND_IGNORE) &&
+	    (tgt_dev->registrant == NULL)) {
+		TRACE_PR("'%s' not registered", cmd->sess->initiator_name);
+		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
+		goto out_done;
+	}
+
 	buffer_size = scst_get_full_buf(cmd, &buffer);
 	if (unlikely(buffer_size <= 0)) {
 		if (buffer_size < 0)
@@ -2027,14 +2041,6 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		TRACE_PR("ALL_TG_PT must be zero for action %x", action);
 		scst_set_cmd_error(cmd, SCST_LOAD_SENSE(
 					scst_sense_invalid_field_in_cdb));
-		goto out_put_full_buf;
-	}
-
-	/* Check if tgt_dev already registered */
-	if ((action != PR_REGISTER) && (action != PR_REGISTER_AND_IGNORE) &&
-	    (tgt_dev->registrant == NULL)) {
-		TRACE_PR("'%s' not registered", cmd->sess->initiator_name);
-		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
 		goto out_put_full_buf;
 	}
 
