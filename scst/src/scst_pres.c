@@ -1106,7 +1106,6 @@ int scst_pr_init_dev(struct scst_device *dev)
 
 	mutex_init(&dev->dev_pr_mutex);
 	atomic_set(&dev->pr_readers_count, 0);
-	atomic_set(&dev->pr_writers_count, 0);
 
 	dev->pr_generation = 0;
 	dev->pr_is_set = 0;

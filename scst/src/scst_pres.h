@@ -63,7 +63,7 @@ static inline bool scst_pr_read_lock(struct scst_device *dev)
 	atomic_inc(&dev->pr_readers_count);
 	smp_mb__after_atomic_inc(); /* to sync with scst_pr_write_lock() */
 
-	if (unlikely(atomic_read(&dev->pr_writers_count) != 0)) {
+	if (unlikely(dev->pr_writer_active)) {
 		unlock = true;
 		atomic_dec(&dev->pr_readers_count);
 		mutex_lock(&dev->dev_pr_mutex);
@@ -98,10 +98,10 @@ static inline void scst_pr_write_lock(struct scst_device *dev)
 
 	mutex_lock(&dev->dev_pr_mutex);
 
-	atomic_inc(&dev->pr_writers_count);
+	dev->pr_writer_active = 1;
 
 	/* to sync with scst_pr_read_lock() and unlock() */
-	smp_mb__after_atomic_inc();
+	smp_mb();
 
 	while (atomic_read(&dev->pr_readers_count) != 0) {
 		TRACE_DBG("Waiting for %d readers (dev %p)",
@@ -116,6 +116,8 @@ static inline void scst_pr_write_lock(struct scst_device *dev)
 static inline void scst_pr_write_unlock(struct scst_device *dev)
 {
 	TRACE_ENTRY();
+
+	dev->pr_writer_active = 0;
 
 	mutex_unlock(&dev->dev_pr_mutex);
 

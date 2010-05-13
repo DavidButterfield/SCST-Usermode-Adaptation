@@ -1920,12 +1920,16 @@ struct scst_device {
 	unsigned short pr_is_set:1;
 
 	/*
-	 * How many threads are checking commands for PR allowance and how
-	 * many threads are changing or going to change PR state(s). Used to
+	 * Set if there is a thread changing or going to change PR state(s).
+	 * Protected by dev_pr_mutex.
+	 */
+	unsigned short pr_writer_active:1;
+
+	/*
+	 * How many threads are checking commands for PR allowance. Used to
 	 * implement lockless read-only fast path.
 	 */
 	atomic_t pr_readers_count;
-	atomic_t pr_writers_count;
 
 	struct scst_dev_type *handler;	/* corresponding dev handler */
 
