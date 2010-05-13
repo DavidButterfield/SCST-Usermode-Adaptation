@@ -1195,8 +1195,6 @@ void scst_pr_clear_tgt_dev(struct scst_tgt_dev *tgt_dev)
 {
 	TRACE_ENTRY();
 
-	tgt_dev->initialized = 0;
-
 	if (tgt_dev->registrant != NULL)
 		tgt_dev->registrant->tgt_dev = NULL;
 

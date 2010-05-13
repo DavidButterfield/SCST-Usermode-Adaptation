@@ -1867,17 +1867,13 @@ struct scst_dev_registrant {
 	uint8_t *transport_id;
 	uint16_t rel_tgt_id;
 	uint64_t key;
-	uint64_t rollback_key;
 	struct scst_tgt_dev *tgt_dev;
 	struct list_head dev_registrants_list_entry;
 	struct list_head aux_list_entry;
+	uint64_t rollback_key;
 };
 
 struct scst_device {
-	struct scst_dev_type *handler;	/* corresponding dev handler */
-
-	struct scst_mem_lim dev_mem_lim;
-
 	unsigned short type;	/* SCSI type of the device */
 
 	/*************************************************************
@@ -1887,12 +1883,6 @@ struct scst_device {
 
 	/* Set if dev is RESERVED */
 	unsigned short dev_reserved:1;
-
-	/* Set if dev is persistently reserved */
-	unsigned short pr_is_set:1;
-
-	/* True if persist through power loss is activated */
-	unsigned short pr_aptpl:1;
 
 	/* Set if double reset UA is possible */
 	unsigned short dev_double_ua_possible:1;
@@ -1908,7 +1898,7 @@ struct scst_device {
 	/*************************************************************
 	 ** Dev's control mode page related values. Updates serialized
 	 ** by scst_block_dev(). It's long to not interfere with the
-	 ** above flags.
+	 ** neighbour fields.
 	 *************************************************************/
 
 	unsigned long queue_alg:4;
@@ -1926,6 +1916,11 @@ struct scst_device {
 
 	/**************************************************************/
 
+	/* Set if dev is persistently reserved. Protected by dev_pr_mutex. */
+	unsigned short pr_is_set:1;
+
+	struct scst_dev_type *handler;	/* corresponding dev handler */
+
 	/* Used for storage of dev handler private stuff */
 	void *dh_priv;
 
@@ -1940,21 +1935,17 @@ struct scst_device {
 	/* List of commands with lock, if dedicated threads are used */
 	struct scst_cmd_threads dev_cmd_threads;
 
+	/* Memory limits for this device */
+	struct scst_mem_lim dev_mem_lim;
+
 	/* How many cmds alive on this dev */
 	atomic_t dev_cmd_count;
 
-	/* Persistent reservation type */
-	uint8_t pr_type;
-
-	/* How many write cmds alive on this dev. Temporary, ToDo */
-	atomic_t write_cmd_count;
-
-	spinlock_t dev_lock;		/* device lock */
-
 	/*
-	 * Mutex to per device lock of PR operations
+	 * How many there are "on_dev" commands, i.e. ones those are being
+	 * executed by the underlying SCSI/virtual device.
 	 */
-	struct mutex dev_pr_mutex;
+	atomic_t on_dev_count;
 
 	/*
 	 * How many times device was blocked for new cmds execution.
@@ -1962,11 +1953,48 @@ struct scst_device {
 	 */
 	int block_count;
 
+	/* How many write cmds alive on this dev. Temporary, ToDo */
+	atomic_t write_cmd_count;
+
+	/*************************************************************
+	 ** Persistent reservation fields. Protected by dev_pr_mutex.
+	 *************************************************************/
+
+	/* True if persist through power loss is activated */
+	unsigned short pr_aptpl:1;
+
+	/* Persistent reservation type */
+	uint8_t pr_type;
+
+	/* Persistent reservation scope */
+	uint8_t pr_scope;
+
+	/* Mutex to protect PR operations */
+	struct mutex dev_pr_mutex;
+
+	/* Persistent reservation generation value */
+	uint32_t pr_generation;
+
+	/* Reference to registrant - persistent reservation holder */
+	struct scst_dev_registrant *pr_holder;
+
+	/* List of dev's registrants */
+	struct list_head dev_registrants_list;
+
 	/*
-	 * How many there are "on_dev" commands, i.e. ones those are being
-	 * executed by the underlying SCSI/virtual device.
+	 * Count of connected tgt_devs from transports, which don't support
+	 * PRs, i.e. don't have get_initiator_port_transport_id(). Protected
+	 * by scst_mutex.
 	 */
-	atomic_t on_dev_count;
+	int not_pr_supporting_tgt_devs_num;
+
+	/* Persist through power loss files */
+	char *pr_file_name;
+	char *pr_file_name1;
+
+	/**************************************************************/
+
+	spinlock_t dev_lock;		/* device lock */
 
 	struct list_head blocked_cmd_list; /* protected by dev_lock */
 
@@ -1996,29 +2024,6 @@ struct scst_device {
 
 	/* Number of threads in the device's threads pools */
 	int threads_num;
-
-	/* Persistent reservation generation value */
-	unsigned int pr_generation;
-
-	/* Persistent reservation scope */
-	uint8_t pr_scope;
-
-	/* List of dev's registrants */
-	struct list_head dev_registrants_list;
-
-	/* Reference to registrant - persistent reservation holder */
-	struct scst_dev_registrant *pr_holder;
-
-	/*
-	 * Count of connected tgt_devs from transports, which don't support
-	 * PRs, i.e. don't have get_initiator_port_transport_id(). Protected
-	 * by scst_mutex.
-	 */
-	int not_pr_supporting_tgt_devs_num;
-
-	/* Persist through power loss files */
-	char *pr_file_name;
-	char *pr_file_name1;
 
 	/* Threads pool type of the device. Valid only if threads_num > 0. */
 	enum scst_dev_type_threads_pool_type threads_pool_type;
@@ -2134,6 +2139,9 @@ struct scst_tgt_dev {
 	struct scst_session *sess;	/* corresponding session */
 	struct scst_acg_dev *acg_dev;	/* corresponding acg_dev */
 
+	/* Reference to registrant to find quicker */
+	struct scst_dev_registrant *registrant;
+
 	/* List entry in dev->dev_tgt_dev_list */
 	struct list_head dev_tgt_dev_list_entry;
 
@@ -2149,12 +2157,6 @@ struct scst_tgt_dev {
 	 */
 	unsigned short tgt_dev_valid_sense_len;
 	uint8_t tgt_dev_sense[SCST_SENSE_BUFFERSIZE];
-
-	/*
-	 * Reference to registrant to find quicker
-	 */
-	unsigned int initialized:1;
-	struct scst_dev_registrant *registrant;
 
 #ifdef CONFIG_SCST_MEASURE_LATENCY
 	/*
