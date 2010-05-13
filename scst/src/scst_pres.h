@@ -54,6 +54,75 @@
 int scst_pr_check_pr_path(void);
 #endif
 
+static inline bool scst_pr_read_lock(struct scst_device *dev)
+{
+	bool unlock = false;
+
+	TRACE_ENTRY();
+
+	atomic_inc(&dev->pr_readers_count);
+	smp_mb__after_atomic_inc(); /* to sync with scst_pr_write_lock() */
+
+	if (unlikely(atomic_read(&dev->pr_writers_count) != 0)) {
+		unlock = true;
+		atomic_dec(&dev->pr_readers_count);
+		mutex_lock(&dev->dev_pr_mutex);
+	}
+
+	TRACE_EXIT_RES(unlock);
+	return unlock;
+}
+
+static inline void scst_pr_read_unlock(struct scst_device *dev, bool unlock)
+{
+	TRACE_ENTRY();
+
+	if (unlikely(unlock))
+		mutex_unlock(&dev->dev_pr_mutex);
+	else {
+		/*
+		 * To sync with scst_pr_write_lock(). We need it to ensure
+		 * order of our reads with the writer's writes.
+		 */
+		smp_mb__before_atomic_dec();
+		atomic_dec(&dev->pr_readers_count);
+	}
+
+	TRACE_EXIT();
+	return;
+}
+
+static inline void scst_pr_write_lock(struct scst_device *dev)
+{
+	TRACE_ENTRY();
+
+	mutex_lock(&dev->dev_pr_mutex);
+
+	atomic_inc(&dev->pr_writers_count);
+
+	/* to sync with scst_pr_read_lock() and unlock() */
+	smp_mb__after_atomic_inc();
+
+	while (atomic_read(&dev->pr_readers_count) != 0) {
+		TRACE_DBG("Waiting for %d readers (dev %p)",
+			atomic_read(&dev->pr_readers_count), dev);
+		msleep(1);
+	}
+
+	TRACE_EXIT();
+	return;
+}
+
+static inline void scst_pr_write_unlock(struct scst_device *dev)
+{
+	TRACE_ENTRY();
+
+	mutex_unlock(&dev->dev_pr_mutex);
+
+	TRACE_EXIT();
+	return;
+}
+
 int scst_pr_init_dev(struct scst_device *dev);
 void scst_pr_clear_dev(struct scst_device *dev);
 

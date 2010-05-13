@@ -1105,6 +1105,8 @@ int scst_pr_init_dev(struct scst_device *dev)
 	TRACE_ENTRY();
 
 	mutex_init(&dev->dev_pr_mutex);
+	atomic_set(&dev->pr_readers_count, 0);
+	atomic_set(&dev->pr_writers_count, 0);
 
 	dev->pr_generation = 0;
 	dev->pr_is_set = 0;
@@ -2186,10 +2188,13 @@ bool scst_pr_is_cmd_allowed(struct scst_cmd *cmd)
 	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
 	struct scst_dev_registrant *reg;
 	uint8_t type;
+	bool unlock;
 
 	TRACE_ENTRY();
 
-	TRACE_DBG("Test if command '%s' (0x%x) from '%s' allowed to execute",
+	unlock = scst_pr_read_lock(dev);
+
+	TRACE_DBG("Testing if command '%s' (0x%x) from '%s' allowed to execute",
 		cmd->op_name, cmd->cdb[0], cmd->sess->initiator_name);
 
 	reg = tgt_dev->registrant;
@@ -2239,6 +2244,8 @@ bool scst_pr_is_cmd_allowed(struct scst_cmd *cmd)
 	else
 		TRACE_DBG("Command %s (0x%x) from '%s' is allowed to execute",
 			cmd->op_name, cmd->cdb[0], cmd->sess->initiator_name);
+
+	scst_pr_read_unlock(dev, unlock);
 
 	TRACE_EXIT_RES(allowed);
 	return allowed;

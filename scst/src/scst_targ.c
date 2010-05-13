@@ -1900,7 +1900,7 @@ static int scst_persistent_reserve_in_local(struct scst_cmd *cmd)
 		goto out_done;
 	}
 
-	mutex_lock(&dev->dev_pr_mutex);
+	scst_pr_write_lock(dev);
 
 	action = cmd->cdb[1] & 0x1f;
 
@@ -1922,12 +1922,12 @@ static int scst_persistent_reserve_in_local(struct scst_cmd *cmd)
 		break;
 	default:
 		PRINT_ERROR("Unsupported action %x", action);
-		mutex_unlock(&dev->dev_pr_mutex);
+		scst_pr_write_unlock(dev);
 		goto out_err;
 	}
 
 out_unlock:
-	mutex_unlock(&dev->dev_pr_mutex);
+	scst_pr_write_unlock(dev);
 
 	cmd->completed = 1;
 	scst_put_full_buf(cmd, buffer);
@@ -2044,7 +2044,7 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		goto out_put_full_buf;
 	}
 
-	mutex_lock(&dev->dev_pr_mutex);
+	scst_pr_write_lock(dev);
 
 	switch (action) {
 	case PR_REGISTER:
@@ -2082,7 +2082,7 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		res = SCST_EXEC_NOT_COMPLETED;
 
 out_unlock:
-	mutex_unlock(&dev->dev_pr_mutex);
+	scst_pr_write_unlock(dev);
 
 out_put_full_buf:
 	scst_put_full_buf(cmd, buffer);
