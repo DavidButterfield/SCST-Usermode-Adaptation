@@ -319,7 +319,8 @@ static void scst_pr_find_registrants_list_key(struct scst_device *dev,
 
 static struct scst_tgt_dev *scst_pr_find_tgt_dev_not_registered_first(
 	struct scst_device *dev, const uint8_t *transport_id,
-	const uint16_t rel_tgt_id, struct scst_tgt_dev *exclude_tgt_dev)
+	const uint16_t rel_tgt_id, uint64_t action_key,
+	struct scst_tgt_dev *exclude_tgt_dev)
 {
 	struct scst_tgt_dev *tgt_dev, *tgt_dev_found = NULL;
 	struct scst_tgt_dev *tgt_dev_found_reg = NULL;
@@ -333,6 +334,10 @@ static struct scst_tgt_dev *scst_pr_find_tgt_dev_not_registered_first(
 		    (tgt_dev != exclude_tgt_dev)) {
 			if (tgt_dev->registrant != NULL) {
 				if (tgt_dev_found_reg == NULL)
+					tgt_dev_found_reg = tgt_dev;
+				else if ((action_key != 0) &&
+					 (tgt_dev_found_reg->registrant->key != action_key) &&
+					 (tgt_dev->registrant->key == action_key))
 					tgt_dev_found_reg = tgt_dev;
 			} else {
 				tgt_dev_found = tgt_dev;
@@ -1277,7 +1282,7 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 			struct scst_tgt_dev *tgt_dev;
 			tgt_dev = scst_pr_find_tgt_dev_not_registered_first(
 					dev, transport_id,
-					sess->tgt->rel_tgt_id, cmd->tgt_dev);
+					sess->tgt->rel_tgt_id, 0, cmd->tgt_dev);
 			if (tgt_dev->registrant == NULL) {
 				reg = scst_pr_add_registrant(dev,
 					tgt_dev->sess->transport_id,
@@ -1647,7 +1652,8 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 	tid_secure(transport_id_move);
 
 	tgt_dev_move = scst_pr_find_tgt_dev_not_registered_first(dev,
-				transport_id_move, rel_tgt_id_move, tgt_dev);
+				transport_id_move, rel_tgt_id_move,
+				action_key, tgt_dev);
 	if (tgt_dev_move == NULL) {
 		TRACE_PR("%s", "Unable to find target device for new record");
 		scst_set_cmd_error(cmd,
