@@ -199,7 +199,7 @@ out:
 
 static void scst_pr_dump_registrants(struct scst_device *dev)
 {
-	TRACE_PR("Dump registration records: device '%s'", dev->virt_name);
+	TRACE_PR("Dumping registration records: device '%s'", dev->virt_name);
 
 	if (list_empty(&dev->dev_registrants_list))
 		TRACE_PR("%s", "No records");
@@ -210,10 +210,10 @@ static void scst_pr_dump_registrants(struct scst_device *dev)
 		i = 0;
 		list_for_each_entry(reg, &dev->dev_registrants_list,
 					dev_registrants_list_entry) {
-			TRACE_PR("[%d] initiator '%s' key '%016llx'", i++,
+			TRACE_PR("[%d] registrant %s/%d, key '%016llx'", i++,
 				debug_transport_id_to_initiator_name(
 					reg->transport_id),
-				reg->key);
+				reg->rel_tgt_id, reg->key);
 		}
 	}
 
@@ -222,15 +222,16 @@ static void scst_pr_dump_registrants(struct scst_device *dev)
 
 static void scst_pr_dump_reservation(struct scst_device *dev)
 {
-	TRACE_PR("Dump persistent reservation: device '%s'", dev->virt_name);
+	TRACE_PR("Dumping persistent reservation: device '%s'", dev->virt_name);
 	if (dev->pr_is_set) {
 		struct scst_dev_registrant *holder = dev->pr_holder;
 		if (holder != NULL)
-			TRACE_PR("Reservation '%s' key '%016llx' scope %x "
-				"type %x",
-				holder ? debug_transport_id_to_initiator_name(
-						holder->transport_id) : "*",
-				holder->key, dev->pr_scope, dev->pr_type);
+			TRACE_PR("Reservation holder %s/%d, key '%016llx', "
+				"scope %x, type %x",
+				debug_transport_id_to_initiator_name(
+							holder->transport_id),
+				holder->rel_tgt_id, holder->key, dev->pr_scope,
+				dev->pr_type);
 		else {
 			/*
 			 * TODO : handle all registrants case
@@ -271,7 +272,7 @@ static void scst_pr_find_registrants_list_all(struct scst_device *dev,
 
 	TRACE_ENTRY();
 
-	TRACE_PR("Find all registered records except: device '%s' "
+	TRACE_PR("Finding all registered records for device '%s' "
 		"with exclude reg key '%016llx'",
 		dev->virt_name, exclude_reg->key);
 
@@ -279,11 +280,9 @@ static void scst_pr_find_registrants_list_all(struct scst_device *dev,
 				dev_registrants_list_entry) {
 		if (reg == exclude_reg)
 			continue;
-		TRACE_PR("Add registered record to list: "
-			"initiator '%s' key '%016llx'",
-			debug_transport_id_to_initiator_name(
-				reg->transport_id),
-			reg->key);
+		TRACE_PR("Adding registrant %s/%d to find list (key '%016llx')",
+			debug_transport_id_to_initiator_name(reg->transport_id),
+			reg->rel_tgt_id, reg->key);
 		list_add_tail(&reg->aux_list_entry, list);
 	}
 
@@ -298,17 +297,17 @@ static void scst_pr_find_registrants_list_key(struct scst_device *dev,
 
 	TRACE_ENTRY();
 
-	TRACE_PR("Find registered records for: device '%s' with key '%016llx'",
+	TRACE_PR("Finding registrants for device '%s' with key '%016llx'",
 		dev->virt_name, key);
 
 	list_for_each_entry(reg, &dev->dev_registrants_list,
 				dev_registrants_list_entry) {
 		if (reg->key == key) {
-			TRACE_PR("Add registered record to list: "
-				"initiator '%s' key '%016llx'",
+			TRACE_PR("Adding registrant %s/%d to find list "
+				"(key '%016llx')",
 				debug_transport_id_to_initiator_name(
 					reg->transport_id),
-				key);
+				reg->rel_tgt_id, key);
 			list_add_tail(&reg->aux_list_entry, list);
 		}
 	}
@@ -409,9 +408,9 @@ static void scst_pr_remove_registrant(struct scst_device *dev,
 {
 	TRACE_ENTRY();
 
-	TRACE_PR("Remove registration record: initiator '%s' key '%016llx'",
+	TRACE_PR("Removing registration record for %s/%d (key '%016llx')",
 		debug_transport_id_to_initiator_name(reg->transport_id),
-		reg->key);
+		reg->rel_tgt_id, reg->key);
 
 	list_del(&reg->dev_registrants_list_entry);
 
@@ -438,10 +437,10 @@ static void scst_pr_send_ua_reg(struct scst_device *dev,
 
 	scst_set_sense(ua, sizeof(ua), dev->d_sense, key, asc, ascq);
 
-	TRACE_PR("Set sense [%x %x %x]: initiator '%s' key "
-		"'%016llx'", ua[2], ua[12], ua[13],
-		debug_transport_id_to_initiator_name(
-			reg->transport_id), reg->key);
+	TRACE_PR("Queuing UA [%x %x %x]: registrant %s/%d, key '%016llx'",
+		ua[2], ua[12], ua[13],
+		debug_transport_id_to_initiator_name(reg->transport_id),
+		reg->rel_tgt_id, reg->key);
 
 	if (reg->tgt_dev)
 		scst_check_set_UA(reg->tgt_dev, ua, sizeof(ua), 0);
@@ -482,16 +481,14 @@ static void scst_pr_abort_reg(struct scst_device *dev,
 
 	TRACE_ENTRY();
 
-	TRACE_PR("Abort commands for: initiator '%s' key '0x%016llx' "
-		"session", debug_transport_id_to_initiator_name(
-				reg->transport_id), reg->key);
+	TRACE_PR("Aborting commands for %s/%d (key '0x%016llx', sess %p)",
+		debug_transport_id_to_initiator_name(reg->transport_id),
+		reg->rel_tgt_id, reg->key, sess);
 
 	if (reg->tgt_dev == NULL) {
-		TRACE_PR("Registered record for initiator '%s' key "
-			"'0x%016llx' have no attached target device",
-			debug_transport_id_to_initiator_name(
-				reg->transport_id),
-			reg->key);
+		TRACE_PR("Registrant %s/%d (key '0x%016llx') has no session",
+			debug_transport_id_to_initiator_name(reg->transport_id),
+			reg->rel_tgt_id, reg->key);
 		goto out;
 	}
 
@@ -596,7 +593,7 @@ static int scst_pr_do_load_device_file(struct scst_device *dev,
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	TRACE_PR("Load persistent file '%s'", file_name);
+	TRACE_PR("Loading persistent file '%s'", file_name);
 
 	file = filp_open(file_name, O_RDONLY, 0);
 	if (IS_ERR(file)) {
@@ -792,7 +789,7 @@ static int scst_pr_copy_file(const char *src, const char *dest)
 		goto out;
 	}
 
-	TRACE_PR("Copy '%s' into '%s'", src, dest);
+	TRACE_PR("Copying '%s' into '%s'", src, dest);
 
 	set_fs(KERNEL_DS);
 
@@ -936,7 +933,7 @@ static int scst_pr_sync_device_file(struct scst_tgt_dev *tgt_dev)
 		goto out_set_fs;
 	}
 
-	TRACE_PR("Update pr file '%s'", dev->pr_file_name);
+	TRACE_PR("Updating pr file '%s'", dev->pr_file_name);
 
 	/*
 	 * signature
@@ -1421,10 +1418,12 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 			TRACE_PR("%s", "Doing nothing - action_key is zero");
 	} else {
 		if (reg->key != key) {
-			TRACE_PR("Initiator '%s' key '%0llx' already "
-				"registered - reservation key mismatch",
+			TRACE_PR("Registrant %s/%d (key '%0llx') already "
+				"registered - reservation key ('%0llx') "
+				"mismatch",
 				debug_transport_id_to_initiator_name(
-					reg->transport_id), reg->key);
+					reg->transport_id),
+				reg->rel_tgt_id, reg->key, key);
 			scst_set_cmd_error_status(cmd,
 				SAM_STAT_RESERVATION_CONFLICT);
 			goto out;
@@ -1606,8 +1605,9 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 	reg = tgt_dev->registrant;
 
 	if (reg->key != key) {
-		TRACE_PR("Key '%016llx' not equal to reservation holder "
-			"key '%016llx'", key, reg->key);
+		TRACE_PR("Registrant's %s/%d key %016llx mismatch with %016llx",
+			debug_transport_id_to_initiator_name(reg->transport_id),
+			reg->rel_tgt_id, reg->key, key);
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
 		goto out;
 	}
@@ -1624,9 +1624,9 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 	 * actions that are allowed in the presence of various reservations".
 	 */
 	if (!scst_pr_is_holder(dev, reg)) {
-		TRACE_PR("'%s' is not holder",
+		TRACE_PR("%s/%d is not a holder",
 			debug_transport_id_to_initiator_name(
-				reg->transport_id));
+				reg->transport_id), reg->rel_tgt_id);
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
 		goto out;
 	}
@@ -1759,8 +1759,9 @@ void scst_pr_reserve(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	/* We already checked reg is not NULL */
 	reg = tgt_dev->registrant;
 	if (reg->key != key) {
-		TRACE_PR("Initiator's '%s' key '%016llx' mismatch",
-			sess->initiator_name, key);
+		TRACE_PR("Registrant's %s/%d key %016llx mismatch with %016llx",
+			debug_transport_id_to_initiator_name(reg->transport_id),
+			reg->rel_tgt_id, reg->key, key);
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
 		goto out;
 	}
@@ -1835,8 +1836,9 @@ void scst_pr_release(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	/* We already checked reg is not NULL */
 	reg = tgt_dev->registrant;
 	if (reg->key != key) {
-		TRACE_PR("Initiator's '%s' key '%016llx' mismatch",
-			sess->initiator_name, key);
+		TRACE_PR("Registrant's %s/%d key %016llx mismatch with %016llx",
+			debug_transport_id_to_initiator_name(reg->transport_id),
+			reg->rel_tgt_id, reg->key, key);
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
 		goto out;
 	}
@@ -1916,8 +1918,9 @@ void scst_pr_clear(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	/* We already checked reg is not NULL */
 	reg = tgt_dev->registrant;
 	if (reg->key != key) {
-		TRACE_PR("Initiator's '%s' key '%016llx' mismatch",
-			sess->initiator_name, key);
+		TRACE_PR("Registrant's %s/%d key %016llx mismatch with %016llx",
+			debug_transport_id_to_initiator_name(reg->transport_id),
+			reg->rel_tgt_id, reg->key, key);
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
 		goto out;
 	}
@@ -1972,15 +1975,16 @@ static void scst_pr_do_preempt(struct scst_cmd *cmd, uint8_t *buffer,
 		goto out;
 	}
 
-	TRACE_PR("Preempt%s: initiator '%s' key '%016llx' action_key '%016llx' "
-		"scope %x type %x", abort ? " and abort" : "",
+	TRACE_PR("Preempt%s: initiator '%s', key '%016llx', action_key "
+		"'%016llx', scope %x type %x", abort ? " and abort" : "",
 		sess->initiator_name, key, action_key, scope, type);
 
 	/* We already checked reg is not NULL */
 	reg = tgt_dev->registrant;
 	if (reg->key != key) {
-		TRACE_PR("Initiator's '%s' key '%016llx' mismatch",
-			sess->initiator_name, key);
+		TRACE_PR("Registrant's %s/%d key %016llx mismatch with %016llx",
+			debug_transport_id_to_initiator_name(reg->transport_id),
+			reg->rel_tgt_id, reg->key, key);
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
 		goto out;
 	}
@@ -2321,7 +2325,7 @@ void scst_pr_read_reservation(struct scst_cmd *cmd, uint8_t *buffer,
 	put_unaligned(cpu_to_be32(dev->pr_generation), (__be32 *)&buffer[0]);
 
 	if (!dev->pr_is_set) {
-		TRACE_PR("Read Reservation: no reservation for dev %s",
+		TRACE_PR("Read Reservation: no reservations for dev %s",
 			dev->virt_name);
 		b[4] =
 		b[5] =
@@ -2379,7 +2383,7 @@ void scst_pr_report_caps(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 		goto skip;
 	}
 
-	TRACE_PR("Report Capabilities (dev %s):  crh %x, sip_c %x, "
+	TRACE_PR("Reporting capabilities (dev %s):  crh %x, sip_c %x, "
 		"atp_c %x, ptpl_c %x, pr_aptpl %x", dev->virt_name,
 		crh, sip_c, atp_c, ptpl_c, dev->pr_aptpl);
 
