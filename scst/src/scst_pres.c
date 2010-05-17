@@ -364,8 +364,10 @@ static struct scst_dev_registrant *scst_pr_add_registrant(
 	sBUG_ON(dev == NULL);
 	sBUG_ON(transport_id == NULL);
 
-	TRACE_PR("Registering dev %p transport_id %p tgt_dev %p",
-		dev, transport_id, tgt_dev);
+	TRACE_PR("Registering dev %s, transport_id %s, rel_tgt_id %d, "
+		"tgt_dev %p", dev->virt_name,
+		debug_transport_id_to_initiator_name(transport_id),
+		rel_tgt_id, tgt_dev);
 
 	reg = kzalloc(sizeof(*reg), GFP_KERNEL);
 	if (reg == NULL) {
@@ -1278,10 +1280,20 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 			}
 		} else {
 			struct scst_tgt_dev *tgt_dev;
+
 			tgt_dev = scst_pr_find_tgt_dev_not_registered_first(
 					dev, transport_id,
 					sess->tgt->rel_tgt_id, 0, cmd->tgt_dev);
-			if (tgt_dev->registrant == NULL) {
+			if (tgt_dev == NULL) {
+				reg = scst_pr_add_registrant(dev,
+					transport_id, sess->tgt->rel_tgt_id,
+					action_key, aptpl, NULL);
+				if (reg == NULL) {
+					scst_set_busy(cmd);
+					res = -ENOMEM;
+					goto out;
+				}
+			} else if (tgt_dev->registrant == NULL) {
 				reg = scst_pr_add_registrant(dev,
 					tgt_dev->sess->transport_id,
 					sess->tgt->rel_tgt_id, action_key,
