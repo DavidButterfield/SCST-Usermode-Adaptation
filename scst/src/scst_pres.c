@@ -2299,7 +2299,7 @@ void scst_pr_read_keys(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 
 			WARN_ON(reg->key == 0);
 
-			put_unaligned(cpu_to_be64(reg->key),
+			put_unaligned(reg->key,
 				(__be64 *)&buffer[offset + 8 * i]);
 
 			offset += 8;
@@ -2357,7 +2357,7 @@ void scst_pr_read_reservation(struct scst_cmd *cmd, uint8_t *buffer,
 		b[6] = 0;
 		b[7] = 0x10;
 
-		put_unaligned(cpu_to_be64(key), (__be64 *)&b[8]);
+		put_unaligned(key, (__be64 *)&b[8]);
 		b[21] = dev->pr_scope << 4 | dev->pr_type;
 
 		size = 24;
@@ -2448,8 +2448,7 @@ void scst_pr_read_full_status(struct scst_cmd *cmd, uint8_t *buffer,
 		if (size_max - size > rec_len) {
 			memset(&buffer[offset], 0, rec_len);
 
-			put_unaligned(cpu_to_be64(reg->key),
-				(__be64 *)(&buffer[offset]));
+			put_unaligned(reg->key, (__be64 *)(&buffer[offset]));
 
 			if (dev->pr_is_set && scst_pr_is_holder(dev, reg)) {
 				buffer[offset + 12] = 1;
