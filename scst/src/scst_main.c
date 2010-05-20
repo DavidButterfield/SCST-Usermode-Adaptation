@@ -201,12 +201,9 @@ int __scst_register_target_template(struct scst_tgt_template *vtt,
 		goto out_err;
 	}
 
-	if (vtt->get_initiator_port_transport_id == NULL) {
+	if (vtt->get_initiator_port_transport_id == NULL)
 		PRINT_WARNING("Target driver %s doesn't support Persistent "
 			"Reservations", vtt->name);
-		res = -EINVAL;
-		goto out_err;
-	}
 
 	if (vtt->threads_num < 0) {
 		PRINT_ERROR("Wrong threads_num value %d for "
@@ -217,13 +214,12 @@ int __scst_register_target_template(struct scst_tgt_template *vtt,
 	}
 
 #ifndef CONFIG_SCST_PROC
-	if (!vtt->enable_target || !vtt->is_target_enabled) {
+	if (!vtt->enable_target || !vtt->is_target_enabled)
 		PRINT_WARNING("Target driver %s doesn't have enable_target() "
 			"and/or is_target_enabled() method(s). This is unsafe "
 			"and can lead that initiators connected on the "
 			"initialization time can see an unexpected set of "
 			"devices or no devices at all!", vtt->name);
-	}
 
 	if (((vtt->add_target != NULL) && (vtt->del_target == NULL)) ||
 	    ((vtt->add_target == NULL) && (vtt->del_target != NULL))) {
@@ -911,14 +907,6 @@ static int scst_dev_handler_check(struct scst_dev_type *dev_handler)
 		goto out;
 	}
 #endif
-
-	if (dev_handler->exec == NULL) {
-#ifdef CONFIG_SCST_ALLOW_PASSTHROUGH_IO_SUBMIT_IN_SIRQ
-		dev_handler->exec_atomic = 1;
-#else
-		dev_handler->exec_atomic = 0;
-#endif
-	}
 
 	if (dev_handler->dev_done == NULL)
 		dev_handler->dev_done_atomic = 1;
@@ -1854,14 +1842,14 @@ static void __init scst_print_config(void)
 		(j == i) ? "" : ", ");
 #endif
 
-#ifdef CONFIG_SCST_ALLOW_PASSTHROUGH_IO_SUBMIT_IN_SIRQ
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
 	i += snprintf(&buf[i], sizeof(buf) - i,
-		"%sALLOW_PASSTHROUGH_IO_SUBMIT_IN_SIRQ",
+		"%sTEST_IO_IN_SIRQ",
 		(j == i) ? "" : ", ");
 #endif
 
 #ifdef CONFIG_SCST_STRICT_SECURITY
-	i += snprintf(&buf[i], sizeof(buf) - i, "%sSCST_STRICT_SECURITY",
+	i += snprintf(&buf[i], sizeof(buf) - i, "%sSTRICT_SECURITY",
 		(j == i) ? "" : ", ");
 #endif
 

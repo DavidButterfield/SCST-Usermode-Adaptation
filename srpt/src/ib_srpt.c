@@ -2723,11 +2723,7 @@ static int srpt_xmit_response(struct scst_cmd *scmnd)
 	int resp_len;
 	enum srpt_command_state prev_state;
 
-	if (unlikely(scst_cmd_atomic(scmnd))) {
-		TRACE_DBG("%s", "Switching to thread context.");
-		ret = SCST_TGT_RES_NEED_THREAD_CTX;
-		goto out;
-	}
+	EXTRACHECKS_BUG_ON(scst_cmd_atomic(scst_cmd));
 
 	ioctx = scst_cmd_get_tgt_priv(scmnd);
 	BUG_ON(!ioctx);

@@ -163,6 +163,9 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	 SCST_DATA_NONE, SCST_SMALL_TIMEOUT|SCST_IMPLICIT_HQ|
 			 SCST_REG_RESERVE_ALLOWED|
 			 SCST_WRITE_EXCL_ALLOWED|
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+			 SCST_TEST_IO_IN_SIRQ_ALLOWED|
+#endif
 			 SCST_EXCL_ACCESS_ALLOWED,
 	 0, get_trans_len_none},
 	{0x01, " M              ", "REWIND",
@@ -195,6 +198,9 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	 SCST_DATA_NONE, SCST_WRITE_MEDIUM, 0, get_trans_len_none},
 	{0x08, "O               ", "READ(6)",
 	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED|
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+			 SCST_TEST_IO_IN_SIRQ_ALLOWED|
+#endif
 			 SCST_WRITE_EXCL_ALLOWED,
 	 4, get_trans_len_1_256},
 	{0x08, " MV OO OV       ", "READ(6)",
@@ -206,7 +212,11 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0x08, "    O           ", "RECEIVE",
 	 SCST_DATA_READ, FLAG_NONE, 2, get_trans_len_3},
 	{0x0A, "O               ", "WRITE(6)",
-	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|SCST_WRITE_MEDIUM,
+	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+			  SCST_TEST_IO_IN_SIRQ_ALLOWED|
+#endif
+	 		  SCST_WRITE_MEDIUM,
 	 4, get_trans_len_1_256},
 	{0x0A, " M  O  OV       ", "WRITE(6)",
 	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|SCST_WRITE_MEDIUM,
@@ -305,6 +315,9 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	 SCST_DATA_READ, FLAG_NONE, 6, get_trans_len_3},
 	{0x28, "M   MMMM        ", "READ(10)",
 	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED|
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+			 SCST_TEST_IO_IN_SIRQ_ALLOWED|
+#endif
 			 SCST_WRITE_EXCL_ALLOWED,
 	 7, get_trans_len_2},
 	{0x28, "         O      ", "GET MESSAGE(10)",
@@ -312,7 +325,11 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0x29, "V   VV O        ", "READ GENERATION",
 	 SCST_DATA_READ, FLAG_NONE, 8, get_trans_len_1},
 	{0x2A, "O   MO M        ", "WRITE(10)",
-	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|SCST_WRITE_MEDIUM,
+	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+			  SCST_TEST_IO_IN_SIRQ_ALLOWED|
+#endif
+	 		  SCST_WRITE_MEDIUM,
 	 7, get_trans_len_2},
 	{0x2A, "         O      ", "SEND MESSAGE(10)",
 	 SCST_DATA_WRITE, FLAG_NONE, 7, get_trans_len_2},
@@ -485,10 +502,17 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	 0, get_trans_len_none},
 	{0x88, "M   MMMM        ", "READ(16)",
 	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED|
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+			 SCST_TEST_IO_IN_SIRQ_ALLOWED|
+#endif
 			 SCST_WRITE_EXCL_ALLOWED,
 	 10, get_trans_len_4},
 	{0x8A, "O   OO O        ", "WRITE(16)",
-	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|SCST_WRITE_MEDIUM,
+	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+			  SCST_TEST_IO_IN_SIRQ_ALLOWED|
+#endif
+	 		  SCST_WRITE_MEDIUM,
 	 10, get_trans_len_4},
 	{0x8C, "OOOOOOOOOO      ", "READ ATTRIBUTE",
 	 SCST_DATA_READ, FLAG_NONE, 10, get_trans_len_4},
@@ -557,11 +581,20 @@ static const struct scst_sdbops scst_scsi_op_table[] = {
 	{0xA8, "         O      ", "GET MESSAGE(12)",
 	 SCST_DATA_READ, FLAG_NONE, 6, get_trans_len_4},
 	{0xA8, "O   OO O        ", "READ(12)",
-	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED, 6, get_trans_len_4},
+	 SCST_DATA_READ, SCST_TRANSFER_LEN_TYPE_FIXED|
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+			 SCST_TEST_IO_IN_SIRQ_ALLOWED|
+#endif
+			 SCST_WRITE_EXCL_ALLOWED,
+	 6, get_trans_len_4},
 	{0xA9, "     O          ", "PLAY TRACK RELATIVE(12)",
 	 SCST_DATA_NONE, FLAG_NONE, 0, get_trans_len_none},
 	{0xAA, "O   OO O        ", "WRITE(12)",
-	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|SCST_WRITE_MEDIUM,
+	 SCST_DATA_WRITE, SCST_TRANSFER_LEN_TYPE_FIXED|
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+			  SCST_TEST_IO_IN_SIRQ_ALLOWED|
+#endif
+	 		  SCST_WRITE_MEDIUM,
 	 6, get_trans_len_4},
 	{0xAA, "         O      ", "SEND MESSAGE(12)",
 	 SCST_DATA_WRITE, FLAG_NONE, 6, get_trans_len_4},
@@ -2108,6 +2141,15 @@ int scst_alloc_device(gfp_t gfp_mask, struct scst_device **out_dev)
 	dev->dev_double_ua_possible = 1;
 	dev->queue_alg = SCST_CONTR_MODE_QUEUE_ALG_UNRESTRICTED_REORDER;
 
+	mutex_init(&dev->dev_pr_mutex);
+	atomic_set(&dev->pr_readers_count, 0);
+	dev->pr_generation = 0;
+	dev->pr_is_set = 0;
+	dev->pr_holder = NULL;
+	dev->pr_scope = SCOPE_LU;
+	dev->pr_type = TYPE_UNSPECIFIED;
+	INIT_LIST_HEAD(&dev->dev_registrants_list);
+
 	scst_init_threads(&dev->dev_cmd_threads);
 
 	*out_dev = dev;
@@ -2815,18 +2857,6 @@ static int scst_alloc_add_tgt_dev(struct scst_session *sess,
 		if (sess->tgt->tgtt->rdy_to_xfer_atomic)
 			__set_bit(SCST_TGT_DEV_AFTER_INIT_WR_ATOMIC,
 				&tgt_dev->tgt_dev_flags);
-		if (dev->handler->exec_atomic)
-			__set_bit(SCST_TGT_DEV_AFTER_INIT_OTH_ATOMIC,
-				&tgt_dev->tgt_dev_flags);
-	}
-	if (dev->handler->exec_atomic) {
-		if (sess->tgt->tgtt->rdy_to_xfer_atomic)
-			__set_bit(SCST_TGT_DEV_AFTER_RESTART_WR_ATOMIC,
-				&tgt_dev->tgt_dev_flags);
-		__set_bit(SCST_TGT_DEV_AFTER_RESTART_OTH_ATOMIC,
-				&tgt_dev->tgt_dev_flags);
-		__set_bit(SCST_TGT_DEV_AFTER_RX_DATA_ATOMIC,
-			&tgt_dev->tgt_dev_flags);
 	}
 	if (dev->handler->dev_done_atomic &&
 	    sess->tgt->tgtt->xmit_response_atomic) {
@@ -3612,6 +3642,8 @@ void scst_free_session(struct scst_session *sess)
 
 	mutex_unlock(&scst_mutex);
 
+	kfree(sess->transport_id);
+
 	scst_sess_sysfs_put(sess); /* must not be called under scst_mutex */
 
 	TRACE_EXIT();
@@ -3944,7 +3976,7 @@ int scst_alloc_request(struct scst_cmd *cmd)
 {
 	int res = 0;
 	struct scsi_request *req;
-	int gm = scst_cmd_atomic(cmd) ? GFP_ATOMIC : GFP_KERNEL;
+	int gm = GFP_KERNEL;
 
 	TRACE_ENTRY();
 
@@ -4275,7 +4307,7 @@ int scst_scsi_exec_async(struct scst_cmd *cmd,
 	struct request *rq;
 	struct scsi_io_context *sioc;
 	int write = (cmd->data_direction & SCST_DATA_WRITE) ? WRITE : READ;
-	gfp_t gfp = scst_cmd_atomic(cmd) ? GFP_ATOMIC : GFP_KERNEL;
+	gfp_t gfp = GFP_KERNEL;
 	int cmd_len = cmd->cdb_len;
 
 	if (cmd->ext_cdb_len == 0) {

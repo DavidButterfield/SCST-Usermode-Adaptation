@@ -200,22 +200,25 @@ static inline int list_is_last(const struct list_head *list,
  *************************************************************/
 
 /* LUN translation (mcmd->tgt_dev assignment) */
-#define SCST_MCMD_STATE_INIT     0
+#define SCST_MCMD_STATE_INIT				0
 
-/* Mgmt cmd is ready for processing */
-#define SCST_MCMD_STATE_READY    1
+/* Mgmt cmd is being processed */
+#define SCST_MCMD_STATE_EXEC				1
 
-/* Mgmt cmd is being executing */
-#define SCST_MCMD_STATE_EXECUTING 2
+/* Waiting for affected commands done */
+#define SCST_MCMD_STATE_WAITING_AFFECTED_CMDS_DONE	2
 
-/* Post check when affected commands done */
-#define SCST_MCMD_STATE_POST_AFFECTED_CMDS_DONE 3
+/* Post actions when affected commands done */
+#define SCST_MCMD_STATE_AFFECTED_CMDS_DONE		3
+
+/* Waiting for affected local commands finished */
+#define SCST_MCMD_STATE_WAITING_AFFECTED_CMDS_FINISHED	4
 
 /* Target driver's task_mgmt_fn_done() is going to be called */
-#define SCST_MCMD_STATE_DONE     4
+#define SCST_MCMD_STATE_DONE				5
 
 /* The mcmd finished */
-#define SCST_MCMD_STATE_FINISHED 5
+#define SCST_MCMD_STATE_FINISHED			6
 
 /*************************************************************
  ** Constants for "atomic" parameter of SCST's functions
@@ -309,9 +312,6 @@ enum scst_exec_context {
  */
 #define SCST_PREPROCESS_STATUS_ERROR_FATAL   3
 
-/* Thread context requested */
-#define SCST_PREPROCESS_STATUS_NEED_THREAD   4
-
 /*************************************************************
  ** Values for AEN functions
  *************************************************************/
@@ -373,12 +373,6 @@ enum scst_exec_context {
 
 /* The cmd should be sent to SCSI mid-level */
 #define SCST_EXEC_NOT_COMPLETED      1
-
-/*
- * Thread context is required to execute the command.
- * Exec() will be called again in the thread context.
- */
-#define SCST_EXEC_NEED_THREAD        2
 
 /*
  * Set if cmd is finished and there is status/sense to be sent.
@@ -463,11 +457,7 @@ enum scst_exec_context {
 
 /* Set if the corresponding context is atomic */
 #define SCST_TGT_DEV_AFTER_INIT_WR_ATOMIC	5
-#define SCST_TGT_DEV_AFTER_INIT_OTH_ATOMIC	6
-#define SCST_TGT_DEV_AFTER_RESTART_WR_ATOMIC	7
-#define SCST_TGT_DEV_AFTER_RESTART_OTH_ATOMIC	8
-#define SCST_TGT_DEV_AFTER_RX_DATA_ATOMIC	9
-#define SCST_TGT_DEV_AFTER_EXEC_ATOMIC		10
+#define SCST_TGT_DEV_AFTER_EXEC_ATOMIC		6
 
 #define SCST_TGT_DEV_CLUST_POOL			11
 
@@ -748,10 +738,6 @@ struct scst_tgt_template {
 	 * This command is expected to be NON-BLOCKING.
 	 * If it is blocking, consider to set threads_num to some none 0 number.
 	 *
-	 * Pay attention to "atomic" attribute of the cmd, which can be get
-	 * by scst_cmd_atomic(): it is true if the function called in the
-	 * atomic (non-sleeping) context.
-	 *
 	 * OPTIONAL
 	 */
 	int (*pre_exec) (struct scst_cmd *cmd);
@@ -994,7 +980,6 @@ struct scst_dev_type {
 	 * the atomic (non-sleeping) context
 	 */
 	unsigned parse_atomic:1;
-	unsigned exec_atomic:1;
 	unsigned dev_done_atomic:1;
 
 #ifdef CONFIG_SCST_PROC
@@ -1040,14 +1025,8 @@ struct scst_dev_type {
 	 * cmd->scst_cmd_done() callback.
 	 * Returns:
 	 *  - SCST_EXEC_COMPLETED - the cmd is done, go to other ones
-	 *  - SCST_EXEC_NEED_THREAD - thread context is required to execute
-	 *	the command. Exec() will be called again in the thread context.
 	 *  - SCST_EXEC_NOT_COMPLETED - the cmd should be sent to SCSI
 	 *	mid-level.
-	 *
-	 * Pay attention to "atomic" attribute of the cmd, which can be get
-	 * by scst_cmd_atomic(): it is true if the function called in the
-	 * atomic (non-sleeping) context.
 	 *
 	 * If this function provides sync execution, you should set
 	 * exec_sync flag and consider to setup dedicated threads by
@@ -1464,6 +1443,22 @@ struct scst_session {
 #endif
 };
 
+struct scst_pr_abort_all_pending_mgmt_cmds_counter {
+	/*
+	 * How many there are pending for this cmd SCST_PR_ABORT_ALL TM
+	 * commands.
+	 */
+	atomic_t pr_abort_pending_cnt;
+
+	/*
+	 * How many there are pending for this cmd SCST_PR_ABORT_ALL TM
+	 * commands, which not yet aborted all affected commands and
+	 * a completion to signal, when it's done.
+	 */
+	atomic_t pr_aborting_cnt;
+	struct completion pr_aborting_cmpl;
+};
+
 struct scst_cmd_threads {
 	spinlock_t cmd_list_lock;
 	struct list_head active_cmd_list;
@@ -1757,6 +1752,9 @@ struct scst_cmd {
 	/* Used for storage of dev handler private stuff */
 	void *dh_priv;
 
+	/* Counter of the corresponding SCST_PR_ABORT_ALL TM commands */
+	struct scst_pr_abort_all_pending_mgmt_cmds_counter *pr_abort_counter;
+
 	/*
 	 * Used to restore the SG vector if it was modified by
 	 * scst_set_resp_data_len()
@@ -1766,7 +1764,10 @@ struct scst_cmd {
 	/* Used to retry commands in case of double UA */
 	int dbl_ua_orig_resp_data_len, dbl_ua_orig_data_direction;
 
-	/* List corresponding mgmt cmd, if any, protected by sess_list_lock */
+	/*
+	 * List of the corresponding mgmt cmds, if any. Protected by
+	 * sess_list_lock.
+	 */
 	struct list_head mgmt_cmd_list;
 
 	/* List entry for dev's blocked_cmd_list */
@@ -1805,8 +1806,11 @@ struct scst_mgmt_cmd_stub {
 	/* List entry in cmd->mgmt_cmd_list */
 	struct list_head cmd_mgmt_cmd_list_entry;
 
-	/* set if the cmd was counted in  mcmd->cmd_done_wait_count */
+	/* Set if the cmd was counted in  mcmd->cmd_done_wait_count */
 	unsigned int done_counted:1;
+
+	/* Set if the cmd was counted in  mcmd->cmd_finish_wait_count */
+	unsigned int finish_counted:1;
 };
 
 struct scst_mgmt_cmd {
@@ -1820,13 +1824,10 @@ struct scst_mgmt_cmd {
 
 	int fn;
 
-	unsigned int completed:1;	/* set, if the mcmd is completed */
 	/* Set if device(s) should be unblocked after mcmd's finish */
 	unsigned int needs_unblocking:1;
 	unsigned int lun_set:1;		/* set, if lun field is valid */
 	unsigned int cmd_sn_set:1;	/* set, if cmd_sn field is valid */
-	/* set, if scst_mgmt_affected_cmds_done was called */
-	unsigned int affected_cmds_done_called:1;
 
 	/*
 	 * Number of commands to finish before sending response,
@@ -1858,8 +1859,11 @@ struct scst_mgmt_cmd {
 	/* completition status, one of the SCST_MGMT_STATUS_* constants */
 	int status;
 
-	/* Used for storage of target driver private stuff */
-	void *tgt_priv;
+	/* Used for storage of target driver private stuff or origin PR cmd */
+	union {
+		void *tgt_priv;
+		struct scst_cmd *origin_pr_cmd;
+	};
 };
 
 /* List entry for dev_registrants_list */

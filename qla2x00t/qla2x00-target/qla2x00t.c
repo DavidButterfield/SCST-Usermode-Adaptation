@@ -2123,8 +2123,7 @@ static int q2x_xmit_response(struct scst_cmd *scst_cmd)
 #endif
 
 #ifdef CONFIG_QLA_TGT_DEBUG_WORK_IN_THREAD
-	if (scst_cmd_atomic(scst_cmd))
-		return SCST_TGT_RES_NEED_THREAD_CTX;
+	EXTRACHECKS_BUG_ON(scst_cmd_atomic(scst_cmd));
 #endif
 
 	if (is_send_status)

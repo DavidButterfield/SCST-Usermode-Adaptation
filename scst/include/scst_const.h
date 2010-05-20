@@ -63,12 +63,12 @@
 /*************************************************************
  ** Values for task management functions
  *************************************************************/
-#define SCST_ABORT_TASK              0
-#define SCST_ABORT_TASK_SET          1
-#define SCST_CLEAR_ACA               2
-#define SCST_CLEAR_TASK_SET          3
-#define SCST_LUN_RESET               4
-#define SCST_TARGET_RESET            5
+#define SCST_ABORT_TASK			0
+#define SCST_ABORT_TASK_SET		1
+#define SCST_CLEAR_ACA			2
+#define SCST_CLEAR_TASK_SET		3
+#define SCST_LUN_RESET			4
+#define SCST_TARGET_RESET		5
 
 /** SCST extensions **/
 
@@ -77,20 +77,20 @@
  * Aborts all tasks there, resets the reservation, if any, and sets
  * up the I_T Nexus loss UA.
  */
-#define SCST_NEXUS_LOSS_SESS         6
+#define SCST_NEXUS_LOSS_SESS		6
 
 /* Aborts all tasks in the corresponding session */
-#define SCST_ABORT_ALL_TASKS_SESS    7
+#define SCST_ABORT_ALL_TASKS_SESS	7
 
 /*
  * Notifies about I_T nexus loss event. Aborts all tasks in all sessions
  * of the tgt, resets the reservations, if any,  and sets up the I_T Nexus
  * loss UA.
  */
-#define SCST_NEXUS_LOSS              8
+#define SCST_NEXUS_LOSS			8
 
 /* Aborts all tasks in all sessions of the tgt */
-#define SCST_ABORT_ALL_TASKS         9
+#define SCST_ABORT_ALL_TASKS		9
 
 /*
  * Internal TM command issued by SCST in scst_unregister_session(). It is the
@@ -99,9 +99,24 @@
  *  - it doesn't call task_mgmt_fn_done()
  *  - it doesn't queue NEXUS LOSS UA.
  *
- * Target driver shall NEVER use it!!
+ * Target drivers must NEVER use it!!
  */
-#define SCST_UNREG_SESS_TM           10
+#define SCST_UNREG_SESS_TM		10
+
+/*
+ * Internal TM command issued by SCST in scst_pr_abort_reg(). It aborts all
+ * tasks from mcmd->origin_pr_cmd->tgt_dev, except mcmd->origin_pr_cmd.
+ * Additionally:
+ *  - it signals pr_aborting_cmpl completion when all affected
+ *    commands marked as aborted.
+ *  - it doesn't call task_mgmt_affected_cmds_done()
+ *  - it doesn't call task_mgmt_fn_done()
+ *  - it calls mcmd->origin_pr_cmd->scst_cmd_done() when all affected
+ *    commands aborted.
+ *
+ * Target drivers must NEVER use it!!
+ */
+#define SCST_PR_ABORT_ALL		11
 
 /*************************************************************
  ** Values for mgmt cmd's status field. Codes taken from iSCSI
@@ -142,6 +157,9 @@ enum scst_cdb_flags {
 	SCST_REG_RESERVE_ALLOWED =		0x0800,
 	SCST_WRITE_EXCL_ALLOWED =		0x1000,
 	SCST_EXCL_ACCESS_ALLOWED =		0x2000,
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+	SCST_TEST_IO_IN_SIRQ_ALLOWED =		0x8000,
+#endif
 };
 
 /*************************************************************

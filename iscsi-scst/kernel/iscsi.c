@@ -3107,8 +3107,7 @@ static int iscsi_xmit_response(struct scst_cmd *scst_cmd)
 	u8 *sense = scst_cmd_get_sense_buffer(scst_cmd);
 	int sense_len = scst_cmd_get_sense_buffer_len(scst_cmd);
 
-	if (unlikely(scst_cmd_atomic(scst_cmd)))
-		return SCST_TGT_RES_NEED_THREAD_CTX;
+	EXTRACHECKS_BUG_ON(scst_cmd_atomic(scst_cmd));
 
 	scst_cmd_set_tgt_priv(scst_cmd, NULL);
 

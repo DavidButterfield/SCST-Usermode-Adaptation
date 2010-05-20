@@ -3255,12 +3255,12 @@ static ssize_t scst_version_show(struct kobject *kobj,
 	strcat(buf, "USE_EXPECTED_VALUES\n");
 #endif
 
-#ifdef CONFIG_SCST_ALLOW_PASSTHROUGH_IO_SUBMIT_IN_SIRQ
-	strcat(buf, "ALLOW_PASSTHROUGH_IO_SUBMIT_IN_SIRQ\n");
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+	strcat(buf, "TEST_IO_IN_SIRQ\n");
 #endif
 
 #ifdef CONFIG_SCST_STRICT_SECURITY
-	strcat(buf, "SCST_STRICT_SECURITY\n");
+	strcat(buf, "STRICT_SECURITY\n");
 #endif
 
 	TRACE_EXIT();

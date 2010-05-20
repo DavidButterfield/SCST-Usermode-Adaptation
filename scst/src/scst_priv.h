@@ -108,7 +108,7 @@ extern unsigned long scst_trace_flag;
  **/
 #define SCST_CMD_STATE_RES_CONT_NEXT         SCST_EXEC_COMPLETED
 #define SCST_CMD_STATE_RES_CONT_SAME         SCST_EXEC_NOT_COMPLETED
-#define SCST_CMD_STATE_RES_NEED_THREAD       SCST_EXEC_NEED_THREAD
+#define SCST_CMD_STATE_RES_NEED_THREAD       (SCST_EXEC_NOT_COMPLETED+1)
 
 /**
  ** Maximum count of uncompleted commands that an initiator could
@@ -196,6 +196,10 @@ static inline bool scst_set_io_context(struct scst_cmd *cmd,
 	struct io_context **old)
 {
 	bool res;
+
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+	return false;
+#endif
 
 	if (cmd->cmd_threads == &scst_main_cmd_threads) {
 		EXTRACHECKS_BUG_ON(in_interrupt());
@@ -567,7 +571,7 @@ int scst_set_pending_UA(struct scst_cmd *cmd);
 void scst_report_luns_changed(struct scst_acg *acg);
 
 void scst_abort_cmd(struct scst_cmd *cmd, struct scst_mgmt_cmd *mcmd,
-	int other_ini, int call_dev_task_mgmt_fn);
+	bool other_ini, bool call_dev_task_mgmt_fn);
 void scst_process_reset(struct scst_device *dev,
 	struct scst_session *originator, struct scst_cmd *exclude_cmd,
 	struct scst_mgmt_cmd *mcmd, bool setUA);

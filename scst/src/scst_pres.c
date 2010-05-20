@@ -115,6 +115,7 @@ static bool tid_equal(const uint8_t *tid_a, const uint8_t *tid_b)
 		const uint8_t tid_b_fmt = tid_b[0] & 0xc0;
 		int tid_a_len, tid_a_max = tid_size(tid_a) - 4;
 		int tid_b_len, tid_b_max = tid_size(tid_b) - 4;
+		int i;
 
 		tid_a += 4;
 		tid_b += 4;
@@ -155,6 +156,12 @@ static bool tid_equal(const uint8_t *tid_a, const uint8_t *tid_b)
 			return false;
 
 		len = tid_a_len;
+
+		/* ISCSI names are case insensitive */
+		for (i = 0; i < len; i++)
+			if (tolower(tid_a[i]) != tolower(tid_b[i]))
+				return false;
+		return true;
 	} else
 		len = TID_COMMON_SIZE;
 
@@ -197,48 +204,40 @@ out:
 	return res;
 }
 
-static void scst_pr_dump_registrants(struct scst_device *dev)
+static void scst_pr_dump_prs(struct scst_device *dev)
 {
-	TRACE_PR("Dumping registration records: device '%s'", dev->virt_name);
+	TRACE_PR("Persistent reservations for device %s:", dev->virt_name);
 
 	if (list_empty(&dev->dev_registrants_list))
-		TRACE_PR("%s", "No records");
+		TRACE_PR("%s", "  No records");
 	else {
-		int i;
 		struct scst_dev_registrant *reg;
-
-		i = 0;
+		int i = 0;
 		list_for_each_entry(reg, &dev->dev_registrants_list,
 					dev_registrants_list_entry) {
-			TRACE_PR("[%d] registrant %s/%d, key '%016llx'", i++,
+			TRACE_PR("  [%d] registrant %s/%d, key '%016llx' "
+				"(reg %p)", i++,
 				debug_transport_id_to_initiator_name(
 					reg->transport_id),
-				reg->rel_tgt_id, reg->key);
+				reg->rel_tgt_id, reg->key, reg);
 		}
 	}
 
-	return;
-}
-
-static void scst_pr_dump_reservation(struct scst_device *dev)
-{
-	TRACE_PR("Dumping persistent reservation: device '%s'", dev->virt_name);
 	if (dev->pr_is_set) {
 		struct scst_dev_registrant *holder = dev->pr_holder;
 		if (holder != NULL)
-			TRACE_PR("Reservation holder %s/%d, key '%016llx', "
-				"scope %x, type %x",
+			TRACE_PR("Reservation holder is %s/%d (key '%016llx', "
+				"scope %x, type %x, reg %p)",
 				debug_transport_id_to_initiator_name(
 							holder->transport_id),
 				holder->rel_tgt_id, holder->key, dev->pr_scope,
+				dev->pr_type, holder);
+		else
+			TRACE_PR("All registrants are reservation holders "
+				"(scope %x, type %x)", dev->pr_scope,
 				dev->pr_type);
-		else {
-			/*
-			 * TODO : handle all registrants case
-			 */
-		}
 	} else
-		TRACE_PR("%s", "No reservation");
+		TRACE_PR("%s", "Not reserved");
 
 	return;
 }
@@ -250,6 +249,10 @@ static struct scst_dev_registrant *scst_pr_find_not_used_registrant(
 	struct scst_dev_registrant *reg, *reg_found = NULL;
 
 	TRACE_ENTRY();
+
+	TRACE_PR("Looking for not used registrant %s/%d (dev %p)",
+		debug_transport_id_to_initiator_name(transport_id),
+		rel_tgt_id, dev);
 
 	list_for_each_entry(reg, &dev->dev_registrants_list,
 				dev_registrants_list_entry) {
@@ -364,10 +367,9 @@ static struct scst_dev_registrant *scst_pr_add_registrant(
 	sBUG_ON(dev == NULL);
 	sBUG_ON(transport_id == NULL);
 
-	TRACE_PR("Registering dev %s, transport_id %s, rel_tgt_id %d, "
-		"tgt_dev %p", dev->virt_name,
+	TRACE_PR("Registering %s/%d (dev %s, tgt_dev %p)",
 		debug_transport_id_to_initiator_name(transport_id),
-		rel_tgt_id, tgt_dev);
+		rel_tgt_id, dev->virt_name, tgt_dev);
 
 	reg = kzalloc(sizeof(*reg), GFP_KERNEL);
 	if (reg == NULL) {
@@ -375,7 +377,7 @@ static struct scst_dev_registrant *scst_pr_add_registrant(
 		goto out;
 	}
 
-	reg->transport_id = kzalloc(tid_size(transport_id), GFP_KERNEL);
+	reg->transport_id = kmalloc(tid_size(transport_id), GFP_KERNEL);
 	if (reg->transport_id == NULL) {
 		PRINT_ERROR("%s", "Unable to allocate initiator port "
 			"transport id");
@@ -410,9 +412,9 @@ static void scst_pr_remove_registrant(struct scst_device *dev,
 {
 	TRACE_ENTRY();
 
-	TRACE_PR("Removing registration record for %s/%d (key '%016llx')",
+	TRACE_PR("Removing registrant %s/%d (key '%016llx', dev %s)",
 		debug_transport_id_to_initiator_name(reg->transport_id),
-		reg->rel_tgt_id, reg->key);
+		reg->rel_tgt_id, reg->key, dev->virt_name);
 
 	list_del(&reg->dev_registrants_list_entry);
 
@@ -469,23 +471,14 @@ static void scst_pr_send_ua_all(struct scst_device *dev,
 	return;
 }
 
-/*
- * lock sess_list_lock
- * abort tasks for all registrants from list,
- * e.g. for all registered initiator's sessions
- * abort all cmds
- */
 static void scst_pr_abort_reg(struct scst_device *dev,
-	struct scst_cmd *exclude_cmd, struct scst_dev_registrant *reg)
+	struct scst_cmd *pr_cmd, struct scst_dev_registrant *reg)
 {
-	struct scst_session *sess = exclude_cmd->sess;
-	struct scst_cmd *sess_cmd;
+	struct scst_session *sess;
+	uint64_t packed_lun;
+	int rc;
 
 	TRACE_ENTRY();
-
-	TRACE_PR("Aborting commands for %s/%d (key '0x%016llx', sess %p)",
-		debug_transport_id_to_initiator_name(reg->transport_id),
-		reg->rel_tgt_id, reg->key, sess);
 
 	if (reg->tgt_dev == NULL) {
 		TRACE_PR("Registrant %s/%d (key '0x%016llx') has no session",
@@ -494,21 +487,27 @@ static void scst_pr_abort_reg(struct scst_device *dev,
 		goto out;
 	}
 
-	spin_lock_irq(&sess->sess_list_lock);
-	list_for_each_entry(sess_cmd, &sess->sess_cmd_list,
-				sess_cmd_list_entry) {
-		if ((sess_cmd->tgt_dev == reg->tgt_dev) &&
-		    (sess_cmd != exclude_cmd)) {
-			TRACE_PR("Abort cmd '%s'", sess_cmd->op_name);
-			/*
-			 * ToDo: dev handlers should be notified
-			 * somehow about the abortion to abort
-			 * faster.
-			 */
-			scst_abort_cmd(sess_cmd, NULL, 0, 0);
-		}
+	sess = reg->tgt_dev->sess;
+
+	TRACE_PR("Aborting %d commands for %s/%d (key '0x%016llx', tgt_dev %p, "
+		"sess %p)", atomic_read(&reg->tgt_dev->tgt_dev_cmd_count),
+		debug_transport_id_to_initiator_name(reg->transport_id),
+		reg->rel_tgt_id, reg->key, reg->tgt_dev, sess);
+
+	packed_lun = scst_pack_lun(reg->tgt_dev->lun, sess->acg->addr_method);
+
+	rc = scst_rx_mgmt_fn_lun(sess, SCST_PR_ABORT_ALL,
+		(uint8_t *)&packed_lun, sizeof(packed_lun), SCST_NON_ATOMIC,
+		pr_cmd);
+	if (rc != 0) {
+		/*
+		 * There's nothing more we can do here... Hopefully, it would
+		 * never happen.
+		 */
+		PRINT_ERROR("SCST_PR_ABORT_ALL failed %d (sess %p)",
+			rc, sess);
 	}
-	spin_unlock_irq(&sess->sess_list_lock);
+
 out:
 	TRACE_EXIT();
 	return;
@@ -766,7 +765,7 @@ int scst_pr_load_device_file(struct scst_device *dev)
 
 	res = scst_pr_do_load_device_file(dev, dev->pr_file_name1);
 
-	scst_pr_dump_registrants(dev);
+	scst_pr_dump_prs(dev);
 
 out:
 	TRACE_EXIT_RES(res);
@@ -1103,19 +1102,8 @@ int scst_pr_init_dev(struct scst_device *dev)
 
 	TRACE_ENTRY();
 
-	mutex_init(&dev->dev_pr_mutex);
-	atomic_set(&dev->pr_readers_count, 0);
-
-	dev->pr_generation = 0;
-	dev->pr_is_set = 0;
-	dev->pr_holder = NULL;
-	dev->pr_scope = SCOPE_LU;
-	dev->pr_type = TYPE_UNSPECIFIED;
-
-	INIT_LIST_HEAD(&dev->dev_registrants_list);
-
 	name_len = snprintf(&q, sizeof(q), "%s/%s", SCST_PR_DIR, dev->virt_name) + 1;
-	dev->pr_file_name = kzalloc(name_len, GFP_KERNEL);
+	dev->pr_file_name = kmalloc(name_len, GFP_KERNEL);
 	if (dev->pr_file_name == NULL) {
 		PRINT_ERROR("Allocation of device '%s' file path failed",
 			dev->virt_name);
@@ -1126,7 +1114,7 @@ int scst_pr_init_dev(struct scst_device *dev)
 			dev->virt_name);
 
 	name_len = snprintf(&q, sizeof(q), "%s/%s.1", SCST_PR_DIR, dev->virt_name) + 1;
-	dev->pr_file_name1 = kzalloc(name_len, GFP_KERNEL);
+	dev->pr_file_name1 = kmalloc(name_len, GFP_KERNEL);
 	if (dev->pr_file_name1 == NULL) {
 		PRINT_ERROR("Allocation of device '%s' backup file path failed",
 			dev->virt_name);
@@ -1183,6 +1171,9 @@ int scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev)
 
 	TRACE_ENTRY();
 
+	if (tgt_dev->sess->transport_id == NULL)
+		goto out;
+
 	tgt_dev->registrant = scst_pr_find_not_used_registrant(
 		tgt_dev->dev, tgt_dev->sess->transport_id,
 		tgt_dev->sess->tgt->rel_tgt_id);
@@ -1192,6 +1183,7 @@ int scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev)
 		tgt_dev->registrant->tgt_dev = tgt_dev;
 	}
 
+out:
 	TRACE_EXIT_RES(res);
 	return res;
 }
@@ -1461,7 +1453,7 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	}
 #endif
 
-	scst_pr_dump_registrants(dev);
+	scst_pr_dump_prs(dev);
 
 out:
 	list_for_each_entry(reg, &rollback_list, aux_list_entry) {
@@ -1557,7 +1549,7 @@ void scst_pr_register_and_ignore(struct scst_cmd *cmd, uint8_t *buffer,
 	}
 #endif
 
-	scst_pr_dump_registrants(dev);
+	scst_pr_dump_prs(dev);
 
 out:
 	TRACE_EXIT();
@@ -1636,7 +1628,7 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 	 * actions that are allowed in the presence of various reservations".
 	 */
 	if (!scst_pr_is_holder(dev, reg)) {
-		TRACE_PR("%s/%d is not a holder",
+		TRACE_PR("Registrant %s/%d is not a holder",
 			debug_transport_id_to_initiator_name(
 				reg->transport_id), reg->rel_tgt_id);
 		scst_set_cmd_error_status(cmd, SAM_STAT_RESERVATION_CONFLICT);
@@ -1720,8 +1712,7 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 	}
 #endif
 
-	scst_pr_dump_registrants(dev);
-	scst_pr_dump_reservation(dev);
+	scst_pr_dump_prs(dev);
 
 out:
 	TRACE_EXIT();
@@ -1736,7 +1727,6 @@ void scst_pr_reserve(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	struct scst_device *dev = cmd->dev;
 	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
 	struct scst_dev_registrant *reg;
-	struct scst_session *sess = cmd->sess;
 
 	TRACE_ENTRY();
 
@@ -1766,7 +1756,7 @@ void scst_pr_reserve(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	}
 
 	TRACE_PR("Reserve: initiator '%s' key '%016llx' scope %d, type %d",
-		sess->initiator_name, key, scope, type);
+		cmd->sess->initiator_name, key, scope, type);
 
 	/* We already checked reg is not NULL */
 	reg = tgt_dev->registrant;
@@ -1787,15 +1777,16 @@ void scst_pr_reserve(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 			 * RESERVE OUT service actions that are allowed in the
 			 * presence of various reservations".
 			 */
-			TRACE_PR("Only holder can override - initiator "
-				"'%s' is not holder", sess->initiator_name);
+			TRACE_PR("Only holder can override - initiator '%s' is "
+				"not holder", cmd->sess->initiator_name);
 			scst_set_cmd_error_status(cmd,
 				SAM_STAT_RESERVATION_CONFLICT);
 			goto out;
 		} else {
 			if (dev->pr_scope != scope || dev->pr_type != type) {
 				TRACE_PR("Error overriding scope or type for "
-					"initiator '%s'", sess->initiator_name);
+					"initiator '%s'",
+					cmd->sess->initiator_name);
 				scst_set_cmd_error_status(cmd,
 					SAM_STAT_RESERVATION_CONFLICT);
 				goto out;
@@ -1805,8 +1796,7 @@ void scst_pr_reserve(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 		}
 	}
 
-	scst_pr_dump_registrants(dev);
-	scst_pr_dump_reservation(dev);
+	scst_pr_dump_prs(dev);
 
 out:
 	TRACE_EXIT();
@@ -1821,7 +1811,6 @@ void scst_pr_release(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	struct scst_device *dev = cmd->dev;
 	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
 	struct scst_dev_registrant *reg;
-	struct scst_session *sess = cmd->sess;
 	uint8_t cur_pr_type;
 
 	TRACE_ENTRY();
@@ -1843,7 +1832,7 @@ void scst_pr_release(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	}
 
 	TRACE_PR("Release: initiator '%s', key '%016llx', scope '%d', type "
-		"'%d'", sess->initiator_name, key, scope, type);
+		"'%d'", cmd->sess->initiator_name, key, scope, type);
 
 	/* We already checked reg is not NULL */
 	reg = tgt_dev->registrant;
@@ -1857,7 +1846,7 @@ void scst_pr_release(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 
 	if (!scst_pr_is_holder(dev, reg)) {
 		TRACE_PR("Initiator '%s' is not a holder - do nothing",
-			sess->initiator_name);
+			cmd->sess->initiator_name);
 		goto out;
 	}
 
@@ -1893,8 +1882,7 @@ void scst_pr_release(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	}
 #endif
 
-	scst_pr_dump_registrants(dev);
-	scst_pr_dump_reservation(dev);
+	scst_pr_dump_prs(dev);
 
 out:
 	TRACE_EXIT();
@@ -1909,7 +1897,6 @@ void scst_pr_clear(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	struct scst_device *dev = cmd->dev;
 	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
 	struct scst_dev_registrant *reg, *r, *t;
-	struct scst_session *sess = cmd->sess;
 
 	TRACE_ENTRY();
 
@@ -1924,8 +1911,8 @@ void scst_pr_clear(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 		goto out;
 	}
 
-	TRACE_PR("Clear: initiator '%s' key '%016llx'", sess->initiator_name,
-		key);
+	TRACE_PR("Clear: initiator '%s' key '%016llx'",
+		cmd->sess->initiator_name, key);
 
 	/* We already checked reg is not NULL */
 	reg = tgt_dev->registrant;
@@ -1937,7 +1924,7 @@ void scst_pr_clear(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 		goto out;
 	}
 
-	scst_pr_send_ua_all(dev, NULL,
+	scst_pr_send_ua_all(dev, reg,
 		SCST_LOAD_SENSE(scst_sense_reservation_preempted));
 
 	list_for_each_entry_safe(r, t, &dev->dev_registrants_list,
@@ -1947,8 +1934,7 @@ void scst_pr_clear(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 
 	dev->pr_generation++;
 
-	scst_pr_dump_registrants(dev);
-	scst_pr_dump_reservation(dev);
+	scst_pr_dump_prs(dev);
 
 out:
 	TRACE_EXIT();
@@ -1963,7 +1949,6 @@ static void scst_pr_do_preempt(struct scst_cmd *cmd, uint8_t *buffer,
 	struct scst_device *dev = cmd->dev;
 	struct scst_tgt_dev *tgt_dev = cmd->tgt_dev;
 	struct scst_dev_registrant *reg, *r, *rt;
-	struct scst_session *sess = cmd->sess;
 	LIST_HEAD(preempt_list);
 
 	TRACE_ENTRY();
@@ -1989,7 +1974,7 @@ static void scst_pr_do_preempt(struct scst_cmd *cmd, uint8_t *buffer,
 
 	TRACE_PR("Preempt%s: initiator '%s', key '%016llx', action_key "
 		"'%016llx', scope %x type %x", abort ? " and abort" : "",
-		sess->initiator_name, key, action_key, scope, type);
+		cmd->sess->initiator_name, key, action_key, scope, type);
 
 	/* We already checked reg is not NULL */
 	reg = tgt_dev->registrant;
@@ -2026,9 +2011,12 @@ static void scst_pr_do_preempt(struct scst_cmd *cmd, uint8_t *buffer,
 					scst_pr_send_ua_reg(dev, r,
 						SCST_LOAD_SENSE(
 						scst_sense_registrations_preempted));
+				else
+					reg = NULL;
 				scst_pr_remove_registrant(dev, r);
 			}
-			scst_pr_set_holder(dev, reg, scope, type);
+			if (reg != NULL)
+				scst_pr_set_holder(dev, reg, scope, type);
 		} else {
 			scst_pr_find_registrants_list_key(dev, action_key,
 				&preempt_list);
@@ -2040,6 +2028,8 @@ static void scst_pr_do_preempt(struct scst_cmd *cmd, uint8_t *buffer,
 					scst_pr_send_ua_reg(dev, r,
 						SCST_LOAD_SENSE(
 						scst_sense_registrations_preempted));
+				else
+					reg = NULL;
 				scst_pr_remove_registrant(dev, r);
 			}
 		}
@@ -2064,6 +2054,8 @@ static void scst_pr_do_preempt(struct scst_cmd *cmd, uint8_t *buffer,
 					scst_pr_send_ua_reg(dev, r,
 						SCST_LOAD_SENSE(
 						scst_sense_registrations_preempted));
+				else
+					reg = NULL;
 				scst_pr_remove_registrant(dev, r);
 			}
 			goto done;
@@ -2079,6 +2071,8 @@ static void scst_pr_do_preempt(struct scst_cmd *cmd, uint8_t *buffer,
 		if (r != reg)
 			scst_pr_send_ua_reg(dev, r, SCST_LOAD_SENSE(
 				scst_sense_registrations_preempted));
+		else
+			reg = NULL;
 		scst_pr_remove_registrant(dev, r);
 	}
 
@@ -2090,13 +2084,13 @@ static void scst_pr_do_preempt(struct scst_cmd *cmd, uint8_t *buffer,
 					scst_sense_reservation_released));
 		}
 
-	scst_pr_set_holder(dev, reg, scope, type);
+	if (reg != NULL)
+		scst_pr_set_holder(dev, reg, scope, type);
 
 done:
 	dev->pr_generation++;
 
-	scst_pr_dump_registrants(dev);
-	scst_pr_dump_reservation(dev);
+	scst_pr_dump_prs(dev);
 
 out:
 	TRACE_EXIT();
@@ -2128,8 +2122,26 @@ void scst_pr_preempt_and_abort(struct scst_cmd *cmd, uint8_t *buffer,
 {
 	TRACE_ENTRY();
 
+	cmd->pr_abort_counter = kzalloc(sizeof(*cmd->pr_abort_counter),
+		GFP_KERNEL);
+	if (cmd->pr_abort_counter == NULL) {
+		PRINT_ERROR("Unable to allocate PR abort counter (size %d)",
+			sizeof(*cmd->pr_abort_counter));
+		scst_set_busy(cmd);
+		goto out;
+	}
+
+	/* 1 to protect cmd from be done by the TM thread too early */
+	atomic_set(&cmd->pr_abort_counter->pr_abort_pending_cnt, 1);
+	atomic_set(&cmd->pr_abort_counter->pr_aborting_cnt, 1);
+	init_completion(&cmd->pr_abort_counter->pr_aborting_cmpl);
+
 	scst_pr_do_preempt(cmd, buffer, buffer_size, true);
 
+	if (!atomic_dec_and_test(&cmd->pr_abort_counter->pr_aborting_cnt))
+		wait_for_completion(&cmd->pr_abort_counter->pr_aborting_cmpl);
+
+out:
 	TRACE_EXIT();
 	return;
 }
@@ -2181,7 +2193,7 @@ bool scst_pr_crh_case(struct scst_cmd *cmd)
 	}
 
 	if (!allowed)
-		TRACE_PR("Command '%s' (0x%x) from '%s' is being rejected due "
+		TRACE_PR("Command '%s' (0x%x) from '%s' rejected due "
 			"to not CRH reservation", cmd->op_name, cmd->cdb[0],
 			cmd->sess->initiator_name);
 	else
@@ -2211,6 +2223,12 @@ bool scst_pr_is_cmd_allowed(struct scst_cmd *cmd)
 
 	TRACE_DBG("Testing if command '%s' (0x%x) from '%s' allowed to execute",
 		cmd->op_name, cmd->cdb[0], cmd->sess->initiator_name);
+
+	/* Recheck, because it can change while we were waiting for the lock */
+	if (unlikely(!dev->pr_is_set)) {
+		allowed = true;
+		goto out_unlock;
+	}
 
 	reg = tgt_dev->registrant;
 	type = dev->pr_type;
@@ -2253,13 +2271,14 @@ bool scst_pr_is_cmd_allowed(struct scst_cmd *cmd)
 	}
 
 	if (!allowed)
-		TRACE_PR("Command '%s' (0x%x) from '%s' is being rejected due "
-			"to reservation", cmd->op_name, cmd->cdb[0],
+		TRACE_PR("Command '%s' (0x%x) from '%s' rejected due "
+			"to PR", cmd->op_name, cmd->cdb[0],
 			cmd->sess->initiator_name);
 	else
 		TRACE_DBG("Command %s (0x%x) from '%s' is allowed to execute",
 			cmd->op_name, cmd->cdb[0], cmd->sess->initiator_name);
 
+out_unlock:
 	scst_pr_read_unlock(dev, unlock);
 
 	TRACE_EXIT_RES(allowed);
