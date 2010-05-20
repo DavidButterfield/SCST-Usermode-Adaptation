@@ -87,7 +87,7 @@ ifneq ($(MOD_VERS),)
 	install -m 644 Module.symvers $(INSTALL_DIR_H)
 endif
 	-/sbin/depmod -a $(KVER)
-	mkdir -p /var/lib/scst
+	mkdir -p /var/lib/scst/pr
 	@echo "****************************************************************"
 	@echo "*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*"
 	@echo "*!!                                                          !!*"

@@ -404,7 +404,7 @@ enum scst_cdb_flags {
  *************************************************************/
 #define SCST_SYSFS_BLOCK_SIZE			PAGE_SIZE
 
-#define SCST_PR_DIR				"/var/lib/scst"
+#define SCST_PR_DIR				"/var/lib/scst/pr"
 
 #define TID_COMMON_SIZE				24
 

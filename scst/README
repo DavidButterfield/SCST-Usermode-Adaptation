@@ -1293,7 +1293,7 @@ Persistent Reservations
 SCST implements Persistent Reservations with full set of capabilities,
 including "Persistence Through Power Loss".
 
-The "Persistence Through Power Loss" data are saved in /var/lib/scst
+The "Persistence Through Power Loss" data are saved in /var/lib/scst/pr
 with files with names the same as the names of the corresponding
 devices. Also this directory contains backup versions of those files
 with suffix ".1". Those backup files are used in case of power or other
