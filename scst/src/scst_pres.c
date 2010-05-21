@@ -357,7 +357,7 @@ static struct scst_tgt_dev *scst_pr_find_tgt_dev_not_registered_first(
 
 static struct scst_dev_registrant *scst_pr_add_registrant(
 	struct scst_device *dev, const uint8_t *transport_id,
-	const uint16_t rel_tgt_id, uint64_t key, bool aptpl,
+	const uint16_t rel_tgt_id, uint64_t key,
 	struct scst_tgt_dev *tgt_dev)
 {
 	struct scst_dev_registrant *reg = NULL;
@@ -388,8 +388,6 @@ static struct scst_dev_registrant *scst_pr_add_registrant(
 	reg->rel_tgt_id = rel_tgt_id;
 	reg->key = key;
 	reg->tgt_dev = tgt_dev;
-
-	dev->pr_aptpl = aptpl;
 
 	if (tgt_dev != NULL)
 		tgt_dev->registrant = reg;
@@ -585,7 +583,7 @@ static int scst_pr_do_load_device_file(struct scst_device *dev,
 	loff_t file_size, pos, data_size;
 	uint64_t sign, version;
 	mm_segment_t old_fs;
-	uint8_t pr_is_set;
+	uint8_t pr_is_set, aptpl;
 	uint64_t key;
 	uint16_t rel_tgt_id;
 
@@ -642,6 +640,7 @@ static int scst_pr_do_load_device_file(struct scst_device *dev,
 	data_size = 0;
 	data_size += sizeof(sign);
 	data_size += sizeof(version);
+	data_size += sizeof(aptpl);
 	data_size += sizeof(pr_is_set);
 	data_size += sizeof(dev->pr_type);
 	data_size += sizeof(dev->pr_scope);
@@ -690,6 +689,10 @@ static int scst_pr_do_load_device_file(struct scst_device *dev,
 		}
 	}
 
+	aptpl = buf[pos];
+	dev->pr_aptpl = aptpl ? 1 : 0;
+	pos += sizeof(aptpl);
+
 	pr_is_set = buf[pos];
 	dev->pr_is_set = pr_is_set ? 1 : 0;
 	pos += sizeof(pr_is_set);
@@ -721,8 +724,7 @@ static int scst_pr_do_load_device_file(struct scst_device *dev,
 		 * attaching to a tgt_dev. The attachment will be done in
 		 * scst_pr_init_tgt_dev.
 		 */
-		reg = scst_pr_add_registrant(dev, tid, rel_tgt_id, key,
-			0, NULL);
+		reg = scst_pr_add_registrant(dev, tid, rel_tgt_id, key, NULL);
 		if (reg == NULL) {
 			res = -ENOMEM;
 			goto out_close;
@@ -904,7 +906,7 @@ static void scst_pr_remove_device_files(struct scst_tgt_dev *tgt_dev)
 	return;
 }
 
-static int scst_pr_sync_device_file(struct scst_tgt_dev *tgt_dev)
+void scst_pr_sync_device_file(struct scst_tgt_dev *tgt_dev, struct scst_cmd *cmd)
 {
 	int res = 0;
 	struct scst_device *dev = tgt_dev->dev;
@@ -913,11 +915,11 @@ static int scst_pr_sync_device_file(struct scst_tgt_dev *tgt_dev)
 	loff_t pos = 0;
 	uint64_t sign;
 	uint64_t version;
-	uint8_t pr_is_set;
+	uint8_t pr_is_set, aptpl;
 
 	TRACE_ENTRY();
 
-	if (dev->pr_aptpl == 0) {
+	if ((dev->pr_aptpl == 0) || list_empty(&dev->dev_registrants_list)) {
 		scst_pr_remove_device_files(tgt_dev);
 		goto out;
 	}
@@ -951,6 +953,14 @@ static int scst_pr_sync_device_file(struct scst_tgt_dev *tgt_dev)
 	version = SCST_PR_FILE_VERSION;
 	res = vfs_write(file, (char *)&version, sizeof(version), &pos);
 	if (res != sizeof(version))
+		goto write_error;
+
+	/*
+	 * APTPL
+	 */
+	aptpl = dev->pr_aptpl;
+	res = vfs_write(file, (char *)&aptpl, sizeof(aptpl), &pos);
+	if (res != sizeof(aptpl))
 		goto write_error;
 
 	/*
@@ -1038,10 +1048,21 @@ out_set_fs:
 	set_fs(old_fs);
 
 out:
-	if (res != 0)
-		PRINT_ERROR("Unable to save persistent information (target %s, "
-			"initiator %s, device %s)", tgt_dev->sess->tgt->tgt_name,
+	if (res != 0) {
+		PRINT_CRIT_ERROR("Unable to save persistent information "
+			"(target %s, initiator %s, device %s)",
+			tgt_dev->sess->tgt->tgt_name,
 			tgt_dev->sess->initiator_name, dev->virt_name);
+#if 0	/*
+	 * Looks like it's safer to return SUCCESS and expect operator's
+	 * intervention to be able to save the PR's state next time, than
+	 * to return HARDWARE ERROR and screw up all the interaction with
+	 * the affected initiator.
+	 */
+	 if (cmd != NULL)
+		 scst_set_cmd_error(cmd, SCST_LOAD_SENSE(scst_sense_hardw_error));
+#endif
+	}
 
 	TRACE_EXIT_RES(res);
 	return res;
@@ -1201,8 +1222,7 @@ void scst_pr_clear_tgt_dev(struct scst_tgt_dev *tgt_dev)
 
 /* Called with dev_pr_mutex locked, no IRQ */
 static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
-	uint8_t *buffer, int buffer_size, bool aptpl,
-	struct list_head *rollback_list)
+	uint8_t *buffer, int buffer_size, struct list_head *rollback_list)
 {
 	int res = 0;
 	int offset, ext_size;
@@ -1256,7 +1276,7 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 					reg = scst_pr_add_registrant(dev,
 						t->sess->transport_id,
 						sess->tgt->rel_tgt_id,
-						action_key, aptpl, t);
+						action_key, t);
 					if (reg == NULL) {
 						scst_set_busy(cmd);
 						res = -ENOMEM;
@@ -1279,7 +1299,7 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 			if (tgt_dev == NULL) {
 				reg = scst_pr_add_registrant(dev,
 					transport_id, sess->tgt->rel_tgt_id,
-					action_key, aptpl, NULL);
+					action_key, NULL);
 				if (reg == NULL) {
 					scst_set_busy(cmd);
 					res = -ENOMEM;
@@ -1289,7 +1309,7 @@ static int scst_pr_register_with_spec_i_pt(struct scst_cmd *cmd,
 				reg = scst_pr_add_registrant(dev,
 					tgt_dev->sess->transport_id,
 					sess->tgt->rel_tgt_id, action_key,
-					aptpl, tgt_dev);
+					tgt_dev);
 				if (reg == NULL) {
 					scst_set_busy(cmd);
 					res = -ENOMEM;
@@ -1398,8 +1418,7 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 			if (spec_i_pt) {
 				int rc;
 				rc = scst_pr_register_with_spec_i_pt(cmd,
-					buffer, buffer_size, aptpl,
-					&rollback_list);
+					buffer, buffer_size, &rollback_list);
 				if (rc != 0)
 					goto out_rollback;
 			}
@@ -1412,7 +1431,7 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 				reg = scst_pr_add_registrant(dev,
 					sess->transport_id,
 					sess->tgt->rel_tgt_id,
-					action_key, aptpl, tgt_dev);
+					action_key, tgt_dev);
 				if (reg == NULL) {
 					scst_set_busy(cmd);
 					goto out_rollback;
@@ -1446,12 +1465,7 @@ void scst_pr_register(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 
 	dev->pr_generation++;
 
-#ifndef CONFIG_SCST_PROC
-	if (scst_pr_sync_device_file(tgt_dev)) {
-		scst_set_cmd_error(cmd, SCST_LOAD_SENSE(scst_sense_hardw_error));
-		goto out;
-	}
-#endif
+	dev->pr_aptpl = aptpl;
 
 	scst_pr_dump_prs(dev);
 
@@ -1525,7 +1539,7 @@ void scst_pr_register_and_ignore(struct scst_cmd *cmd, uint8_t *buffer,
 			"register", sess->initiator_name);
 		if (action_key) {
 			reg = scst_pr_add_registrant(dev, sess->transport_id,
-				sess->tgt->rel_tgt_id, action_key, aptpl,
+				sess->tgt->rel_tgt_id, action_key,
 				cmd->tgt_dev);
 			if (reg == NULL) {
 				scst_set_busy(cmd);
@@ -1542,12 +1556,7 @@ void scst_pr_register_and_ignore(struct scst_cmd *cmd, uint8_t *buffer,
 
 	dev->pr_generation++;
 
-#ifndef CONFIG_SCST_PROC
-	if (scst_pr_sync_device_file(tgt_dev)) {
-		scst_set_cmd_error(cmd, SCST_LOAD_SENSE(scst_sense_hardw_error));
-		goto out;
-	}
-#endif
+	dev->pr_aptpl = aptpl;
 
 	scst_pr_dump_prs(dev);
 
@@ -1688,7 +1697,7 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 	if (tgt_dev_move->registrant == NULL) {
 		reg_move = scst_pr_add_registrant(dev, transport_id_move,
 			tgt_dev_move->sess->tgt->rel_tgt_id, action_key,
-			aptpl, tgt_dev_move);
+			tgt_dev_move);
 		if (reg_move == NULL) {
 			scst_set_busy(cmd);
 			goto out;
@@ -1705,12 +1714,7 @@ void scst_pr_register_and_move(struct scst_cmd *cmd, uint8_t *buffer,
 
 	dev->pr_generation++;
 
-#ifndef CONFIG_SCST_PROC
-	if (scst_pr_sync_device_file(tgt_dev)) {
-		scst_set_cmd_error(cmd, SCST_LOAD_SENSE(scst_sense_hardw_error));
-		goto out;
-	}
-#endif
+	dev->pr_aptpl = aptpl;
 
 	scst_pr_dump_prs(dev);
 
@@ -1874,13 +1878,6 @@ void scst_pr_release(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 			break;
 		}
 	}
-
-#ifndef CONFIG_SCST_PROC
-	if (scst_pr_sync_device_file(tgt_dev)) {
-		scst_set_cmd_error(cmd, SCST_LOAD_SENSE(scst_sense_hardw_error));
-		goto out;
-	}
-#endif
 
 	scst_pr_dump_prs(dev);
 

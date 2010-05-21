@@ -2074,8 +2074,13 @@ static int scst_persistent_reserve_out_local(struct scst_cmd *cmd)
 		goto out_unlock;
 	}
 
+#ifndef CONFIG_SCST_PROC
+	if (cmd->status == SAM_STAT_GOOD)
+		scst_pr_sync_device_file(tgt_dev, cmd);
+#endif
+
 	if ((dev->handler->pr_cmds_notifications) &&
-	    (SAM_STAT_GOOD == cmd->status))
+	    (cmd->status == SAM_STAT_GOOD)) /* sync file may change status */
 		res = SCST_EXEC_NOT_COMPLETED;
 
 out_unlock:

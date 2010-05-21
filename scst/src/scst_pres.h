@@ -153,4 +153,8 @@ void scst_pr_report_caps(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 void scst_pr_read_full_status(struct scst_cmd *cmd, uint8_t *buffer,
 	int buffer_size);
 
+#ifndef CONFIG_SCST_PROC
+void scst_pr_sync_device_file(struct scst_tgt_dev *tgt_dev, struct scst_cmd *cmd);
+#endif
+
 #endif /* SCST_PRES_H_ */
