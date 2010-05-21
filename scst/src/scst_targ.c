@@ -1359,12 +1359,7 @@ static void scst_cmd_done_local(struct scst_cmd *cmd, int next_state,
 {
 	TRACE_ENTRY();
 
-	if (unlikely(cmd->pr_abort_counter != NULL)) {
-		if (!atomic_dec_and_test(&cmd->pr_abort_counter->pr_abort_pending_cnt))
-			goto out;
-		kfree(cmd->pr_abort_counter);
-		cmd->pr_abort_counter = NULL;
-	}
+	EXTRACHECKS_BUG_ON(cmd->pr_abort_counter != NULL);
 
 	scst_set_exec_time(cmd);
 
@@ -1404,7 +1399,6 @@ static void scst_cmd_done_local(struct scst_cmd *cmd, int next_state,
 	pref_context = scst_optimize_post_exec_context(cmd, pref_context);
 	scst_process_redirect_cmd(cmd, pref_context, 0);
 
-out:
 	TRACE_EXIT();
 	return;
 }

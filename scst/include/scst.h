@@ -1450,6 +1450,10 @@ struct scst_pr_abort_all_pending_mgmt_cmds_counter {
 	 */
 	atomic_t pr_abort_pending_cnt;
 
+	/* Saved completition routine */
+	void (*saved_cmd_done) (struct scst_cmd *cmd, int next_state,
+		enum scst_exec_context pref_context);
+
 	/*
 	 * How many there are pending for this cmd SCST_PR_ABORT_ALL TM
 	 * commands, which not yet aborted all affected commands and
@@ -1752,9 +1756,6 @@ struct scst_cmd {
 	/* Used for storage of dev handler private stuff */
 	void *dh_priv;
 
-	/* Counter of the corresponding SCST_PR_ABORT_ALL TM commands */
-	struct scst_pr_abort_all_pending_mgmt_cmds_counter *pr_abort_counter;
-
 	/*
 	 * Used to restore the SG vector if it was modified by
 	 * scst_set_resp_data_len()
@@ -1772,6 +1773,9 @@ struct scst_cmd {
 
 	/* List entry for dev's blocked_cmd_list */
 	struct list_head blocked_cmd_list_entry;
+
+	/* Counter of the corresponding SCST_PR_ABORT_ALL TM commands */
+	struct scst_pr_abort_all_pending_mgmt_cmds_counter *pr_abort_counter;
 
 	struct scst_cmd *orig_cmd; /* Used to issue REQUEST SENSE */
 

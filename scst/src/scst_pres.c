@@ -2113,6 +2113,31 @@ void scst_pr_preempt(struct scst_cmd *cmd, uint8_t *buffer, int buffer_size)
 	return;
 }
 
+static void scst_cmd_done_pr_preempt(struct scst_cmd *cmd, int next_state,
+	enum scst_exec_context pref_context)
+{
+	void (*saved_cmd_done) (struct scst_cmd *cmd, int next_state,
+		enum scst_exec_context pref_context);
+
+	TRACE_ENTRY();
+
+	saved_cmd_done = NULL; /* to remove warning that it's used not inited */
+
+	if (cmd->pr_abort_counter != NULL) {
+		if (!atomic_dec_and_test(&cmd->pr_abort_counter->pr_abort_pending_cnt))
+			goto out;
+		saved_cmd_done = cmd->pr_abort_counter->saved_cmd_done;
+		kfree(cmd->pr_abort_counter);
+		cmd->pr_abort_counter = NULL;
+	}
+
+	saved_cmd_done(cmd, next_state, pref_context);
+
+out:
+	TRACE_EXIT();
+	return;
+}
+
 /*
  * Called with dev_pr_mutex locked, no IRQ. Expects session_list_lock
  * not locked
@@ -2135,6 +2160,9 @@ void scst_pr_preempt_and_abort(struct scst_cmd *cmd, uint8_t *buffer,
 	atomic_set(&cmd->pr_abort_counter->pr_abort_pending_cnt, 1);
 	atomic_set(&cmd->pr_abort_counter->pr_aborting_cnt, 1);
 	init_completion(&cmd->pr_abort_counter->pr_aborting_cmpl);
+
+	cmd->pr_abort_counter->saved_cmd_done = cmd->scst_cmd_done;
+	cmd->scst_cmd_done = scst_cmd_done_pr_preempt;
 
 	scst_pr_do_preempt(cmd, buffer, buffer_size, true);
 
