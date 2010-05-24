@@ -6357,6 +6357,86 @@ out:
 	return;
 }
 
+/**
+ * scst_reassign_persistent_sess_states() - reassigns persistent states
+ *
+ * Reassigns persistent states from old_sess to new_sess.
+ */
+void scst_reassign_persistent_sess_states(struct scst_session *new_sess,
+	struct scst_session *old_sess)
+{
+	struct scst_device *dev;
+
+	TRACE_ENTRY();
+
+	TRACE_DBG("Reassigning persistent states from old_sess %p to "
+		"new_sess %p", old_sess, new_sess);
+
+	if ((new_sess == NULL) || (old_sess == NULL)) {
+		TRACE_DBG("%s", "new_sess or old_sess is NULL");
+		goto out;
+	}
+
+	if ((new_sess->transport_id == NULL) ||
+	    (old_sess->transport_id == NULL)) {
+		TRACE_DBG("%s", "new_sess or old_sess doesn't support PRs");
+		goto out;
+	}
+
+	mutex_lock(&scst_mutex);
+
+	list_for_each_entry(dev, &scst_dev_list, dev_list_entry) {
+		struct scst_tgt_dev *tgt_dev;
+		struct scst_tgt_dev *new_tgt_dev = NULL, *old_tgt_dev = NULL;
+
+		TRACE_DBG("Processing dev %s", dev->virt_name);
+
+		list_for_each_entry(tgt_dev, &dev->dev_tgt_dev_list,
+					dev_tgt_dev_list_entry) {
+			if (tgt_dev->sess == new_sess) {
+				new_tgt_dev = tgt_dev;
+				if (old_tgt_dev != NULL)
+					break;
+			}
+			if (tgt_dev->sess == old_sess) {
+				old_tgt_dev = tgt_dev;
+				if (new_tgt_dev != NULL)
+					break;
+			}
+		}
+
+		if ((new_tgt_dev == NULL) || (old_tgt_dev == NULL)) {
+			TRACE_DBG("new_tgt_dev %p or old_sess %p is NULL, "
+				"skipping (dev %s)", new_tgt_dev, old_tgt_dev,
+				dev->virt_name);
+			continue;
+		}
+
+		scst_pr_write_lock(dev);
+
+		if (old_tgt_dev->registrant != NULL)
+			TRACE_PR("Reassigning reg %p from tgt_dev %p to %p",
+				old_tgt_dev->registrant, old_tgt_dev,
+				new_tgt_dev);
+
+		if (new_tgt_dev->registrant != NULL)
+			new_tgt_dev->registrant->tgt_dev = NULL;
+
+		new_tgt_dev->registrant = old_tgt_dev->registrant;
+		if (new_tgt_dev->registrant != NULL)
+			new_tgt_dev->registrant->tgt_dev = new_tgt_dev;
+
+		scst_pr_write_unlock(dev);
+	}
+
+	mutex_unlock(&scst_mutex);
+
+out:
+	TRACE_EXIT();
+	return;
+}
+EXPORT_SYMBOL(scst_reassign_persistent_sess_states);
+
 int scst_get_max_lun_commands(struct scst_session *sess, uint64_t lun)
 {
 	return SCST_MAX_TGT_DEV_COMMANDS;

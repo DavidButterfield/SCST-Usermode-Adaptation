@@ -326,12 +326,17 @@ void iscsi_task_mgmt_affected_cmds_done(struct scst_mgmt_cmd *scst_mcmd)
 		struct iscsi_session *sess = conn->session;
 		struct iscsi_conn *c;
 
+		if (sess->sess_reinst_successor != NULL)
+			scst_reassign_persistent_sess_states(
+				sess->sess_reinst_successor->scst_sess,
+				sess->scst_sess);
+
 		mutex_lock(&sess->target->target_mutex);
 
 		/*
 		 * We can't mark sess as shutting down earlier, because until
 		 * now it might have pending commands. Otherwise, in case of
-		 * reinstatement it might lead to data corruption, because
+		 * reinstatement, it might lead to data corruption, because
 		 * commands in being reinstated session can be executed
 		 * after commands in the new session.
 		 */
