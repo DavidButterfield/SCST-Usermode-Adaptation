@@ -1186,6 +1186,7 @@ void scst_pr_clear_dev(struct scst_device *dev)
 	return;
 }
 
+/* Called under scst_mutex */
 int scst_pr_init_tgt_dev(struct scst_tgt_dev *tgt_dev)
 {
 	int res = 0;
@@ -1209,13 +1210,33 @@ out:
 	return res;
 }
 
+/* Called under scst_mutex */
 void scst_pr_clear_tgt_dev(struct scst_tgt_dev *tgt_dev)
 {
 	TRACE_ENTRY();
 
-	if (tgt_dev->registrant != NULL)
-		tgt_dev->registrant->tgt_dev = NULL;
+	if (tgt_dev->registrant != NULL) {
+		struct scst_dev_registrant *reg = tgt_dev->registrant;
+		struct scst_tgt_dev *t;
+		list_for_each_entry(t, &tgt_dev->dev->dev_tgt_dev_list,
+					dev_tgt_dev_list_entry) {
+			if ((t->registrant == NULL) &&
+			    (t->sess->tgt->rel_tgt_id == reg->rel_tgt_id) &&
+			    tid_equal(t->sess->transport_id, reg->transport_id)) {
+				TRACE_PR("Reassigning reg %s/%d (%p) to tgt_dev "
+					"%p (being cleared tgt_dev %p)",
+					debug_transport_id_to_initiator_name(
+						reg->transport_id),
+					reg->rel_tgt_id, reg, t, tgt_dev);
+				t->registrant = reg;
+				reg->tgt_dev = t;
+				goto out;
+			}
+		}
+		reg->tgt_dev = NULL;
+	}
 
+out:
 	TRACE_EXIT();
 	return;
 }
