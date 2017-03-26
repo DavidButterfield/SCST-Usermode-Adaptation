@@ -1,0 +1,1462 @@
+--- /home/dave/orig/scst/iscsi-scst/usr/Makefile	2016-01-21 21:04:43.000000000 -0700
++++ scst/iscsi-scst/usr/Makefile	2017-03-23 14:19:50.436650754 -0600
+@@ -14,6 +14,10 @@
+ #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ #  GNU General Public License for more details.
+ 
++ifdef MAKE_INCLUDES
++include $(MAKE_INCLUDES)
++endif
++
+ ifndef PREFIX
+         PREFIX=/usr/local
+ endif
+@@ -35,8 +39,19 @@
+ PROGRAMS = iscsi-scstd iscsi-scst-adm
+ LIBS =
+ 
++ifndef SCST_USERMODE
++# Make daemon code its own executable, to talk to implementation in real kernel
+ all: $(PROGRAMS)
+ 
++else
++# Make a "library" of all the user daemon code, to be linked with the "kernel" code
++all: iscsi-scstlib.o iscsi-scst-adm
++
++iscsi-scstlib.o: .depend_d $(OBJS_D)
++	$(LD) $(OBJS_D) $(LOCAL_LD_FLAGS) -r -o $@
++
++endif
++
+ iscsi-scstd: .depend_d $(OBJS_D)
+ 	$(CC) $(OBJS_D) $(LIBS) $(LOCAL_LD_FLAGS) -o $@
+ 
+
+--- /home/dave/orig/scst/iscsi-scst/usr/event.c	2017-03-18 10:57:32.481216734 -0600
++++ scst/iscsi-scst/usr/event.c	2017-03-23 14:19:50.436650754 -0600
+@@ -30,6 +30,11 @@
+ #include <linux/netlink.h>
+ #include <arpa/inet.h>
+ 
++#ifdef SCST_USERMODE
++#include <pthread.h>
++extern void SCST_exit(void);
++#endif
++
+ #include <scst_const.h>
+ 
+ #include "iscsid.h"
+@@ -1073,7 +1078,12 @@
+ 		 * thread is expected to exit when this happens.
+ 		 */
+ 		log_info("kernel module shutdown -- daemon exits");
++#ifndef SCST_USERMODE			/* daemon shutdown */
+ 		exit(1);
++#else /* SCST_USERMODE */
++		SCST_exit();		/* shutdown all the "kernel" modules */
++		pthread_exit(NULL);
++#endif /* SCST_USERMODE */
+ 	}
+ 
+ 	log_debug(1, "target %u, session %#" PRIx64 ", conn %u, code %u, cookie %d",
+
+--- /home/dave/orig/scst/iscsi-scst/usr/iscsi_scstd.c	2017-03-18 10:57:32.481216734 -0600
++++ scst/iscsi-scst/usr/iscsi_scstd.c	2017-03-23 14:19:50.436650754 -0600
+@@ -826,6 +826,11 @@
+ 	return;
+ }
+ 
++#ifdef SCST_USERMODE			/* intercept nl_open --> SCST_nl_open */
++extern int SCST_nl_open(void);
++#define nl_open() SCST_nl_open()
++#endif
++
+ int main(int argc, char **argv)
+ {
+ 	int ch, longindex;
+
+--- /home/dave/orig/scst/iscsi-scst/usr/ctldev.c	2016-03-27 10:10:45.000000000 -0600
++++ scst/iscsi-scst/usr/ctldev.c	2017-03-23 14:19:50.436650754 -0600
+@@ -27,6 +27,18 @@
+ 
+ #include "iscsid.h"
+ 
++#ifdef SCST_USERMODE  /* ioctl(ctrl_fd)-->SCST_ctldev_ioctl, create_and_open_dev-->SCST_init */
++
++#define ioctl(ctrl_fd, cmd, argp) SCST_ctldev_ioctl((ctrl_fd), (cmd), (uintptr_t)(argp))
++extern int SCST_ctldev_ioctl(int fd_arg, unsigned int cmd, unsigned long arg);
++
++#define create_and_open_dev(dev, readonly) SCST_init((dev), (readonly))
++extern int SCST_init(const char * dev, int readonly);
++
++#define close(ctlfd)	/* ctlfd not really a file descriptor */
++
++#endif /* SCST_USERMODE */
++
+ #define CTL_DEVICE	"iscsi-scst-ctl"
+ 
+ int kernel_open(void)
+
+--- /home/dave/orig/scst/iscsi-scst/Makefile	2016-12-27 13:26:11.000000000 -0700
++++ scst/iscsi-scst/Makefile	2017-03-23 14:19:50.436650754 -0600
+@@ -5,6 +5,10 @@
+ # removes any old dependencies. DON'T put your own dependencies here
+ # unless it's something special (not a .c file).
+ 
++ifdef MAKE_INCLUDES
++include $(MAKE_INCLUDES)
++endif
++
+ ifndef PREFIX
+ 	PREFIX=/usr/local
+ endif
+@@ -55,7 +59,12 @@
+ endif
+ 
+ INSTALL_DIR := $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/extra
++
++ifndef SCST_USERMODE
+ INFINIBAND_ENABLED = $(shell if grep -wq 'ib_register_client' $$(dirname "$(KDIR)")/modules.symbols; then echo true; else echo false; fi)
++else
++INFINIBAND_ENABLED := false
++endif
+ 
+ all: progs mods
+ 
+
+--- /home/dave/orig/scst/iscsi-scst/kernel/iscsi.c	2017-03-18 10:57:32.485216807 -0600
++++ scst/iscsi-scst/kernel/iscsi.c	2017-03-23 14:19:50.440650827 -0600
+@@ -2360,7 +2360,7 @@
+ 	 * Lock to sync with iscsi_check_tm_data_wait_timeouts(), including
+ 	 * CMD_ABORTED bit set.
+ 	 */
+-	spin_lock_bh(&conn->conn_thr_pool->rd_lock);
++	conn_rd_lock(conn);
+ 
+ 	/*
+ 	 * We suppose that preliminary commands completion is tested by
+@@ -2374,7 +2374,7 @@
+ 	TRACE_MGMT_DBG("Setting conn_tm_active for conn %p", conn);
+ 	conn->conn_tm_active = 1;
+ 
+-	spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
++	conn_rd_unlock(conn);
+ 
+ 	/*
+ 	 * We need the lock to sync with req_add_to_write_timeout_list() and
+@@ -2940,7 +2940,7 @@
+ 
+ 	iscsi_extracheck_is_wr_thread(conn);
+ 
+-	set_cork(conn->sock, 1);
++//	set_cork(conn->sock, 1);    //XXX using MSG_MORE instead
+ 
+ 	conn->write_iop = conn->write_iov;
+ 	conn->write_iop->iov_base = (void __force __user *)(&cmnd->pdu.bhs);
+@@ -3048,7 +3048,7 @@
+ 		}
+ 	}
+ 
+-	set_cork(cmnd->conn->sock, 0);
++//	set_cork(cmnd->conn->sock, 0);	//XXX using MSG_MORE instead
+ 	return;
+ }
+ 
+@@ -3380,7 +3380,26 @@
+ 		 */
+ 		cmnd_get(req);
+ 		req->scst_state = ISCSI_CMD_STATE_AFTER_PREPROC;
++
++#ifndef CONN_LOCAL_READ			/* try reading data from pp_done callback */
+ 		iscsi_make_conn_rd_active(req->conn);
++#else
++		conn_rd_lock(req->conn);
++
++		if (req->conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING) {
++			req->conn->rd_data_ready = 1;
++		} else {
++			/* Try to read the data we want right now */
++			int rc = scst_try_one_rd(req->conn);
++			if (rc < 0) {
++				/* closed */
++			} else {
++				iscsi_make_conn_rd_active(req->conn);
++			}
++		}
++
++		conn_rd_unlock(req->conn);
++#endif
+ 		if (unlikely(req->conn->closing)) {
+ 			TRACE_DBG("Waking up closing conn %p", req->conn);
+ 			wake_up(&req->conn->read_state_waitQ);
+@@ -4093,7 +4112,11 @@
+ 	.sg_tablesize = 0xFFFF /* no limit */,
+ 	.threads_num = 0,
+ 	.no_clustering = 1,
++#ifdef SCST_USERMODE
++	.xmit_response_atomic = 1,
++#else
+ 	.xmit_response_atomic = 0,
++#endif
+ #ifndef CONFIG_SCST_PROC
+ 	.tgtt_attrs = iscsi_attrs,
+ 	.tgt_attrs = iscsi_tgt_attrs,
+@@ -4278,7 +4301,12 @@
+ 
+ 	list_add_tail(&p->thread_pools_list_entry, &iscsi_thread_pools_list);
+ 
+-	for (j = 0; j < 2; j++) {
++#ifdef SCST_USERMODE			/* only create writer threads */
++	j = 1;		    /* only create writer threads */
++#else
++	j = 0;		    /* create reader and writer threads */
++#endif
++	for ( ; j < 2; j++) {
+ 		for (i = 0; i < count; i++) {
+ 			t = kmalloc(sizeof(*t), GFP_KERNEL);
+ 			if (t == NULL) {
+
+--- /home/dave/orig/scst/iscsi-scst/kernel/nthread.c	2017-03-18 10:57:32.485216807 -0600
++++ scst/iscsi-scst/kernel/nthread.c	2017-03-23 14:21:35.702586221 -0600
+@@ -1039,8 +1039,79 @@
+ 	return res;
+ }
+ 
++/* Called under CONN->rd_lock and BHs disabled, but will drop it inside, then
++ * reacquire.  Returns -1 if conn closed (if so do not reference it further).
++ *
++ * Otherwise the return value denotes the number of additional bytes needed to
++ * satisfy the current read request -- if this is zero the request was satisfied
++ * (all bytes requested were read).
++ *
++ * If the read was satisfied, conn->rd_state is returned to the state it was in
++ * when the function was called.
++ *
++ * If the read was NOT satisfied, conn->rd_state is *usually* set to _IDLE
++ * (because it has nothing to do until more data shows up); but if more data
++ * arrived after input processing but before the conn was relocked, then
++ * rd_state will be returned to the state it was in when the function was called.
++ *
++ * Thus it is possible to return with the read UNsatisfied, and yet the conn is NOT
++ * IDLE.  In all cases, caller is responsible to see that processing continues if
++ * the new state on return (still under lock) is not IDLE.
++ *
++ * Note we are polling the socket descriptors in EDGE triggered mode -- if zero is
++ * returned from this function, the caller remains responsible to receive data
++ * without any further notifications until the socket is exhausted -- before that
++ * time there may not be any further notification callbacks.
++ */
++int scst_try_one_rd(struct iscsi_conn * conn)
++{
++	int closed = 0, rc;
++	TRACE_ENTRY();
++
++	lockdep_assert_held(&conn->rd_lock);
++
++	sBUG_ON(conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING);
++	conn->rd_data_ready = 0;
++	unsigned short rd_state_previous = conn->rd_state;
++	conn->rd_state = ISCSI_CONN_RD_STATE_PROCESSING;
++#ifdef CONFIG_SCST_EXTRACHECKS
++	sBUG_ON(conn->rd_task != NULL);
++	conn->rd_task = current;
++#endif
++	conn_rd_unlock(conn);	/* we own conn read by _STATE_PROCESSING now */
++
++	rc = process_read_io(conn, &closed);
++		/*** Note that conn may now no longer exist ***/
++
++	if (unlikely(closed)) return -1;
++	/* conn still exists */
++
++	conn_rd_lock(conn);	/* relock the conn */
++
++	if (unlikely(conn->conn_tm_active)) {
++		conn_rd_unlock(conn);
++		iscsi_check_tm_data_wait_timeouts(conn, false);
++		conn_rd_lock(conn);
++	}
++
++#ifdef CONFIG_SCST_EXTRACHECKS
++	sBUG_ON(conn->rd_task != current);
++	conn->rd_task = NULL;
++#endif
++
++	/* Modify state from PROCESSING and return held lock to caller */
++	if ((rc == 0) || conn->rd_data_ready) {	    /*** Received a message ***/
++	    conn->rd_state = rd_state_previous;
++	} else {				    /*** Awaiting a message ***/
++	    conn->rd_state = ISCSI_CONN_RD_STATE_IDLE;
++	}
++
++	TRACE_EXIT();
++	return rc;
++}
++
+ /*
+- * Called under rd_lock and BHs disabled, but will drop it inside,
++ * Called under POOL->rd_lock and BHs disabled, but will drop it inside,
+  * then reacquire.
+  */
+ static void scst_do_job_rd(struct iscsi_thread_pool *p)
+@@ -1048,47 +1119,51 @@
+ 	__releases(&rd_lock)
+ {
+ 	TRACE_ENTRY();
+-
++#ifdef SCST_USERMODE
++        sBUG_ON("SCST_USERMODE should never reach this point");
++#endif
+ 	/*
+ 	 * We delete/add to tail connections to maintain fairness between them.
++	 * 
++	 * XXX It is not clear that equality of IOPS opportunity is really
++	 *     "fair" compared with equality of bandwidth opportunity, which
++	 *     depends on the I/O size of each initiator's workload.
+ 	 */
+ 
+ 	while (!list_empty(&p->rd_list)) {
+-		int closed = 0, rc;
++		int rc;
+ 		struct iscsi_conn *conn = list_first_entry(&p->rd_list,
+ 			typeof(*conn), rd_list_entry);
+ 
++		sBUG_ON(conn->rd_state != ISCSI_CONN_RD_STATE_IN_LIST);
+ 		list_del(&conn->rd_list_entry);
++		conn_pool_rd_unlock(p);		/* UNLOCK POOL command list */
+ 
+-		sBUG_ON(conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING);
+-		conn->rd_data_ready = 0;
+-		conn->rd_state = ISCSI_CONN_RD_STATE_PROCESSING;
+-#ifdef CONFIG_SCST_EXTRACHECKS
+-		conn->rd_task = current;
+-#endif
+-		spin_unlock_bh(&p->rd_lock);
+-
+-		rc = process_read_io(conn, &closed);
++		/* We have taken a read-ready conn from the list -- try the read */
++		conn_rd_lock(conn);		/* LOCK CONN */
+ 
+-		spin_lock_bh(&p->rd_lock);
++		rc = scst_try_one_rd(conn);
+ 
+-		if (unlikely(closed))
+-			continue;
++		/* We are holding conn->rd_lock, so this next line of code
++		 * means our lock acquisition order is CONN FIRST, THEN POOL
++		 */
++		conn_pool_rd_lock(p);		/* RELOCK POOL command list */
+ 
+-		if (unlikely(conn->conn_tm_active)) {
+-			spin_unlock_bh(&p->rd_lock);
+-			iscsi_check_tm_data_wait_timeouts(conn, false);
+-			spin_lock_bh(&p->rd_lock);
++		if (unlikely(rc < 0)) {
++			/* conn closed -- don't try to unlock it */
++			continue;   /* proceed to next conn awaiting service */
+ 		}
+ 
+-#ifdef CONFIG_SCST_EXTRACHECKS
+-		conn->rd_task = NULL;
+-#endif
+-		if ((rc == 0) || conn->rd_data_ready) {
++		if (conn->rd_state != ISCSI_CONN_RD_STATE_IDLE) {
++			sBUG_ON(conn->rd_state != ISCSI_CONN_RD_STATE_IN_LIST);
+ 			list_add_tail(&conn->rd_list_entry, &p->rd_list);
+-			conn->rd_state = ISCSI_CONN_RD_STATE_IN_LIST;
+-		} else
+-			conn->rd_state = ISCSI_CONN_RD_STATE_IDLE;
++		} else {
++			/* Waiting for more data */
++			sBUG_ON(rc == 0);
++		}
++
++		/* Lock correctness does not depend on unlock order or strict nesting */
++		conn_rd_unlock(conn);		/* UNLOCK CONN */
+ 	}
+ 
+ 	TRACE_EXIT();
+@@ -1116,13 +1191,13 @@
+ 	if (rc != 0)
+ 		PRINT_ERROR("Setting CPU affinity failed: %d", rc);
+ 
+-	spin_lock_bh(&p->rd_lock);
++	conn_pool_rd_lock(p);
+ 	while (!kthread_should_stop()) {
+ 		wait_event_locked(p->rd_waitQ, test_rd_list(p), lock_bh,
+ 				  p->rd_lock);
+ 		scst_do_job_rd(p);
+ 	}
+-	spin_unlock_bh(&p->rd_lock);
++	conn_pool_rd_unlock(p);
+ 
+ 	/*
+ 	 * If kthread_should_stop() is true, we are guaranteed to be
+@@ -1314,10 +1389,10 @@
+ 	 * lock for rd_lock.
+ 	 */
+ 	if (unlikely(set_conn_tm_active)) {
+-		spin_lock_bh(&conn->conn_thr_pool->rd_lock);
++		conn_rd_lock(req->conn);
+ 		TRACE_MGMT_DBG("Setting conn_tm_active for conn %p", conn);
+ 		conn->conn_tm_active = 1;
+-		spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
++		conn_rd_unlock(req->conn);
+ 	}
+ 
+ out:
+@@ -1325,9 +1400,14 @@
+ 	return;
+ }
+ 
++#if 1
++#define SCST_MSG_MORE MSG_MORE
++#else
++#define SCST_MSG_MORE 0	    // for experimentation only
++#endif
++
+ static int write_data(struct iscsi_conn *conn)
+ {
+-	mm_segment_t oldfs;
+ 	struct file *file;
+ 	struct iovec *iop;
+ 	struct socket *sock;
+@@ -1362,20 +1442,29 @@
+ 	saved_size = size;
+ 	iop = conn->write_iop;
+ 	count = conn->write_iop_used;
++	flags = MSG_DONTWAIT | MSG_NOSIGNAL;
++	sg = write_cmnd->sg;
+ 
+ 	if (iop) {
+ 		while (1) {
+-			loff_t off = 0;
+ 			int rest;
+ 
+ 			sBUG_ON(count > ARRAY_SIZE(conn->write_iov));
+ retry:
+-			oldfs = get_fs();
++			{
++#ifndef SCST_USERMODE
++			loff_t off = 0;
++			mm_segment_t oldfs = get_fs();
+ 			set_fs(KERNEL_DS);
+ 			res = vfs_writev(file,
+ 					 (struct iovec __force __user *)iop,
+ 					 count, &off, 0);
+ 			set_fs(oldfs);
++#else
++			struct msghdr msg = { .msg_iov = iop, .msg_iovlen = count };
++			res = UMC_kernelize(sendmsg(file->fd, &msg, flags | (sg ? SCST_MSG_MORE : 0)));
++#endif
++			}
+ 			TRACE_WRITE("sid %#Lx, cid %u, res %d, iov_len %zd",
+ 				    (unsigned long long int)conn->session->sid,
+ 				    conn->cid, res, iop->iov_len);
+@@ -1410,7 +1499,6 @@
+ 		}
+ 	}
+ 
+-	sg = write_cmnd->sg;
+ 	if (unlikely(sg == NULL)) {
+ 		PRINT_INFO("WARNING: Data missed (cmd %p)!", write_cmnd);
+ 		res = 0;
+@@ -1433,7 +1521,6 @@
+ 		sock_sendpage = sock->ops->sendpage;
+ #endif
+ 
+-	flags = MSG_DONTWAIT;
+ 	sg_size = size;
+ 
+ 	if (sg != write_cmnd->rsp_sg) {
+@@ -1501,6 +1588,12 @@
+ 			spin_unlock(&net_priv_lock);
+ 		}
+ #endif
++
++#ifdef SCST_USERMODE
++  #define page_info(page) page_to_pfn(page)
++#else
++  #define page_info(page) ((page)->index)
++#endif
+ 		sendsize = min(size, length);
+ 		if (size <= sendsize) {
+ retry2:
+@@ -1510,7 +1603,7 @@
+ 				"page %p)", (sendpage != sock_no_sendpage) ?
+ 						"sendpage" : "sock_no_sendpage",
+ 				(unsigned long long int)conn->session->sid,
+-				conn->cid, res, page->index,
++				conn->cid, res, page_info(page),
+ 				offset, size, write_cmnd, page);
+ 			if (unlikely(res <= 0)) {
+ 				if (res == -EINTR)
+@@ -1532,13 +1625,13 @@
+ 		}
+ 
+ retry1:
+-		res = sendpage(sock, page, offset, sendsize, flags | MSG_MORE);
++		res = sendpage(sock, page, offset, sendsize, flags | SCST_MSG_MORE);
+ 		TRACE_WRITE("%s sid %#Lx, cid %u, res %d (page index %lu, "
+ 			"offset %u, sendsize %u, size %u, cmd %p, page %p)",
+ 			(sendpage != sock_no_sendpage) ? "sendpage" :
+ 							 "sock_no_sendpage",
+ 			(unsigned long long)conn->session->sid, conn->cid,
+-			res, page->index, offset, sendsize, size,
++			res, page_info(page), offset, sendsize, size,
+ 			write_cmnd, page);
+ 		if (unlikely(res <= 0)) {
+ 			if (res == -EINTR)
+
+--- /home/dave/orig/scst/iscsi-scst/kernel/conn.c	2017-03-18 10:57:32.485216807 -0600
++++ scst/iscsi-scst/kernel/conn.c	2017-03-23 14:19:50.440650827 -0600
+@@ -45,9 +45,11 @@
+ 
+ 	switch (conn->rd_state) {
+ 	case ISCSI_CONN_RD_STATE_PROCESSING:
++	case ISCSI_CONN_RD_STATE_AWAKE:
+ 		pos += scnprintf(&p[pos], size - pos, "%s", "read_processing ");
+ 		break;
+ 	case ISCSI_CONN_RD_STATE_IN_LIST:
++	case ISCSI_CONN_RD_STATE_WAKING:
+ 		pos += scnprintf(&p[pos], size - pos, "%s", "in_read_list ");
+ 		break;
+ 	}
+@@ -405,11 +407,10 @@
+ 
+ void iscsi_make_conn_rd_active(struct iscsi_conn *conn)
+ {
+-	struct iscsi_thread_pool *p = conn->conn_thr_pool;
+-
+ 	TRACE_ENTRY();
+ 
+-	spin_lock_bh(&p->rd_lock);
++	/* Lock acquisition order is CONN FIRST, THEN POOL */
++	conn_rd_lock(conn);
+ 
+ 	TRACE_DBG("conn %p, rd_state %x, rd_data_ready %d", conn,
+ 		conn->rd_state, conn->rd_data_ready);
+@@ -424,12 +425,23 @@
+ 	conn->rd_data_ready = 1;
+ 
+ 	if (conn->rd_state == ISCSI_CONN_RD_STATE_IDLE) {
++#ifndef SCST_USERMODE			/* schedule conn_read_wakeup_handler */
++		struct iscsi_thread_pool *p = conn->conn_thr_pool;
++		conn_pool_rd_lock(p);
+ 		list_add_tail(&conn->rd_list_entry, &p->rd_list);
+ 		conn->rd_state = ISCSI_CONN_RD_STATE_IN_LIST;
+ 		wake_up(&p->rd_waitQ);
++		conn_pool_rd_unlock(p);
++#else
++		/* Schedule an ASAP "softirq" callback to rd_wakeup_handler */
++		conn->rd_state = ISCSI_CONN_RD_STATE_WAKING;
++		sys_callback_schedule(conn->sock->rd_poll_event_task,
++				      iscsi_conn_rd_wakeup_handler,
++				      conn->sock->sk, 0, E_OK, "sock read wakeup");
++#endif
+ 	}
+ 
+-	spin_unlock_bh(&p->rd_lock);
++	conn_rd_unlock(conn);
+ 
+ 	TRACE_EXIT();
+ 	return;
+@@ -467,13 +479,13 @@
+ 
+ void iscsi_tcp_mark_conn_closed(struct iscsi_conn *conn, int flags)
+ {
+-	spin_lock_bh(&conn->conn_thr_pool->rd_lock);
++	conn_rd_lock(conn);
+ 	conn->closing = 1;
+ 	if (flags & ISCSI_CONN_ACTIVE_CLOSE)
+ 		conn->active_close = 1;
+ 	if (flags & ISCSI_CONN_DELETING)
+ 		conn->deleting = 1;
+-	spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
++	conn_rd_unlock(conn);
+ 
+ 	iscsi_make_conn_rd_active(conn);
+ }
+@@ -531,18 +543,48 @@
+ 
+ 	TRACE_ENTRY();
+ 
++#ifndef CONN_SIRQ_READ			/* read conn directly from event thread */
+ 	iscsi_make_conn_rd_active(conn);
++#else
++	/* Drive the receive directly out of the notification (SIRQ) handler */
++	conn_rd_lock(conn);
+ 
++	if (conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING) {
++		conn->rd_data_ready = 1;
++	} else {
++		conn->rd_state = ISCSI_CONN_RD_STATE_AWAKE;
++		while (conn->rd_state == ISCSI_CONN_RD_STATE_AWAKE) {
++			if (scst_try_one_rd(conn) < 0)  {
++				return;	    /*closed*/
++			}
++		}
++	}
++
++	conn_rd_unlock(conn);
++#endif
++
++#ifndef SCST_USERMODE			/* calls to old entry points unnecessary */
+ #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0))
+ 	conn->old_data_ready(sk);
+ #else
+ 	conn->old_data_ready(sk, len);
+ #endif
++#endif
+ 
+ 	TRACE_EXIT();
+ 	return;
+ }
+ 
++#ifdef SCST_USERMODE			/* define iscsi_conn_rd_wakeup_handler */
++void iscsi_conn_rd_wakeup_handler(void * env, uintptr_t arg, errno_t err)
++{
++	assert_eq(err, E_OK);
++	assert_eq(arg, 0);
++	struct sock * sk = env;
++	iscsi_data_ready(sk, 0);
++}
++#endif
++
+ void __iscsi_write_space_ready(struct iscsi_conn *conn)
+ {
+ 	struct iscsi_thread_pool *p = conn->conn_thr_pool;
+@@ -702,7 +744,7 @@
+ 	iscsi_extracheck_is_rd_thread(conn);
+ 
+ again:
+-	spin_lock_bh(&conn->conn_thr_pool->rd_lock);
++	conn_rd_lock(conn);
+ 	spin_lock(&conn->write_list_lock);
+ 
+ 	aborted_cmds_pending = false;
+@@ -740,7 +782,7 @@
+ 			    (time_after_eq(j, cmnd->write_start + ISCSI_TM_DATA_WAIT_TIMEOUT) ||
+ 			     force)) {
+ 				spin_unlock(&conn->write_list_lock);
+-				spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
++				conn_rd_unlock(conn);
+ 				iscsi_fail_data_waiting_cmnd(cmnd);
+ 				goto again;
+ 			}
+@@ -763,7 +805,7 @@
+ 	}
+ 
+ 	spin_unlock(&conn->write_list_lock);
+-	spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
++	conn_rd_unlock(conn);
+ 
+ 	TRACE_EXIT();
+ 	return;
+@@ -958,6 +1000,7 @@
+ 	INIT_LIST_HEAD(&conn->reinst_pending_cmd_list);
+ 	INIT_LIST_HEAD(&conn->nop_req_list);
+ 	spin_lock_init(&conn->nop_req_list_lock);
++	spin_lock_init(&conn->rd_lock);
+ 
+ 	conn->conn_thr_pool = session->sess_thr_pool;
+ 
+
+--- /home/dave/orig/scst/iscsi-scst/kernel/Makefile	2016-01-21 21:04:43.000000000 -0700
++++ scst/iscsi-scst/kernel/Makefile	2017-03-23 14:19:50.440650827 -0600
+@@ -20,6 +20,10 @@
+ #
+ #  Note 2! The CFLAGS definitions are now in the main makefile.
+ 
++ifdef MAKE_INCLUDES
++include $(MAKE_INCLUDES)
++endif
++
+ cc-option = $(shell if $(CC) $(CFLAGS) $(1) -S -o /dev/null -xc /dev/null \
+              > /dev/null 2>&1; then echo "$(1)"; else echo "$(2)"; fi ;)
+ enable-Wextra = $(shell uname_r="$$(uname -r)"; if [ "$${uname_r%.el5}" = "$${uname_r}" ]; then echo "$(1)"; fi)
+@@ -29,14 +33,20 @@
+ 	$(call cc-option,-Wno-old-style-declaration) \
+ 	-Wno-unused-parameter -Wno-missing-field-initializers)
+ 
+-EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
++#XXXDAB#    EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
+ #EXTRA_CFLAGS += -DCONFIG_SCST_TRACING
+-EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG -g -fno-inline -fno-inline-functions
++#XXXDAB#    EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG
++EXTRA_CFLAGS += -g
+ 
+ #EXTRA_CFLAGS += -DCONFIG_SCST_ISCSI_DEBUG_DIGEST_FAILURES
+ 
+ obj-m		+= iscsi-scst.o
+ iscsi-scst-objs	:= iscsi.o nthread.o config.o digest.o \
+-	conn.o session.o target.o event.o param.o \
++	conn.o session.o target.o param.o \
+ 	iscsit_transport.o
+ 
++ifndef SCST_USERMODE
++iscsi-scst-objs	:= $(iscsi-scst-objs) event.o
++else
++iscsi-scst-objs	:= $(iscsi-scst-objs) scst_compat.o
++endif
+
+--- /home/dave/orig/scst/iscsi-scst/kernel/param.c	2016-01-21 21:04:43.000000000 -0700
++++ scst/iscsi-scst/kernel/param.c	2017-03-23 14:19:50.440650827 -0600
+@@ -281,13 +281,13 @@
+ 			conn->data_rsp_timeout = session->tgt_params.rsp_timeout * HZ;
+ 			conn->nop_in_interval = session->tgt_params.nop_in_interval * HZ;
+ 			conn->nop_in_timeout = session->tgt_params.nop_in_timeout * HZ;
+-			spin_lock_bh(&conn->conn_thr_pool->rd_lock);
++			conn_rd_lock(conn);
+ 			if (!conn->closing && (conn->nop_in_interval > 0)) {
+ 				TRACE_DBG("Schedule Nop-In work for conn %p", conn);
+ 				schedule_delayed_work(&conn->nop_in_delayed_work,
+ 					conn->nop_in_interval + ISCSI_ADD_SCHED_TIME);
+ 			}
+-			spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
++			conn_rd_unlock(conn);
+ 		}
+ 	} else {
+ 		GET_PARAM(params, info, iparams, queued_cmnds);
+
+--- /home/dave/orig/scst/iscsi-scst/kernel/isert-scst/Makefile	2015-06-12 09:31:05.000000000 -0600
++++ scst/iscsi-scst/kernel/isert-scst/Makefile	2017-03-23 14:19:50.440650827 -0600
+@@ -30,9 +30,12 @@
+ 	$(call cc-option,-Wno-old-style-declaration) \
+ 	-Wno-unused-parameter -Wno-missing-field-initializers)
+ 
+-EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
++#XXXDAB#    EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
+ #EXTRA_CFLAGS += -DCONFIG_SCST_TRACING
+-EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG -g -fno-inline -fno-inline-functions
++#XXXDAB#    EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG
++#XXXDAB#    EXTRA_CFLAGS += -fno-inline -fno-inline-functions
++
++EXTRA_CFLAGS += -g
+ 
+ obj-m		+= isert-scst.o
+ isert-scst-objs	:= isert.o isert_login.o \
+
+--- /home/dave/orig/scst/iscsi-scst/kernel/iscsi.h	2016-12-19 23:00:43.000000000 -0700
++++ scst/iscsi-scst/kernel/iscsi.h	2017-03-23 14:19:50.440650827 -0600
+@@ -23,6 +23,13 @@
+ #include <linux/module.h>
+ #include <net/sock.h>
+ 
++#ifdef SCST_USERMODE			/* resolve symbol conflicts */
++  extern void iscsi_conn_rd_wakeup_handler(void *, uintptr_t, errno_t);
++  /* Rename some kernel-code symbols that conflict with daemon-code symbols */
++  #define conn_free                     SCST_kconn_free
++  #define session_free                  SCST_ksession_free
++#endif
++
+ #ifdef INSIDE_KERNEL_TREE
+ #include <scst/scst.h>
+ #include <scst/iscsi_scst.h>
+@@ -78,6 +85,9 @@
+ 
+ struct iscsi_thread_pool {
+ 	spinlock_t rd_lock;
++	#define conn_pool_rd_lock(pool)   spin_lock_bh(  &(pool)->rd_lock)
++	#define conn_pool_rd_unlock(pool) spin_unlock_bh(&(pool)->rd_lock)
++
+ 	struct list_head rd_list;
+ 	wait_queue_head_t rd_waitQ;
+ 
+@@ -191,6 +201,8 @@
+ #define ISCSI_CONN_RD_STATE_IDLE		0
+ #define ISCSI_CONN_RD_STATE_IN_LIST		1
+ #define ISCSI_CONN_RD_STATE_PROCESSING		2
++#define ISCSI_CONN_RD_STATE_WAKING		10
++#define ISCSI_CONN_RD_STATE_AWAKE		11
+ 
+ #define ISCSI_CONN_WR_STATE_IDLE		0
+ #define ISCSI_CONN_WR_STATE_IN_LIST		1
+@@ -278,6 +290,21 @@
+ 	unsigned short active_close:1;
+ 	unsigned short deleting:1;
+ 	unsigned short conn_tm_active:1;
++	spinlock_t rd_lock;
++	#define conn_rd_lock(conn)	spin_lock_bh(  &(conn)->rd_lock)
++	#define conn_rd_unlock(conn)	spin_unlock_bh(&(conn)->rd_lock)
++
++#ifdef SCST_USERMODE
++	uint8_t tcp_nagle;		/* current socket TCP_NODELAY state */
++	unsigned long cpu_busy_count[4];    /* reads done in IDLE-BUSY cycle */
++	unsigned int cpu_busy_idx;
++	/* stats */
++	unsigned long cpu_idles;	    /* since last stats print */
++	unsigned long max_cpu_busy_count;   /* since last stats print */
++	unsigned long stat_cpu_busy_count;  /* since last stats print */
++	unsigned long read_nodelay;	    /* reads done while NODELAY set */
++	unsigned long read_nagle;	    /* reads done while NODELAY unset */
++#endif
+ 
+ 	struct list_head rd_list_entry;
+ 
+@@ -591,6 +618,7 @@
+ extern void iscsi_get_page_callback(struct page *page);
+ extern void iscsi_put_page_callback(struct page *page);
+ #endif
++extern int scst_try_one_rd(struct iscsi_conn * conn);
+ extern int istrd(void *arg);
+ extern int istwr(void *arg);
+ extern void iscsi_task_mgmt_affected_cmds_done(struct scst_mgmt_cmd *scst_mcmd);
+
+--- /home/dave/orig/scst/iscsi-scst/kernel/Makefile.in-kernel	2015-10-28 15:11:06.000000000 -0600
++++ scst/iscsi-scst/kernel/Makefile.in-kernel	2017-03-23 14:19:50.440650827 -0600
+@@ -1,3 +1,7 @@
++ifdef MAKE_INCLUDES
++include $(MAKE_INCLUDES)
++endif
++
+ iscsi-scst-y += config.o
+ iscsi-scst-y += conn.o
+ iscsi-scst-y += digest.o
+@@ -9,4 +13,15 @@
+ iscsi-scst-y += session.o
+ iscsi-scst-y += target.o
+ 
++ifndef SCST_USERMODE
++
+ obj-$(CONFIG_SCST_ISCSI) += iscsi-scst.o isert-scst/
++
++else
++
++iscsi-scst-y += scst_compat.o
++
++obj-$(CONFIG_SCST_ISCSI) += iscsi-scst.o
++
++endif
++
+
+--- /home/dave/orig/scst/iscsi-scst/kernel/config.c	2016-03-27 10:10:26.000000000 -0600
++++ scst/iscsi-scst/kernel/config.c	2017-03-23 14:19:50.440650827 -0600
+@@ -1095,7 +1095,7 @@
+ 	return res;
+ }
+ 
+-static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
++static long ioctl_impl(struct file *file, unsigned int cmd, unsigned long arg)
+ {
+ 	long err;
+ 
+@@ -1172,7 +1172,7 @@
+ 	return err;
+ }
+ 
+-static int open(struct inode *inode, struct file *file)
++static int open_impl(struct inode *inode, struct file *file)
+ {
+ 	bool already;
+ 
+@@ -1220,11 +1220,12 @@
+ 	return 0;
+ }
+ 
++/* Avoid function names like open and ioctl that conflict with C library symbols */
+ const struct file_operations ctr_fops = {
+ 	.owner		= THIS_MODULE,
+-	.unlocked_ioctl	= ioctl,
+-	.compat_ioctl	= ioctl,
+-	.open		= open,
++	.unlocked_ioctl	= ioctl_impl,
++	.compat_ioctl	= ioctl_impl,
++	.open		= open_impl,
+ 	.release	= release,
+ };
+ 
+
+--- /home/dave/orig/scst/scst/include/scst.h	2017-03-18 10:57:32.489216880 -0600
++++ scst/scst/include/scst.h	2017-03-23 14:19:50.444650900 -0600
+@@ -4067,6 +4067,9 @@
+ 
+ static inline enum scst_exec_context __scst_estimate_context(bool atomic)
+ {
++#ifdef SCST_USERMODE
++	return SCST_CONTEXT_SAME;
++#else
+ 	if (in_irq())
+ 		return SCST_CONTEXT_TASKLET;
+ /*
+@@ -4087,6 +4090,7 @@
+ #else
+ 	return SCST_CONTEXT_THREAD;
+ #endif
++#endif /* !SCST_USERMODE */
+ }
+ 
+ static inline enum scst_exec_context scst_estimate_context(void)
+@@ -4947,6 +4951,9 @@
+ 
+ static inline struct scatterlist *__sg_next_inline(struct scatterlist *sg)
+ {
++	WARN_ON(sg_is_last(sg),
++	       "sg=%p *sg={ link=%p offset=%u length=%u }",
++	       sg, sg->page_link, sg->offset, sg->length);
+ 	sg++;
+ 	if (unlikely(sg_is_chain(sg)))
+ 		sg = sg_chain_ptr(sg);
+@@ -5491,6 +5498,7 @@
+ 
+ void scst_dev_inquiry_data_changed(struct scst_device *dev);
+ 
++#ifndef wait_event_locked
+ /*
+  * Has to be put here open coded, because Linux doesn't have equivalent, which
+  * allows exclusive wake ups of threads in LIFO order. We need it to let (yet)
+@@ -5533,6 +5541,7 @@
+ 	} while (!(condition));						\
+ 	finish_wait(&(wq), &__wait);					\
+ }
++#endif
+ 
+ /* Only use get_unaligned_be24() if reading p - 1 is allowed. */
+ static inline uint32_t get_unaligned_be24(const uint8_t *const p)
+
+--- /home/dave/orig/scst/scst/include/scst_const.h	2016-12-19 23:10:56.000000000 -0700
++++ scst/scst/include/scst_const.h	2017-03-23 14:19:50.444650900 -0600
+@@ -362,15 +362,23 @@
+ #define INIT_ELEMENT_STATUS         0x07
+ #define INIT_ELEMENT_STATUS_RANGE   0x37
+ #define PREVENT_ALLOW_MEDIUM        0x1E
++
++#ifndef READ_ATTRIBUTE
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 38) \
+ 	&& (!defined(RHEL_MAJOR) || RHEL_MAJOR -0 <= 5)
+ #define READ_ATTRIBUTE              0x8C
+ #endif
++#endif
++
+ #define REQUEST_VOLUME_ADDRESS      0xB5
++
++#ifndef WRITE_ATTRIBUTE
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 38) \
+ 	&& (!defined(RHEL_MAJOR) || RHEL_MAJOR -0 <= 5)
+ #define WRITE_ATTRIBUTE             0x8D
+ #endif
++#endif
++
+ #define WRITE_VERIFY_16             0x8E
+ #define VERIFY_6                    0x13
+ #ifndef VERIFY_12
+@@ -478,6 +486,7 @@
+ #endif
+ #endif
+ 
++#ifndef BLKDISCARD
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 28)
+ /*
+  * From <linux/fs.h>. See also commit
+@@ -485,6 +494,7 @@
+  */
+ #define BLKDISCARD _IO(0x12, 119)
+ #endif
++#endif
+ 
+ /*************************************************************
+  **  SCSI Architecture Model (SAM) Status codes. Taken from SAM-3 draft
+
+--- /home/dave/orig/scst/scst/include/backport.h	2017-03-18 10:57:32.489216880 -0600
++++ scst/scst/include/backport.h	2017-03-23 14:19:50.444650900 -0600
+@@ -47,11 +47,13 @@
+ /* <linux/blkdev.h> */
+ 
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 31)
++#ifndef queue_max_hw_sectors
+ static inline unsigned int queue_max_hw_sectors(struct request_queue *q)
+ {
+ 	return q->max_hw_sectors;
+ }
+ #endif
++#endif
+ 
+ /* <linux/compiler.h> */
+ 
+@@ -203,13 +205,16 @@
+ 
+ /* See also commit 0f8e0d9a317406612700426fad3efab0b7bbc467 */
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 28)
++#ifndef DLM_LSFL_NEWEXCL
+ enum {
+ 	DLM_LSFL_NEWEXCL = 0
+ };
+ #endif
++#endif
+ 
+ /* <linux/fs.h> */
+ 
++#ifndef file_inode
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0) && \
+ 	!defined(CONFIG_COMPAT_KERNEL_3_12)
+ /*
+@@ -222,6 +227,7 @@
+ 	return f->f_dentry->d_inode;
+ }
+ #endif
++#endif
+ 
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0)
+ static inline ssize_t vfs_readv_backport(struct file *file,
+@@ -238,10 +244,13 @@
+ {
+ 	return vfs_writev(file, vec, vlen, pos);
+ }
++#undef vfs_readv
++#undef vfs_writev
+ #define vfs_readv vfs_readv_backport
+ #define vfs_writev vfs_writev_backport
+ #endif
+ 
++#ifndef vfs_fsync
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 35)
+ static inline int vfs_fsync_backport(struct file *file, int datasync)
+ {
+@@ -256,6 +265,7 @@
+ 
+ #define vfs_fsync vfs_fsync_backport
+ #endif
++#endif
+ 
+ /* <linux/kernel.h> */
+ 
+@@ -392,9 +402,11 @@
+ 
+ /* <linux/lockdep.h> */
+ 
++#ifndef lockdep_assert_held
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 32)
+ #define lockdep_assert_held(l) (void)(l)
+ #endif
++#endif
+ 
+ /* <linux/kernel.h> */
+ 
+@@ -408,6 +420,7 @@
+ 	return get_user_pages(current, current->mm, start, nr_pages, write,
+ 			      force, pages, vmas);
+ }
++#undef get_user_pages
+ #define get_user_pages get_user_pages_backport
+ #endif
+ 
+@@ -587,10 +600,12 @@
+ 	memset(sgl, 0, sizeof(*sgl) * nents);
+ }
+ 
++#ifndef sg_assign_page
+ static inline void sg_assign_page(struct scatterlist *sg, struct page *page)
+ {
+ 	sg->page = page;
+ }
++#endif
+ 
+ static inline void sg_set_page(struct scatterlist *sg, struct page *page,
+ 			       unsigned int len, unsigned int offset)
+@@ -663,12 +678,14 @@
+  * See also patch "mm: add vzalloc() and vzalloc_node() helpers" (commit
+  * e1ca7788dec6773b1a2bce51b7141948f2b8bccf).
+  */
++#ifndef vzalloc
+ static inline void *vzalloc(unsigned long size)
+ {
+ 	return __vmalloc(size, GFP_KERNEL | __GFP_HIGHMEM | __GFP_ZERO,
+ 			 PAGE_KERNEL);
+ }
+ #endif
++#endif
+ 
+ /* <linux/unaligned.h> */
+ 
+
+--- /home/dave/orig/scst/scst/include/scst_itf_ver.h	2017-03-18 11:04:32.216899207 -0600
++++ scst/scst/include/scst_itf_ver.h	2017-03-26 11:42:23.139724524 -0600
+@@ -1,5 +1,5 @@
+ /* Autogenerated, don't edit */
+ 
+-#define SCST_INTF_VER "e0349b586f8b4709f7bf939afa14391a56850124"
+-#define SCST_CONST_INTF_VER "48bacf2cd998cf53880298389b808a349482a756"
++#define SCST_INTF_VER "71bf7939ccbf0ded7b76391f04e436ebceae3ab0"
++#define SCST_CONST_INTF_VER "28cd48dc86cc3d6ba238478735247a8f5e01f2ab"
+ #define DEV_USER_INTF_VER "bab23b70314abb59edd4bfe507477e42b4190eb4"
+
+--- /home/dave/orig/scst/scst/src/Makefile	2016-01-21 21:04:43.000000000 -0700
++++ scst/scst/src/Makefile	2017-03-23 14:19:50.444650900 -0600
+@@ -27,6 +27,10 @@
+ #    - install and uninstall must be made as root
+ #
+ 
++ifdef MAKE_INCLUDES
++include $(MAKE_INCLUDES)
++endif
++
+ ifndef PREFIX
+         PREFIX=/usr/local
+ endif
+@@ -43,16 +47,21 @@
+ scst-y        += scst_main.o
+ scst-y        += scst_targ.o
+ scst-y        += scst_lib.o
+-#scst-y        += scst_proc.o
+-scst-y        += scst_sysfs.o
+ scst-y        += scst_mem.o
+ scst-y        += scst_debug.o
+ scst-y        += scst_pres.o
+ scst-y        += scst_no_dlm.o
+-scst-y        += scst_dlm.o
+ scst-y        += scst_tg.o
+-scst-y        += scst_event.o
+ scst-y        += scst_copy_mgr.o
++ifndef SCST_USERMODE
++#scst-y        += scst_proc.o
++scst-y        += scst_sysfs.o
++scst-y        += scst_dlm.o
++scst-y        += scst_event.o
++else
++scst-y        += scst_proc.o
++endif
++
+ obj-$(CONFIG_SCST)   += scst.o dev_handlers/
+ 
+ obj-$(BUILD_DEV) += $(DEV_HANDLERS_DIR)/
+@@ -160,7 +169,7 @@
+ 
+ #EXTRA_CFLAGS += -DCONFIG_SCST_STRICT_SERIALIZING
+ 
+-EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
++#XXXDAB#    EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
+ 
+ #EXTRA_CFLAGS += -DCONFIG_SCST_USE_EXPECTED_VALUES
+ #EXTRA_CFLAGS += -DCONFIG_SCST_TEST_IO_IN_SIRQ
+@@ -170,7 +179,8 @@
+ 
+ #EXTRA_CFLAGS += -DCONFIG_SCST_TRACING
+ 
+-EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG -g -fno-inline -fno-inline-functions
++EXTRA_CFLAGS += -g
++#XXXDAB#    EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG
+ #EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG_RETRY
+ #EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG_OOM
+ #EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG_SN
+
+--- /home/dave/orig/scst/scst/src/scst_pres.c	2017-03-18 10:57:32.489216880 -0600
++++ scst/scst/src/scst_pres.c	2017-03-23 14:19:50.444650900 -0600
+@@ -1037,7 +1037,10 @@
+ 
+ write_error_close:
+ 	filp_close(file, NULL);
+-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
++#ifdef SCST_USERMODE			/* unlink */
++	res = UMC_kernelize(unlink(pr_file_name));
++	expect_noerr(res, "unlink(\"%s\")", pr_file_name);
++#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+ 	{
+ 		struct nameidata nd;
+ 		int rc;
+
+--- /home/dave/orig/scst/scst/src/scst_main.c	2017-03-18 10:57:32.489216880 -0600
++++ scst/scst/src/scst_main.c	2017-03-23 14:19:50.444650900 -0600
+@@ -47,6 +47,7 @@
+ details.
+ #endif
+ 
++#ifndef SCST_USERMODE			/* no scst_exec_req_fifo patch warning */
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 30) && \
+ 	!defined(SCSI_EXEC_REQ_FIFO_DEFINED) &&	     \
+ 	!defined(CONFIG_SCST_STRICT_SERIALIZING)
+@@ -54,6 +55,7 @@
+ your kernel and CONFIG_SCST_STRICT_SERIALIZING is not defined. \
+ Pass-through dev handlers will not work.
+ #endif
++#endif
+ 
+ /**
+  ** SCST global variables. They are all uninitialized to have their layout in
+@@ -2558,7 +2560,11 @@
+ 	/* ToDo: register_cpu_notifier() */
+ 
+ 	if (scst_threads == 0)
++#ifdef SCST_USERMODE
++		scst_threads = 1;		//XXXX TUNE
++#else
+ 		scst_threads = scst_num_cpus;
++#endif
+ 
+ 	if (scst_threads < 1) {
+ 		PRINT_ERROR("%s", "scst_threads can not be less than 1");
+
+--- /home/dave/orig/scst/scst/src/dev_handlers/Makefile	2016-01-21 21:04:43.000000000 -0700
++++ scst/scst/src/dev_handlers/Makefile	2017-03-23 14:19:50.444650900 -0600
+@@ -27,11 +27,17 @@
+ #    - install and uninstall must be made as root
+ #
+ 
++ifdef MAKE_INCLUDES
++include $(MAKE_INCLUDES)
++endif
++
+ SHELL=/bin/bash
+ 
+ ifneq ($(PATCHLEVEL),)
+ SCST_INC_DIR := $(SUBDIRS)/../include
+ 
++ifndef SCST_USERMODE
++
+ obj-m := scst_cdrom.o scst_changer.o scst_disk.o scst_modisk.o scst_tape.o \
+ 	scst_vdisk.o scst_raid.o scst_processor.o scst_user.o
+ 
+@@ -45,6 +51,13 @@
+ obj-$(CONFIG_SCST_VDISK)	+= scst_vdisk.o
+ obj-$(CONFIG_SCST_USER)		+= scst_user.o
+ 
++else # SCST_USERMODE
++
++obj-m := scst_vdisk.o
++obj-$(CONFIG_SCST_VDISK)	+= scst_vdisk.o
++
++endif # SCST_USERMODE
++
+ else
+ ######### BEGIN OUT-OF-TREE RULES #########
+ 
+@@ -87,10 +100,12 @@
+ EXTRA_CFLAGS += -I$(SUBDIRS) -I$(SCST_INC_DIR) $(call enable-Wextra,-Wextra \
+ 	-Wno-unused-parameter -Wno-missing-field-initializers)
+ 
+-EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
++#XXXDAB#    EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
+ 
+ #EXTRA_CFLAGS += -DCONFIG_SCST_TRACING
+-EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG -g -fno-inline -fno-inline-functions
++#XXXDAB#    EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG
++#XXXDAB#    EXTRA_CFLAGS += -fno-inline -fno-inline-functions
++EXTRA_CFLAGS += -g
+ 
+ #EXTRA_CFLAGS += -DCONFIG_DEBUG_EXT_COPY_REMAP
+ 
+
+--- /home/dave/orig/scst/scst/src/dev_handlers/scst_vdisk.c	2017-03-18 10:57:32.489216880 -0600
++++ scst/scst/src/dev_handlers/scst_vdisk.c	2017-03-23 14:19:50.448650975 -0600
+@@ -113,7 +113,13 @@
+ #define DEF_NV_CACHE			0
+ #define DEF_O_DIRECT			0
+ #define DEF_DUMMY			0
++
++#ifdef VALGRIND
++#define DEF_READ_ZERO			1
++#else
+ #define DEF_READ_ZERO			0
++#endif
++
+ #define DEF_REMOVABLE			0
+ #define DEF_ROTATIONAL			1
+ #define DEF_THIN_PROVISIONED		0
+@@ -280,7 +286,9 @@
+ 
+ typedef enum compl_status_e (*vdisk_op_fn)(struct vdisk_cmd_params *p);
+ 
+-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
++#ifdef SCST_USERMODE			/* threads per LUN per session */
++#define DEF_NUM_THREADS		1	//XXXX TUNE
++#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
+ #define DEF_NUM_THREADS		5
+ #else
+ /* Context RA patch supposed to be applied on the kernel */
+@@ -6747,6 +6755,10 @@
+ }
+ #endif /* defined(CONFIG_BLK_DEV_INTEGRITY) */
+ 
++#ifdef SCST_USERMODE
++#define blkdev_issue_flush(bdev, xxx) (-EPERM)
++#endif
++
+ static void blockio_exec_rw(struct vdisk_cmd_params *p, bool write, bool fua)
+ {
+ 	struct scst_cmd *cmd = p->cmd;
+@@ -10411,6 +10423,9 @@
+ 				TRACE_DBG("%s", "NULLIO");
+ 			} else if (!strncmp("BLOCKIO", p, 7)) {
+ 				p += 7;
++#if defined(SCST_USERMODE) && !defined(SCST_USERMODE_AIO)
++				WARN_ON(SCST_USERMODE, "BLOCKIO ignored");
++#else
+ 				virt_dev->blockio = 1;
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
+ 				res = vdisk_create_bioset(virt_dev);
+@@ -10423,6 +10438,7 @@
+ 					(int)sizeof(virt_dev->t10_vend_id) - 1,
+ 					SCST_BIO_VENDOR);
+ 				TRACE_DBG("%s", "BLOCKIO");
++#endif
+ 			} else if (!strncmp("REMOVABLE", p, 9)) {
+ 				p += 9;
+ 				virt_dev->removable = 1;
+@@ -10910,7 +10926,8 @@
+ static int __init vdev_check_mode_pages_path(void)
+ {
+ 	int res;
+-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
++#ifdef SCST_USERMODE                   /* path_lookup() --> access(2) */
++#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+ 	struct nameidata nd;
+ #else
+ 	struct path path;
+@@ -10921,7 +10938,10 @@
+ 
+ 	set_fs(KERNEL_DS);
+ 
+-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
++#ifdef SCST_USERMODE                   /* path_lookup() --> access(2) */
++       res = UMC_kernelize(access(VDEV_MODE_PAGES_DIR, F_OK));
++       expect_noerr(res, "access(%s)", VDEV_MODE_PAGES_DIR);
++#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+ 	res = path_lookup(VDEV_MODE_PAGES_DIR, 0, &nd);
+ 	if (res == 0)
+ 		scst_path_put(&nd);
+
+--- /home/dave/orig/scst/scst/src/scst_targ.c	2017-03-18 10:57:32.493216953 -0600
++++ scst/scst/src/scst_targ.c	2017-03-23 14:19:50.448650975 -0600
+@@ -3469,6 +3469,10 @@
+ 		  scsi_dev->host->host_no, scsi_dev->channel, scsi_dev->id,
+ 		  (u64)scsi_dev->lun);
+ 
++#ifdef SCST_USERMODE
++        BUG_ON("SCST_USERMODE should never reach this point");
++#endif
++
+ 	scst_set_exec_start(cmd);
+ 
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 30)
+@@ -5662,6 +5666,15 @@
+ 	spin_lock(&thr->thr_cmd_list_lock);
+ 	while (!kthread_should_stop()) {
+ 		if (!test_cmd_threads(thr)) {
++#ifdef SCST_USERMODE
++			/* wait_event_locked2(WAITQ, COND, LOCK, INNERLOCK) --
++			 * Wait Event with exclusive wakeup, NO timeout, and TWO spinlocks;
++			 * Lock acquisition order is LOCK, INNERLOCK;
++			 * SCST_USERMODE does not care about the "_irq" blocking, NOP here.
++			 */
++			wait_event_locked2(p_cmd_threads->cmd_list_waitQ, test_cmd_threads(thr),
++					   p_cmd_threads->cmd_list_lock, thr->thr_cmd_list_lock);
++#else
+ 			DEFINE_WAIT(wait);
+ 
+ 			do {
+@@ -5677,6 +5690,7 @@
+ 				spin_lock(&thr->thr_cmd_list_lock);
+ 			} while (!test_cmd_threads(thr));
+ 			finish_wait(&p_cmd_threads->cmd_list_waitQ, &wait);
++#endif
+ 		}
+ 
+ 		/* Drop both locks now that we are through the test_cmd_threads() checks */
+@@ -6796,6 +6810,10 @@
+ 		if (dev->scsi_dev == NULL)
+ 			continue;
+ 
++#ifdef SCST_USERMODE
++		BUG_ON("SCST_USERMODE should never reach this point");
++#endif
++
+ 		list_for_each_entry(d, &host_devs, tm_dev_list_entry) {
+ 			if (dev->scsi_dev->host->host_no ==
+ 				    d->scsi_dev->host->host_no) {
+@@ -6815,6 +6833,10 @@
+ 	 */
+ 
+ 	list_for_each_entry(dev, &host_devs, tm_dev_list_entry) {
++#ifdef SCST_USERMODE
++		BUG_ON("SCST_USERMODE should never reach this point");
++#endif
++
+ 		/* dev->scsi_dev must be non-NULL here */
+ 		TRACE(TRACE_MGMT, "Resetting host %d bus ",
+ 			dev->scsi_dev->host->host_no);
+@@ -6887,6 +6909,10 @@
+ 	scst_call_dev_task_mgmt_fn_received(mcmd, tgt_dev);
+ 
+ 	if (dev->scsi_dev != NULL) {
++#ifdef SCST_USERMODE
++		BUG_ON("SCST_USERMODE should never reach this point");
++#endif
++
+ 		TRACE(TRACE_MGMT, "Resetting host %d bus ",
+ 		      dev->scsi_dev->host->host_no);
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
+
+--- /home/dave/orig/scst/scst/src/scst_lib.c	2017-03-18 10:59:36.759490841 -0600
++++ scst/scst/src/scst_lib.c	2017-03-23 14:41:46.752540333 -0600
+@@ -4788,6 +4788,7 @@
+ 
+ void scst_put_acg(struct scst_acg *acg)
+ {
++#ifndef SCST_USERMODE
+ 	struct scst_acg_put_work *put_work;
+ 
+ 	put_work = kmalloc(sizeof(*put_work), GFP_KERNEL | __GFP_NOFAIL);
+@@ -4808,6 +4809,13 @@
+ 	 * avoid deep recursion and a stack overflow.
+ 	 */
+ 	WARN_ON_ONCE(!queue_work(scst_release_acg_wq, &put_work->work));
++#else
++	/* Somehow the put_work never makes it to scst_put_acg_work before
++	 * shutdown, if we schedule it; so call it directly for a clean
++	 * valgrind/mem_arena output.	    XXXX Investigate
++	 */
++	kref_put(&acg->acg_kref, scst_release_acg);
++#endif
+ }
+ 
+ void scst_get_acg(struct scst_acg *acg)
+@@ -7516,6 +7524,10 @@
+ 	if (cmd->no_sgv)
+ 		flags |= SGV_POOL_ALLOC_NO_CACHED;
+ 
++#ifdef VALGRIND
++	flags |= SGV_POOL_ALLOC_NO_CACHED;  /* valgrind wants to see frees happen */
++#endif
++
+ 	cmd->sg = sgv_pool_alloc(tgt_dev->pools[raw_smp_processor_id()],
+ 			cmd->bufflen, gfp_mask, flags, &cmd->sg_cnt, &cmd->sgv,
+ 			&cmd->dev->dev_mem_lim, NULL);
+@@ -14676,6 +14688,8 @@
+ 	return;
+ }
+ 
++#ifndef SCST_USERMODE			/* unlink */
++
+ /* Abstract vfs_unlink() for different kernel versions (as possible) */
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+ void scst_vfs_unlink_and_put(struct nameidata *nd)
+@@ -14718,6 +14732,8 @@
+ EXPORT_SYMBOL(scst_path_put);
+ #endif
+ 
++#endif /* !SCST_USERMODE */
++
+ int scst_copy_file(const char *src, const char *dest)
+ {
+ 	int res = 0;
+@@ -14817,7 +14833,8 @@
+ int scst_remove_file(const char *name)
+ {
+ 	int res = 0;
+-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
++#ifdef SCST_USERMODE                   /* unlink */
++#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+ 	struct nameidata nd;
+ #else
+ 	struct path path;
+@@ -14828,7 +14845,10 @@
+ 
+ 	set_fs(KERNEL_DS);
+ 
+-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
++#ifdef SCST_USERMODE                   /* unlink */
++       res = UMC_kernelize(unlink(name));
++       expect_noerr(res, "unlink(\"%s\")", name);
++#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+ 	res = path_lookup(name, 0, &nd);
+ 	if (!res)
+ 		scst_vfs_unlink_and_put(&nd);
