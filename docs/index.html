@@ -1,13 +1,24 @@
 ﻿<!-- DOCTYPE HTML-->
 <HEAD><TITLE>David A. Butterfield</TITLE></HEAD>
-<BODY><FONT style="font-size: 10.5">
-<P>
-<STRONG>David A. Butterfield</STRONG>
+<BODY>
+<STRONG>SCST Usermode Adaptation</STRONG>
+<BR>
+<I>David A. Butterfield</I>
 
 <P>
 <A HREF="SCST_Usermode.html"><STRONG>iSCSI-SCST Storage Server Usermode Adaptation</STRONG></A>
 <I>(PDF paper, diagrams, and SCST patch)</I>
 
-<!-- TODO: add links to SCST changes and MTE -->
+<P>
+The SCST Usermode Adaptation is based on scst-svn-7105-trunk and depends on these fixes to it:
+<A HREF="SCST.7105.FIXES.txt">fixes patch</A>
+
+<P>
+After applying the fixes_patch, this patch has the changes to allow running SCST in usermode:
+<A HREF="SCST.7105.USERMODE.txt">usermode_adaptation patch</A>
+
+<P>
+The SCST Usermode Adaptation depends on this library:
+<A HREF="https://davidbutterfield.github.io/MTE/">Multi-threaded Event Engine</A>
 
 </BODY>
