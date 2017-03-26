@@ -1,1 +1,147 @@
-welcome to index.html
+﻿<!-- DOCTYPE HTML-->
+<HEAD>
+<TITLE>iSCSI-SCST Storage Server Usermode Adaptation</TITLE>
+<META name=description value="Adaptation of SCST to run in Usermode; Adaptive Nagle Algorithm">
+<META name=keywords value="Butterfield, SCST, iSCSI, Storage, Server, Usermode, Adaptation, Performance, Adaptive, Nagle, Linux">
+</HEAD>
+
+<BODY>
+
+<style>
+@page {
+        margin-top: .4in;
+        margin-left: .4in;
+        margin-bottom: .4in;
+        margin-right: .4in;
+    }
+</style>
+
+<FONT style="font-size: 10.5">
+
+<P>
+<A HREF="SCST_Usermode.pdf">
+    <BIG><U><STRONG>iSCSI-SCST Storage Server Usermode Adaptation</STRONG></U></BIG>
+    </A><SMALL>&nbsp;&nbsp;&lt;-- <I>Click for Paper (PDF)</I></SMALL>
+<FONT style="font-size: 1"><BR>&nbsp;<BR></FONT>
+<EM>David A. Butterfield &mdash; January 2017</EM>
+
+<BR><FONT style="font-size: 6">&nbsp;</FONT><BR>
+
+<TABLE WIDTH=700 cellpadding=0% cellspacing=5% style="font-size: 10.5">
+<COL width="8%">
+<COL width="2%">
+<COL width="89%">
+<TR><TH align="left" valign="top"><I>Abstract</I><BR>&nbsp;
+        <TD><TD>
+    This paper describes an adaptation of the iSCSI-SCST storage server software to run
+    entirely in usermode on an unmodified Linux kernel; performance measurements and model;
+    and an experimental algorithm to improve performance for small Read operations.  The
+    Appendix lists a few issues discovered in the SCST source code.
+<TR><TD><TD><TD>
+    In a standard installation of SCST the iscsi-scstd daemon runs as a single-threaded
+    Linux usermode process that cooperates with the kernel-resident SCST implementation
+    using ioctl(2) and netlink(7) for communication.
+<TR><TD><TD><TD>
+    In the iSCSI-SCST Usermode Adaptation the iscsi-scstd daemon runs on the main thread in
+    a multi-threaded process in which other usermode threads are concurrently providing the
+    services and executing the SCST code that would be running inside the kernel in a
+    standard installation of SCST.
+<TR><TD><TD><TD>
+    The subset of SCST used includes the SCST Core, the iSCSI daemon and kernel logic, the
+    vdisk device, and the /proc interface; comprising about 80,000 lines of code.  To
+    support running in usermode, around 55 (fifty-five) lines of executable C code have been
+    added or changed under #ifdef in SCST source files.
+<TR><TD><TD><TD>
+    For a single session over 1 Gb Ethernet being serviced by a single 2.4 GHz CPU: the
+    described <I>Adaptive Nagle</I> optimization improves peak throughput performance for
+    512-Byte Random Read of /dev/zero from around 63,000 IOPS to more than 100,000 IOPS,
+    with no adverse impact below Queue Depth 17.
+</TABLE>
+
+<P>
+<TABLE WIDTH=700 cellpadding=0% cellspacing=0% style="font-size: 10.5">
+<COL width="8%">
+<COL width="3%">
+<COL width="1%">
+<COL width="88%">
+<TR><TH align="left" valign="top"><I>Contents</I>
+        <TD align="right">1<TD><TD align="left">Introduction
+<TR><TD><TD align="right">2<TD><TD align="left">Motivation
+<TR><TD><TD align="right">2<TD><TD align="left">Implemented Functionality
+<TR><TD><TD align="right">2<TD><TD align="left">Implementation Overview
+<TR><TD><TD align="right">4<TD><TD align="left">Threading
+<TR><TD><TD align="right">5<TD><TD align="left">CPU Assignments
+<TR><TD><TD align="right">6<TD><TD align="left">Performance Measurements
+<TR><TD><TD align="right">8<TD><TD align="left">Experimental Performance Improvement for Small Read Sizes
+<TR><TD><TD align="right">17<TD><TD align="left">Performance Model
+<TR><TD><TD align="right">35<TD><TD align="left">SCST Issues Discovered (Summary)
+<TR><TD><TD align="right">35<TD><TD align="left">Sample top(1) Display
+<TR><TD><TD align="right">36<TD><TD align="left">Sample Content from /fuse/scst/proc/scsi_tgt
+<TR><TD><TD align="right">37<TD><TD align="left">Sample Logging (Startup, before scstadmin)
+<TR><TD><TD align="right">37<TD><TD align="left">Sample Logging (Startup, during scstadmin)
+<TR><TD><TD align="right">38<TD><TD align="left">Sample Logging (Startup, after scstadmin)
+<TR><TD><TD align="right">38<TD><TD align="left">Sample Logging (Shutdown, SIGINT-->exit)
+<TR><TD><TD align="right">39<TD><TD align="left">Initiator and Server Machine Settings
+<TR><TD><TD align="right">40<TD><TD align="left">Appendix: SCST Issues Discovered&nbsp;&nbsp;
+						 <A HREF="SCST.7005.FIXES.txt"><I>(patch)</I></A>
+</TABLE>
+
+<P>&nbsp;
+
+<P>
+<TABLE WIDTH=700 cellpadding=0% cellspacing=0% style="font-size: 10.5">
+<COL width="8%">
+<COL width="3%">
+<COL width="1%">
+<COL width="88%">
+<TR><TH align="left" rowspan="2" valign="top"><I>Diagrams (PDF)</I>
+        <TD align="right">1<TD><TD align="left"> <A HREF="SCST_iSCSI_datapath.pdf">
+	Datapath of SCST Configured with iSCSI and VDISK</A>
+<TR>    <TD align="right">3<TD><TD align="left"> <A HREF="SCST_usermode_service_map.pdf">
+	SCST Usermode Adaptation Service Map</A>
+<TR><TD><TD align="right">4<TD><TD align="left"> <A HREF="SCST_usermode_includes.pdf">
+	SCST Usermode Adaptation Compiler and Linker Inclusions</A>
+<TR><TD><TD align="right">21<TD><TD align="left"> <A HREF="iSCSI_OP_flow.pdf">
+	iSCSI Operation Flow</A>
+<TR><TD><TD align="right">23<TD><TD align="left"> <A HREF="pipeline_element8.pdf">
+	Abstracted Operation Pipeline Stages</A>
+<TR><TD><TD align="right">24<TD><TD align="left"> <A HREF="client_server.pdf">
+	Server / Remote Initiator: Network Round Trip</A>
+<TR><TD><TD align="right">26<TD><TD align="left"> <A HREF="RTT_blank.pdf">
+	Network Round Trip Template</A>
+<TR><TD><TD align="right">27<TD><TD align="left"> <A HREF="client_server_local.pdf">
+	Server / Local Initiator: External Loopback Network Round Trip</A>
+</TABLE>
+
+<P>&nbsp;
+
+<P>
+<TABLE WIDTH=700 cellpadding=3% cellspacing=0% style="font-size: 10.5">
+<COL width="100%">
+<TR><TH align="left" valign="top"><U>About the Author</U>
+<TR><TD>
+David Butterfield &nbsp;<I>[david.butterfield@acm.org]</I>&nbsp;
+began programming for usermode in 2008 after a prior gigasecond or so working on software in
+various versions of the Unix and Solaris kernels (or without any kernel).  He holds an MSc in
+Computer Science from UCLA, where his undergraduate degree was in Mathematics and Computer
+Science.
+<TR><TD>
+One of the founders of Locus Computing Corporation, he designed the first Virtual Machine
+Monitor for x86, to <I>"Merge"</I> MS-DOS and its applications under Unix SVR2; and led an
+engineering team in its implementation.  The <I>OS-Merge</I> product was first marketed by
+AT&amp;T under the name <I>"Simultask"</I> on their 6300+ (IBM AT clone) model.
+<I>[Sometime after his involvement that product evolved into two descendant products known as NeTraverse Merge and Win4Lin]</I>
+<TR><TD>
+He joined Sun Microsystems to establish and lead the first Solaris x86 device driver development
+team, later accepting an international assignment to Dublin, Ireland to start another driver
+engineering team there.
+<TR><TD>
+Back in the U.S., at LeftHand Networks he contributed many performance improvements to the SAN/iQ
+event-driven distributed storage application, introducing application-transparent
+multi-threading into the existing single-threaded event framework and devising other optimizations
+amounting in total to a 2.5x increase in throughput (IOPS) capability.  Some of his diagrams were
+said to inspire awe.
+<TR><TD>
+His most recent (unpaid) project is described in this paper.  He is presently looking for an
+interesting (well-paid) project.
+</TABLE>
