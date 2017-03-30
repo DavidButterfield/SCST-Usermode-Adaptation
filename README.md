@@ -11,7 +11,7 @@ iSCSI transport type, and SCSI Block Commands backed by either a file or a
 block device.
 
 A paper describing the work in detail is
-[here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/SCST_Usermode.html
+[here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_Usermode.html
        "A paper describing the work in detail is here").
 
 These are
