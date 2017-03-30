@@ -29,8 +29,8 @@ These are
 #### Diagrams showing the relationship between UMC, MTE, and Usermode SCST
 * * *
 ![SCST usermode service map](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/SCST_usermode_service_map.png
-                             "SCST Usermode Service Map")
+ "SCST Usermode Service Map")
 * * *
 ![SCST usermode header and library inclusions](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/SCST_usermode_includes.png
-                                               "SCST Usermode Header and Library Inclusions")
+ "SCST Usermode Header and Library Inclusions")
 * * *
