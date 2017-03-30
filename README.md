@@ -11,9 +11,11 @@ iSCSI transport type, and SCSI Block Commands backed by either a file or a
 block device.
 
 A paper describing the work in detail is
-[here](SCST_Usermode.html "A paper describing the work in detail is here").
+[here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/SCST_Usermode.html
+       "A paper describing the work in detail is here").
 
-[Patches for SCST to run in usermode](docs/index.html "Patches for SCST to run in usermode")
+[Patches for SCST to run in usermode](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/index.html
+				      "Patches for SCST to run in usermode")
 
 **The SCST iSCSI Usermode Adaptation depends on**
 [Multithreaded Event Engine](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
