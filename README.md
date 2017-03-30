@@ -18,14 +18,14 @@ A paper describing the work in detail is
 				      "Patches for SCST to run in usermode")
 
 **The SCST iSCSI Usermode Adaptation depends on**
- + [Multithreaded Event Engine](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
-    &mdash; a high-performance multi-threaded event dispatching engine for usermode
-
  + [Usermode Compatibility Module](https://github.com/DavidButterfield/usermode_compat
 				"Usermode Compatibility for Linux Kernel Code (UMC)")
     &mdash; A shim for running some Linux kernel code in usermode
 
-#### Diagrams showing the relationship between UMC, MTE, and SCST
+ + [Multithreaded Event Engine](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
+    &mdash; a high-performance multi-threaded event dispatching engine for usermode
+
+#### Diagrams showing the relationship between UMC, MTE, and Usermode SCST
 * * *
 ![SCST usermode service map](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/SCST_usermode_service_map.png
                              "SCST Usermode Service Map")
