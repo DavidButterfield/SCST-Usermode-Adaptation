@@ -15,7 +15,7 @@ A paper describing the work in detail is
        "A paper describing the work in detail is here").
 
 These are
-[Patches for SCST to run in usermode](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/index.html
+[patches for SCST to run in usermode](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/index.html
 				      "Patches for SCST to run in usermode")
 
 **The SCST iSCSI Usermode Adaptation depends on**
