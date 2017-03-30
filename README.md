@@ -20,7 +20,7 @@ A paper describing the work in detail is
 **The SCST iSCSI Usermode Adaptation depends on**
  + [Usermode Compatibility Module](https://github.com/DavidButterfield/usermode_compat
 				"Usermode Compatibility for Linux Kernel Code (UMC)")
-    &mdash; A shim for running some Linux kernel code in usermode
+    &mdash; a shim for running some Linux kernel code in usermode
 
  + [Multithreaded Event Engine](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
     &mdash; a high-performance multi-threaded event dispatching engine for usermode
