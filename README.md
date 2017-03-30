@@ -12,9 +12,9 @@ block device.
 
 ###### frob
 
-[A paper describing the work in detail is](SCST_Usermode.html here).
+[A paper describing the work in detail is](<SCST_Usermode.html> here).
 
-[Patches for SCST to run in usermode](docs/index.html Patches for SCST to run in usermode)
+[Patches for SCST to run in usermode](<docs/index.html> Patches for SCST to run in usermode)
 
 **The SCST iSCSI Usermode Adaptation depends on**
 [Multithreaded Event Engine](https://github.com/DavidButterfield/MTE Multithreaded Engine (libmte))
