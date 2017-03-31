@@ -4430,6 +4430,7 @@ int scst_acg_add_lun(struct scst_acg *acg, struct kobject *parent,
 		acg_dev->acg_dev_dif_guard_format = SCST_DIF_GUARD_FORMAT_CRC;
 	} else
 		acg_dev->acg_dev_dif_guard_format =
+		    acg->tgt &&	    /* sometimes NULL */
 			acg->tgt->tgt_hw_dif_ip_supported && !dev->dev_dif_ip_not_supported ?
 							SCST_DIF_GUARD_FORMAT_IP :
 							SCST_DIF_GUARD_FORMAT_CRC;
