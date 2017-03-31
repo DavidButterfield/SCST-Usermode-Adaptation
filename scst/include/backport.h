@@ -48,10 +48,12 @@
 /* <linux/blkdev.h> */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 31)
+#ifndef queue_max_hw_sectors
 static inline unsigned int queue_max_hw_sectors(struct request_queue *q)
 {
 	return q->max_hw_sectors;
 }
+#endif
 #endif
 
 /* <linux/compiler.h> */
@@ -204,13 +206,16 @@ static inline bool cpumask_equal(const cpumask_t *src1p,
 
 /* See also commit 0f8e0d9a317406612700426fad3efab0b7bbc467 */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 28)
+#ifndef DLM_LSFL_NEWEXCL
 enum {
 	DLM_LSFL_NEWEXCL = 0
 };
 #endif
+#endif
 
 /* <linux/fs.h> */
 
+#ifndef file_inode
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0) && \
 	!defined(CONFIG_COMPAT_KERNEL_3_12)
 /*
@@ -222,6 +227,7 @@ static inline struct inode *file_inode(const struct file *f)
 {
 	return f->f_dentry->d_inode;
 }
+#endif
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0)
@@ -239,10 +245,13 @@ static inline ssize_t vfs_writev_backport(struct file *file,
 {
 	return vfs_writev(file, vec, vlen, pos);
 }
+#undef vfs_readv
+#undef vfs_writev
 #define vfs_readv vfs_readv_backport
 #define vfs_writev vfs_writev_backport
 #endif
 
+#ifndef vfs_fsync
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 35)
 static inline int vfs_fsync_backport(struct file *file, int datasync)
 {
@@ -256,6 +265,7 @@ static inline int vfs_fsync_backport(struct file *file, int datasync)
 }
 
 #define vfs_fsync vfs_fsync_backport
+#endif
 #endif
 
 /* <linux/kernel.h> */
@@ -410,8 +420,10 @@ static inline bool list_entry_in_list(const struct list_head *entry)
 
 /* <linux/lockdep.h> */
 
+#ifndef lockdep_assert_held
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 32)
 #define lockdep_assert_held(l) (void)(l)
+#endif
 #endif
 
 /* <linux/kernel.h> */
@@ -426,6 +438,7 @@ static inline long get_user_pages_backport(unsigned long start,
 	return get_user_pages(current, current->mm, start, nr_pages, write,
 			      force, pages, vmas);
 }
+#undef get_user_pages
 #define get_user_pages get_user_pages_backport
 #endif
 
@@ -610,10 +623,12 @@ static inline void sg_init_table(struct scatterlist *sgl, unsigned int nents)
 	memset(sgl, 0, sizeof(*sgl) * nents);
 }
 
+#ifndef sg_assign_page
 static inline void sg_assign_page(struct scatterlist *sg, struct page *page)
 {
 	sg->page = page;
 }
+#endif
 
 static inline void sg_set_page(struct scatterlist *sg, struct page *page,
 			       unsigned int len, unsigned int offset)
@@ -686,11 +701,13 @@ char *kvasprintf(gfp_t gfp, const char *fmt, va_list ap);
  * See also patch "mm: add vzalloc() and vzalloc_node() helpers" (commit
  * e1ca7788dec6773b1a2bce51b7141948f2b8bccf).
  */
+#ifndef vzalloc
 static inline void *vzalloc(unsigned long size)
 {
 	return __vmalloc(size, GFP_KERNEL | __GFP_HIGHMEM | __GFP_ZERO,
 			 PAGE_KERNEL);
 }
+#endif
 #endif
 
 /* <linux/unaligned.h> */

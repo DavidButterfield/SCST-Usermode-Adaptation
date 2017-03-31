@@ -5500,6 +5500,7 @@ int scst_get_max_lun_commands(struct scst_session *sess, uint64_t lun);
 
 void scst_dev_inquiry_data_changed(struct scst_device *dev);
 
+#ifndef wait_event_locked
 /*
  * Has to be put here open coded, because Linux doesn't have equivalent, which
  * allows exclusive wake ups of threads in LIFO order. We need it to let (yet)
@@ -5542,6 +5543,7 @@ if (!(condition)) {							\
 	} while (!(condition));						\
 	finish_wait(&(wq), &__wait);					\
 }
+#endif
 
 /* Only use get_unaligned_be24() if reading p - 1 is allowed. */
 static inline uint32_t get_unaligned_be24(const uint8_t *const p)
