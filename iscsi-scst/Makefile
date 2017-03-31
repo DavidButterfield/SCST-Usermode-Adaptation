@@ -239,6 +239,9 @@ extraclean:
 		include/iscsi_scst_itf_ver.h \
 		kernel/*.orig kernel/*.rej \
 		kernel/isert-scst/*.orig kernel/isert-scst/*.rej
+	rm -rf conftest/*/*.ko conftest/*/*.mod.c conftest/*/Module.symvers conftest/*/*.o \
+                conftest/*/*.o.cmd conftest/*/*.ko.cmd conftest/*/.*.o.cmd conftest/*/.*.ko.cmd \
+                conftest/*/*.order conftest/*/.tmp_versions/
 
 2release:
 	sed -i.aa s/"^E\?XTRA_CFLAGS += \-DCONFIG_SCST_EXTRACHECKS"/"#EXTRA_CFLAGS += \-DCONFIG_SCST_EXTRACHECKS"/ $(KMOD)/Makefile
