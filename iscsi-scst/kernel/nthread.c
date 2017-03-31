@@ -599,7 +599,7 @@ static int close_conn_thr(void *arg)
 	close_conn(conn);
 
 	TRACE_EXIT();
-	return 0;
+	do_exit(0);
 }
 
 /* No locks */
