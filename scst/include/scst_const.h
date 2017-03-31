@@ -362,15 +362,23 @@ static inline int scst_sense_response_code(const uint8_t *sense)
 #define INIT_ELEMENT_STATUS         0x07
 #define INIT_ELEMENT_STATUS_RANGE   0x37
 #define PREVENT_ALLOW_MEDIUM        0x1E
+
+#ifndef READ_ATTRIBUTE
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 38) \
 	&& (!defined(RHEL_MAJOR) || RHEL_MAJOR -0 <= 5)
 #define READ_ATTRIBUTE              0x8C
 #endif
+#endif
+
 #define REQUEST_VOLUME_ADDRESS      0xB5
+
+#ifndef WRITE_ATTRIBUTE
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 38) \
 	&& (!defined(RHEL_MAJOR) || RHEL_MAJOR -0 <= 5)
 #define WRITE_ATTRIBUTE             0x8D
 #endif
+#endif
+
 #define WRITE_VERIFY_16             0x8E
 #define VERIFY_6                    0x13
 #ifndef VERIFY_12
@@ -478,12 +486,14 @@ static inline int scst_sense_response_code(const uint8_t *sense)
 #endif
 #endif
 
+#ifndef BLKDISCARD
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 28)
 /*
  * From <linux/fs.h>. See also commit
  * d30a2605be9d5132d95944916e8f578fcfe4f976.
  */
 #define BLKDISCARD _IO(0x12, 119)
+#endif
 #endif
 
 /*************************************************************
