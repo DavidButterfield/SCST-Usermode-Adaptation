@@ -508,8 +508,11 @@ again:
 	case IOSTATE_READ_BHS:
 	case IOSTATE_READ_AHS_DATA:
 	      read_again:
+		errno = 0;	/* for the log_debug() */
 		res = read(pollfd->fd, conn->buffer, conn->rwsize);
 		if (res <= 0) {
+			log_debug(1, "read(%u, %p, %u) returned %d, errno=%u",
+			      pollfd->fd, conn->buffer, conn->rwsize, res, errno);
 			if (res == 0 || (errno != EINTR && errno != EAGAIN)) {
 				conn->state = STATE_DROP;
 				goto out;
@@ -576,6 +579,8 @@ again:
 		conn->cork_transmit(pollfd->fd);
 		res = write(pollfd->fd, conn->buffer, conn->rwsize);
 		if (res < 0) {
+			log_debug(1, "write(%u, %p, %u) returned %d, errno=%u",
+			      pollfd->fd, conn->buffer, conn->rwsize, res, errno);
 			if (errno != EINTR && errno != EAGAIN) {
 				conn->state = STATE_DROP;
 				goto out;
@@ -746,7 +751,8 @@ static void event_loop(void)
 			    (conn->state == STATE_DROP)) {
 				struct session *sess = conn->sess;
 
-				log_debug(1, "closing conn %p", conn);
+				log_debug(1, "closing conn %p state=0x%x fd=%u",
+					  conn, conn->state, pollfd->fd);
 				conn_free_pdu(conn);
 				close(pollfd->fd);
 				pollfd->fd = -1;
