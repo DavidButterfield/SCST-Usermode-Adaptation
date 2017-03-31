@@ -5,6 +5,10 @@
 # removes any old dependencies. DON'T put your own dependencies here
 # unless it's something special (not a .c file).
 
+ifdef MAKE_INCLUDES
+include $(MAKE_INCLUDES)
+endif
+
 ifndef PREFIX
 	PREFIX=/usr/local
 endif
@@ -55,7 +59,12 @@ ifeq ($(INSTALL_MOD_PATH),)
 endif
 
 INSTALL_DIR := $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/extra
+
+ifndef SCST_USERMODE
 INFINIBAND_ENABLED = $(shell if grep -wq 'ib_register_client' $$(dirname "$(KDIR)")/modules.symbols; then echo true; else echo false; fi)
+else
+INFINIBAND_ENABLED := false
+endif
 
 all: progs mods
 
@@ -240,8 +249,8 @@ extraclean:
 		kernel/*.orig kernel/*.rej \
 		kernel/isert-scst/*.orig kernel/isert-scst/*.rej
 	rm -rf conftest/*/*.ko conftest/*/*.mod.c conftest/*/Module.symvers conftest/*/*.o \
-                conftest/*/*.o.cmd conftest/*/*.ko.cmd conftest/*/.*.o.cmd conftest/*/.*.ko.cmd \
-                conftest/*/*.order conftest/*/.tmp_versions/
+		conftest/*/*.o.cmd conftest/*/*.ko.cmd conftest/*/.*.o.cmd conftest/*/.*.ko.cmd \
+		conftest/*/*.order conftest/*/.tmp_versions/
 
 2release:
 	sed -i.aa s/"^E\?XTRA_CFLAGS += \-DCONFIG_SCST_EXTRACHECKS"/"#EXTRA_CFLAGS += \-DCONFIG_SCST_EXTRACHECKS"/ $(KMOD)/Makefile

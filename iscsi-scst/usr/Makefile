@@ -14,6 +14,10 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 #  GNU General Public License for more details.
 
+ifdef MAKE_INCLUDES
+include $(MAKE_INCLUDES)
+endif
+
 ifndef PREFIX
         PREFIX=/usr/local
 endif
@@ -35,7 +39,15 @@ CFLAGS += $(LOCAL_CFLAGS)
 PROGRAMS = iscsi-scstd iscsi-scst-adm
 LIBS =
 
+ifndef SCST_USERMODE
+# Make daemon code its own executable, to talk to implementation in real kernel
 all: $(PROGRAMS)
+else
+# Make a "library" of all the user daemon code, to be linked with the "kernel" code
+all: iscsi-scstlib.o iscsi-scst-adm
+iscsi-scstlib.o: .depend_d $(OBJS_D)
+	$(LD) $(OBJS_D) $(LOCAL_LD_FLAGS) -r -o $@
+endif
 
 iscsi-scstd: .depend_d $(OBJS_D)
 	$(CC) $(OBJS_D) $(LIBS) $(LOCAL_LD_FLAGS) -o $@
