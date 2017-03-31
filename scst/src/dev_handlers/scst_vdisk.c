@@ -112,7 +112,13 @@ static struct scst_trace_log vdisk_local_trace_tbl[] = {
 #define DEF_NV_CACHE			0
 #define DEF_O_DIRECT			0
 #define DEF_DUMMY			0
+
+#ifdef VALGRIND
+#define DEF_READ_ZERO			1
+#else
 #define DEF_READ_ZERO			0
+#endif
+
 #define DEF_REMOVABLE			0
 #define DEF_ROTATIONAL			1
 #define DEF_THIN_PROVISIONED		0
@@ -279,7 +285,9 @@ enum compl_status_e {
 
 typedef enum compl_status_e (*vdisk_op_fn)(struct vdisk_cmd_params *p);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
+#ifdef SCST_USERMODE			/* threads per LUN per session */
+#define DEF_NUM_THREADS		1	//XXXX TUNE
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
 #define DEF_NUM_THREADS		5
 #else
 /* Context RA patch supposed to be applied on the kernel */
@@ -6745,6 +6753,10 @@ static void vdisk_blk_add_dif(struct bio *bio, gfp_t gfp_mask,
 }
 #endif /* defined(CONFIG_BLK_DEV_INTEGRITY) */
 
+#ifdef SCST_USERMODE
+#define blkdev_issue_flush(bdev, xxx) (-EPERM)
+#endif
+
 static void blockio_exec_rw(struct vdisk_cmd_params *p, bool write, bool fua)
 {
 	struct scst_cmd *cmd = p->cmd;
@@ -10409,6 +10421,9 @@ static int vdisk_write_proc(char *buffer, char **start, off_t offset,
 				TRACE_DBG("%s", "NULLIO");
 			} else if (!strncmp("BLOCKIO", p, 7)) {
 				p += 7;
+#if defined(SCST_USERMODE) && !defined(SCST_USERMODE_AIO)
+				WARN_ON(SCST_USERMODE, "BLOCKIO ignored");
+#else
 				virt_dev->blockio = 1;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 				res = vdisk_create_bioset(virt_dev);
@@ -10421,6 +10436,7 @@ static int vdisk_write_proc(char *buffer, char **start, off_t offset,
 					(int)sizeof(virt_dev->t10_vend_id) - 1,
 					SCST_BIO_VENDOR);
 				TRACE_DBG("%s", "BLOCKIO");
+#endif
 			} else if (!strncmp("REMOVABLE", p, 9)) {
 				p += 9;
 				virt_dev->removable = 1;
@@ -10908,7 +10924,8 @@ static void init_ops(vdisk_op_fn *ops, int count)
 static int __init vdev_check_mode_pages_path(void)
 {
 	int res;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+#ifdef SCST_USERMODE                   /* path_lookup() --> access(2) */
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
 	struct nameidata nd;
 #else
 	struct path path;
@@ -10919,7 +10936,10 @@ static int __init vdev_check_mode_pages_path(void)
 
 	set_fs(KERNEL_DS);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+#ifdef SCST_USERMODE                   /* path_lookup() --> access(2) */
+       res = UMC_kernelize(access(VDEV_MODE_PAGES_DIR, F_OK));
+       expect_noerr(res, "access(%s)", VDEV_MODE_PAGES_DIR);
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
 	res = path_lookup(VDEV_MODE_PAGES_DIR, 0, &nd);
 	if (res == 0)
 		scst_path_put(&nd);

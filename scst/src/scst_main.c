@@ -47,12 +47,14 @@ option or use a 64-bit configuration instead. See README file for \
 details.
 #endif
 
+#ifndef SCST_USERMODE			/* no scst_exec_req_fifo patch warning */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 30) && \
 	!defined(SCSI_EXEC_REQ_FIFO_DEFINED) &&	     \
 	!defined(CONFIG_SCST_STRICT_SERIALIZING)
 #warning Patch scst_exec_req_fifo-<kernel-version> was not applied on \
 your kernel and CONFIG_SCST_STRICT_SERIALIZING is not defined. \
 Pass-through dev handlers will not work.
+#endif
 #endif
 
 /**
@@ -2558,7 +2560,11 @@ static int __init init_scst(void)
 	/* ToDo: register_cpu_notifier() */
 
 	if (scst_threads == 0)
+#ifdef SCST_USERMODE
+		scst_threads = 1;		//XXX TUNE
+#else
 		scst_threads = scst_num_cpus;
+#endif
 
 	if (scst_threads < 1) {
 		PRINT_ERROR("%s", "scst_threads can not be less than 1");

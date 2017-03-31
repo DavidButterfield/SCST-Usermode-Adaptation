@@ -23,6 +23,13 @@
 #include <linux/module.h>
 #include <net/sock.h>
 
+#ifdef SCST_USERMODE			/* resolve symbol conflicts */
+  extern void iscsi_conn_rd_wakeup_handler(void *, uintptr_t, errno_t);
+  /* Rename some kernel-code symbols that conflict with daemon-code symbols */
+  #define conn_free                     SCST_kconn_free
+  #define session_free                  SCST_ksession_free
+#endif
+
 #ifdef INSIDE_KERNEL_TREE
 #include <scst/scst.h>
 #include <scst/iscsi_scst.h>
@@ -194,6 +201,8 @@ struct iscsi_session {
 #define ISCSI_CONN_RD_STATE_IDLE		0
 #define ISCSI_CONN_RD_STATE_IN_LIST		1
 #define ISCSI_CONN_RD_STATE_PROCESSING		2
+#define ISCSI_CONN_RD_STATE_WAKING		10
+#define ISCSI_CONN_RD_STATE_AWAKE		11
 
 #define ISCSI_CONN_WR_STATE_IDLE		0
 #define ISCSI_CONN_WR_STATE_IN_LIST		1
@@ -284,6 +293,18 @@ struct iscsi_conn {
 	spinlock_t rd_lock;
 	#define conn_rd_lock(conn)	spin_lock_bh(  &(conn)->rd_lock)
 	#define conn_rd_unlock(conn)	spin_unlock_bh(&(conn)->rd_lock)
+
+#ifdef SCST_USERMODE
+	uint8_t tcp_nagle;		/* current socket TCP_NODELAY state */
+	unsigned long cpu_busy_count[4];    /* reads done in IDLE-BUSY cycle */
+	unsigned int cpu_busy_idx;
+	/* stats */
+	unsigned long cpu_idles;	    /* since last stats print */
+	unsigned long max_cpu_busy_count;   /* since last stats print */
+	unsigned long stat_cpu_busy_count;  /* since last stats print */
+	unsigned long read_nodelay;	    /* reads done while NODELAY set */
+	unsigned long read_nagle;	    /* reads done while NODELAY unset */
+#endif
 
 	struct list_head rd_list_entry;
 
