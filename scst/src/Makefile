@@ -27,10 +27,6 @@
 #    - install and uninstall must be made as root
 #
 
-ifdef MAKE_INCLUDES
-include $(MAKE_INCLUDES)
-endif
-
 ifndef PREFIX
         PREFIX=/usr/local
 endif
@@ -47,20 +43,16 @@ obj-m := scst.o
 scst-y        += scst_main.o
 scst-y        += scst_targ.o
 scst-y        += scst_lib.o
+#scst-y        += scst_proc.o
+scst-y        += scst_sysfs.o
 scst-y        += scst_mem.o
 scst-y        += scst_debug.o
 scst-y        += scst_pres.o
 scst-y        += scst_no_dlm.o
-scst-y        += scst_tg.o
-scst-y        += scst_copy_mgr.o
-ifndef SCST_USERMODE
-scst-y        += scst_sysfs.o
 scst-y        += scst_dlm.o
+scst-y        += scst_tg.o
 scst-y        += scst_event.o
-else
-scst-y        += scst_proc.o
-endif
-
+scst-y        += scst_copy_mgr.o
 obj-$(CONFIG_SCST)   += scst.o dev_handlers/
 
 obj-$(BUILD_DEV) += $(DEV_HANDLERS_DIR)/

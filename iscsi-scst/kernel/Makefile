@@ -20,10 +20,6 @@
 #
 #  Note 2! The CFLAGS definitions are now in the main makefile.
 
-ifdef MAKE_INCLUDES
-include $(MAKE_INCLUDES)
-endif
-
 cc-option = $(shell if $(CC) $(CFLAGS) $(1) -S -o /dev/null -xc /dev/null \
              > /dev/null 2>&1; then echo "$(1)"; else echo "$(2)"; fi ;)
 enable-Wextra = $(shell uname_r="$$(uname -r)"; if [ "$${uname_r%.el5}" = "$${uname_r}" ]; then echo "$(1)"; fi)
@@ -41,11 +37,6 @@ EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG -g -fno-inline -fno-inline-functions
 
 obj-m		+= iscsi-scst.o
 iscsi-scst-objs	:= iscsi.o nthread.o config.o digest.o \
-	conn.o session.o target.o param.o \
+	conn.o session.o target.o event.o param.o \
 	iscsit_transport.o
 
-ifndef SCST_USERMODE
-iscsi-scst-objs	:= $(iscsi-scst-objs) event.o
-else
-iscsi-scst-objs	:= $(iscsi-scst-objs) scst_compat.o
-endif

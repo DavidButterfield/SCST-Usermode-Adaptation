@@ -1,7 +1,3 @@
-ifdef MAKE_INCLUDES
-include $(MAKE_INCLUDES)
-endif
-
 iscsi-scst-y += config.o
 iscsi-scst-y += conn.o
 iscsi-scst-y += digest.o
@@ -13,9 +9,4 @@ iscsi-scst-y += param.o
 iscsi-scst-y += session.o
 iscsi-scst-y += target.o
 
-ifndef SCST_USERMODE
 obj-$(CONFIG_SCST_ISCSI) += iscsi-scst.o isert-scst/
-else
-iscsi-scst-y += scst_compat.o
-obj-$(CONFIG_SCST_ISCSI) += iscsi-scst.o
-endif

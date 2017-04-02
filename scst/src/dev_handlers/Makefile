@@ -27,16 +27,10 @@
 #    - install and uninstall must be made as root
 #
 
-ifdef MAKE_INCLUDES
-include $(MAKE_INCLUDES)
-endif
-
 SHELL=/bin/bash
 
 ifneq ($(PATCHLEVEL),)
 SCST_INC_DIR := $(SUBDIRS)/../include
-
-ifndef SCST_USERMODE
 
 obj-m := scst_cdrom.o scst_changer.o scst_disk.o scst_modisk.o scst_tape.o \
 	scst_vdisk.o scst_raid.o scst_processor.o scst_user.o
@@ -50,13 +44,6 @@ obj-$(CONFIG_SCST_RAID)		+= scst_raid.o
 obj-$(CONFIG_SCST_PROCESSOR)	+= scst_processor.o
 obj-$(CONFIG_SCST_VDISK)	+= scst_vdisk.o
 obj-$(CONFIG_SCST_USER)		+= scst_user.o
-
-else # SCST_USERMODE
-
-obj-m := scst_vdisk.o
-obj-$(CONFIG_SCST_VDISK)	+= scst_vdisk.o
-
-endif # SCST_USERMODE
 
 else
 ######### BEGIN OUT-OF-TREE RULES #########
