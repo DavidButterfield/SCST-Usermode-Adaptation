@@ -128,7 +128,9 @@ WFLAGS_INHIBIT += -Wno-unused-parameter		# silly
 
 ################################################################################
 
-MY_CFLAGS += -g -D_GNU_SOURCE $(WFLAGS_WARN) $(WFLAGS_INHIBIT)
+SHELL=/bin/bash
+
+MY_CFLAGS += -g -fPIC -D_GNU_SOURCE $(WFLAGS_WARN) $(WFLAGS_INHIBIT)
 
 # EXTRA_CFLAGS is used in kernel makefiles
 export EXTRA_CFLAGS += $(MY_CFLAGS)
