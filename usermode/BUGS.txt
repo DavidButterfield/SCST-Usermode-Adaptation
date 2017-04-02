@@ -1,0 +1,24 @@
+Bugs, observations, notes, etc...
+================================================================================
+
+This can be ignored:
+    cannot find isert_scst in /proc/devices - make sure the module is loaded
+
+================================================================================
+
+After starting "scst.out -f", pressing CTRL-C (SIGINT) is intended to initiate
+a graceful shutdown; however it sometimes requires pressing repeatedly before
+the shutdown eventually engages.  Once it has engaged it then shuts down in the
+intended manner.  (It only engages once, so it's OK to repeat the key quickly.)
+
+================================================================================
+
+If scstadmin gives this:
+    Failed to obtain SCST version information. Is the scst module loaded?
+
+Then try this
+    fusermount -u /fuse/scst/proc
+
+================================================================================
+
+
