@@ -97,7 +97,7 @@ WFLAGS_WARN += -Wbad-function-cast
 WFLAGS_WARN += -Wmissing-declarations
 WFLAGS_WARN += -Wmissing-prototypes
 WFLAGS_WARN += -Wnested-externs
-WFLAGS_WARN += -Wswitch-enum
+# WFLAGS_WARN += -Wswitch-enum		#  XXXXX when debugs on
 
 ### Inhibit (or leave unenabled) some warnings for now because they are too noisy today
 						# Number of Warnings
