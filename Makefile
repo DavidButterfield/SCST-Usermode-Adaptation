@@ -54,6 +54,8 @@ EMULEX_DIR=emulex
 
 ISCSI_DIR=iscsi-scst
 
+SCST_USERMODE_DIR=usermode
+
 REVISION ?= $(shell if svn info >/dev/null 2>&1;			 \
 		    then svn info | sed -n 's/^Revision:[[:blank:]]*//p';\
 		    else git log | grep -c ^commit;			 \
@@ -194,6 +196,7 @@ clean:
 	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
 	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
 	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
+	@if [ -d $(SCST_USERMODE_DIR) ]; then cd $(SCST_USERMODE_DIR) && $(MAKE) $@; fi
 
 extraclean:
 	-rm -f TAGS tags cscope.out
@@ -209,6 +212,11 @@ extraclean:
 	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
 	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
 	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
+	@if [ -d $(SCST_USERMODE_DIR) ]; then cd $(SCST_USERMODE_DIR) && $(MAKE) $@; fi
+
+.PHONY: usermode
+usermode:
+	@if [ -d $(SCST_USERMODE_DIR) ]; then cd $(SCST_USERMODE_DIR) && $(MAKE) all; fi
 
 tags:
 	find . -type f -name "*.[ch]" | ctags --c-kinds=+p --fields=+iaS --extra=+q -e -L-

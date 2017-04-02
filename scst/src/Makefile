@@ -36,23 +36,30 @@ SHELL=/bin/bash
 DEV_HANDLERS_DIR = dev_handlers
 
 ifneq ($(PATCHLEVEL),)
+
+ifndef	SCST_INC_DIR
 SCST_INC_DIR := $(SUBDIRS)/../include
+endif
 
 obj-m := scst.o
 
 scst-y        += scst_main.o
 scst-y        += scst_targ.o
 scst-y        += scst_lib.o
-#scst-y        += scst_proc.o
-scst-y        += scst_sysfs.o
 scst-y        += scst_mem.o
 scst-y        += scst_debug.o
 scst-y        += scst_pres.o
 scst-y        += scst_no_dlm.o
-scst-y        += scst_dlm.o
 scst-y        += scst_tg.o
-scst-y        += scst_event.o
 scst-y        += scst_copy_mgr.o
+ifndef SCST_USERMODE
+scst-y        += scst_sysfs.o
+scst-y        += scst_dlm.o
+scst-y        += scst_event.o
+else
+scst-y        += scst_proc.o
+endif
+
 obj-$(CONFIG_SCST)   += scst.o dev_handlers/
 
 obj-$(BUILD_DEV) += $(DEV_HANDLERS_DIR)/
@@ -92,6 +99,8 @@ $(SCST_INTF_VER_FILE): $(SCST_INC_DIR)/scst.h $(SCST_INC_DIR)/scst_const.h $(SCS
 	echo "\"`sha1sum $(SCST_INC_DIR)/scst_const.h|awk '{printf $$1}'`\"" >>$(SCST_INTF_VER_FILE)
 	echo -n "#define DEV_USER_INTF_VER " >>$(SCST_INTF_VER_FILE)
 	echo "\"`sha1sum $(SCST_INC_DIR)/scst_user.h|awk '{printf $$1}'`\"" >>$(SCST_INTF_VER_FILE)
+
+ifndef	SCST_USERMODE #################### 
 
 all: $(SCST_INTF_VER_FILE)
 	$(MAKE) -C $(KDIR) SUBDIRS=$(shell pwd) BUILD_DEV=m
@@ -146,8 +155,35 @@ uninstall:
 	-/sbin/depmod -b $(INSTALL_MOD_PATH)/ -a $(KVER)
 	rm -rf $(INSTALL_DIR_H)
 
+else	########## SCST_USERMODE ##########
+
+PATCHLEVEL=UMC
+include Makefile
+
+all:	mods
+
+mods:	$(SCST_INTF_VER_FILE)
+	$(MAKE) -C . modules
+
+modules:    $(obj-m)
+
+$(obj-m):   $(scst-y)
+	$(LD) -r -o $@ $(scst-y)
+
+%.o: %.c
+	$(CC) -c -o $(@) -I$(SCST_INC_DIR) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+
+install: all
+
+uninstall:
+
+endif	########## SCST_USERMODE ##########
+
 ########## END OUT-OF-TREE RULES ##########
 endif
+
+ifndef BEEN_HERE
+BEEN_HERE = 1
 
 INSTALL_DIR := $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/extra
 INSTALL_DIR_H := $(DESTDIR)$(PREFIX)/include/scst
@@ -242,5 +278,7 @@ enable_proc:
 	sed -i.aa s/"^s\?cst\-y        += scst_sysfs.o"/"#scst\-y        += scst_sysfs.o"/ Makefile
 	grep "^#scst\-y        += scst_sysfs.o" Makefile >/dev/null
 	rm Makefile.aa
+
+endif	# BEEN_HERE
 
 .PHONY: all install uninstall clean extraclean 2release 2debug 2perf disable_proc enable_proc
