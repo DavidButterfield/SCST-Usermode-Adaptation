@@ -27,8 +27,8 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
  + A little more work would be required to run on architectures other than x86
  + Possibly less work would be needed to run on non-Linux POSIX systems having gcc and the libraries
  + It shouldn't matter much, but I have only tested with these:
-        - Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
-        - Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
+    * Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
+    * Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
 
 **Hints to help get started running iSCSI-SCST in usermode**  
 
