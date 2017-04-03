@@ -26,7 +26,8 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 	- Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
 	- Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
 
-**Hints to help get started running Usermode SCST**   
+**Hints to help get started running Usermode SCST**
+
 	sudo apt install libaio-dev		# required
 	sudo apt install libfuse-dev		# required
 	sudo apt install subversion		# or git accessor of your choice
