@@ -45,21 +45,21 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       $ svn co https://github.com/DavidButterfield/usermode_compat.git UMC            # UMC
       $ svn co https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git SCST  # SCST
 
-      $ pushd MTE/trunk/src         # build the Multithreaded Engine library
+      $ pushd MTE/trunk/src             # build the Multithreaded Engine library
       $ make
-      $ sudo make install           # needs permission for /lib, /usr/include
+      $ sudo make install               # needs permission for /lib, /usr/include
       $ popd
 
       $ cd SCST/trunk/usermode
-      $ make                        # build the SCST iSCSI server binary
-      $ ls -l scst.out              # in SCST/trunk/usermode/
+      $ make                            # build the SCST iSCSI server binary
+      $ ls -l scst.out                  # in SCST/trunk/usermode/
 
       ### Patch SCST.pm (used by scstadmin) to know where /fuse/scst/proc is:
       ### +++/usr/local/share/perl/*/SCST/SCST.pm
       ### -my $_SCST_DIR_ =           '/proc/scsi_tgt';
       ### +my $_SCST_DIR_ = '/fuse/scst/proc/scsi_tgt';
 
-      $ [ gdb | valgrind ] scst.out -f   # run as normal user, with or without accessories
+      $ [ gdb | valgrind ] scst.out -f  # run as normal user, with or without accessories
 In another terminal window
 
       # scstadmin -config /etc/scst.conf
