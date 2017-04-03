@@ -21,7 +21,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
     &mdash; a shim for running some Linux kernel code in usermode
  + [Multithreaded Engine (MTE)](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
     &mdash; a high-performance multi-threaded event dispatching engine for usermode
- + The SCST files here comprise a snapshot of scst/ and iscsi-scst/
+ + The SCST files in this repository comprise a snapshot of scst/ and iscsi-scst/
    [https://sourceforge.net/projects/scst/](https://sourceforge.net/projects/scst "SCST svn -r7105")
    at svn -r7105.
  + A little work would be required to run on architectures other than x86
