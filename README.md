@@ -28,39 +28,32 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 
 **Simplest way to get started running Usermode SCST**  
 
-	sudo apt install subversion	    # if you don't have these packages
-	sudo apt install cscope
-	sudo apt install exuberant-ctags
-	sudo apt install libaio-dev
-	sudo apt install libfuse-dev
+	sudo apt install libaio-dev		# required
+	sudo apt install libfuse-dev		# required
+	sudo apt install subversion		# or git accessor of your choice
+	sudo apt install cscope			# (optional with makefile edit)
+	sudo apt install exuberant-ctags	# (optional with makefile edit)
 
-	mkdir Usermode_SCST	# or whatever name you want
-	cd    Usermode_SCST
-
+	mkdir Usermode_SCST ; cd Usermode_SCST	# or whatever name you want
 	svn co https://github.com/DavidButterfield/MTE.git MTE
 	svn co https://github.com/DavidButterfield/usermode_compat.git UMC
 	svn co https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git SCST
 
 	pushd MTE/trunk/src	    # make the Multithreaded Engine library
-	make; sudo make install	    # install needs permission to add to /lib and /usr/include
+	make
+	sudo make install	    # needs permission for /lib, /usr/include
 	popd
 
-	pushd SCST/trunk/usermode   # make the SCST iSCSI server binary
-	make
+	cd SCST/trunk/usermode
+	make			    # make the SCST iSCSI server binary
+	ls -l scst.out		    # in SCST/trunk/usermode/
 
 	# Patch SCST.pm (used by scstadmin) to know where /fuse/scst/proc is:
 	# +++/usr/local/share/perl/*/SCST/SCST.pm
 	# -my $_SCST_DIR_ =           '/proc/scsi_tgt';
 	# +my $_SCST_DIR_ = '/fuse/scst/proc/scsi_tgt';
 
-	SCST/trunk/usermode/scst.out -f
-or
-
-	gdb SCST/trunk/usermode/scst.out -f
-or
-
-	valgrind SCST/trunk/usermode/scst.out -f
-	
+	[ gdb | valgrind ] scst.out -f
 In another terminal window
 
 	scstadmin -config /etc/scst.conf
