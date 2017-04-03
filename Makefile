@@ -196,7 +196,6 @@ clean:
 	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
 	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
 	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SCST_USERMODE_DIR) ]; then cd $(SCST_USERMODE_DIR) && $(MAKE) $@; fi
 
 extraclean:
 	-rm -f TAGS tags cscope.out
@@ -212,7 +211,6 @@ extraclean:
 	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
 	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
 	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SCST_USERMODE_DIR) ]; then cd $(SCST_USERMODE_DIR) && $(MAKE) $@; fi
 
 .PHONY: usermode
 usermode:

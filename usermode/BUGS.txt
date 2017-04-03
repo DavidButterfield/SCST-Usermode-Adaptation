@@ -1,6 +1,19 @@
 Bugs, observations, notes, etc...
 ================================================================================
 
+If switching between making a kernel-based SCST build and making a Usermode
+build in the same set of directories, issue "make extraclean" between.
+
+================================================================================
+
+Three workspaces are needed.  Makefile defaults work if they are set up under
+a common directory thus:
+    SCST/trunk	    UMC/trunk	    MTE/trunk
+
+Otherwise environment variables can be used to specify where they are.
+
+================================================================================
+
 This can be ignored:
     cannot find isert_scst in /proc/devices - make sure the module is loaded
 
@@ -20,5 +33,3 @@ Then try this
     fusermount -u /fuse/scst/proc
 
 ================================================================================
-
-

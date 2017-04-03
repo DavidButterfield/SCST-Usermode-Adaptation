@@ -147,21 +147,33 @@ export KVER = __NONE__
 USERMODELIB = $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.o
 GCCLDFLAGS = -Wl,-z,now -Wl,-O1
 
-all:	scst.out
+all:	cscope check_mte
+	$(MAKE) scst.out
 
-scst.out:   components
+usermode: all
+
+COMPONENTS=\
+	$(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o \
+	$(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o \
+	$(USERMODELIB)
+
+scst.out:   $(COMPONENTS)
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
-	$(CC) -o scst.out $(GCCLDFLAGS) \
-		$(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o \
-		$(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o \
-		$(USERMODELIB) -lmte -lpthread -laio -ldl -lfuse -lc
+	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) -lmte -lpthread -laio -ldl -lfuse -lc
 
-components: cscope check_mte
-	$(MAKE) -C $(USERMODE_LIB_SRC) all			    # usermode compatibility (UMC) library
-	$(MAKE) -C $(SCST_SRC)/scst all				    # SCST CORE
+$(USERMODELIB):
+	$(MAKE) -C $(USERMODE_LIB_SRC) all	    # usermode compatibility (UMC) library
+
+$(SCST_SRC)/scst/src/scst.o:
+	$(MAKE) -C $(SCST_SRC)/scst all		    # SCST CORE
+
+$(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o:
 	$(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o   # SCST-VDISK
-	$(MAKE) -C $(SCST_SRC)/iscsi-scst all			    # iSCSI-SCST
+
+$(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o:
+$(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o:
+	$(MAKE) -C $(SCST_SRC)/iscsi-scst all	    # iSCSI-SCST
 
 check_mte:
 	# The libmte.so module should have been installed in /lib or somewhere .so files can be found
@@ -174,10 +186,13 @@ valgrind:
 	valgrind $(VALGRIND_OPTS) ./scst.out -f
 
 clean:
-	rm -rf scst.out scst_usermode.o
+	rm -rf scst.out
+	make -C .. $@
 
-extraclean: clean
+extraclean:
+	rm -rf scst.out
 	rm -rf tags cscope.out
+	make -C .. $@
 
 cscope:
 	@cscope -b -c -R -s$(USERMODE_LIB_SRC) -s$(SCST_SRC) -s$(SYS_SERVICE_INCL)
@@ -189,3 +204,4 @@ ls:
 l:
 	@ls -lsrtad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) $(SYS_SERVICE_INCL) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
 
+.PHONY:	all components check_mte valgrind clean extraclean cscope ls l

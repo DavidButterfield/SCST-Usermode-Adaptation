@@ -250,6 +250,9 @@ uninstall:
 		$(DESTDIR)$(MANDIR)/man8/iscsi-scst-adm.8 \
 		# $(DESTDIR)$(SBINDIR)/iscsi-scstd \
 
+KMOD := $(shell pwd)/kernel
+KDIR=$(KMOD)
+
 endif	########## SCST_USERMODE ##########
 
 include/iscsi_scst_itf_ver.h: include/iscsi_scst.h
