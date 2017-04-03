@@ -7,7 +7,7 @@ This project adapts the SCST iSCSI storage server software, normally resident
 in the Linux kernel, to run entirely in usermode on an unmodified kernel.  The
 resulting executable can run as a regular (non-super) user, as long as it has
 permission to access the backing storage.  A paper describing the work and
-performance measurements is
+performance study is
 [here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_Usermode.html
        "A paper describing the work in detail").
 
@@ -25,7 +25,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
    [https://sourceforge.net/projects/scst](https://sourceforge.net/projects/scst "SCST svn -r7105")
    /scst and /iscsi-scst at svn -r7105.
  + A little work would be required to run on architectures other than x86
- + Possibly even less work would be needed to run on non-Linux POSIX systems with gcc and libraries
+ + Possibly even less work would be needed to run on non-Linux POSIX systems having gcc and the libraries
  + It shouldn't matter much, but I have only tested with these:
 	- Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
 	- Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
@@ -37,10 +37,12 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       # apt install subversion		# or github accessor of your choice
       # apt install cscope		# (optional with makefile edit)
       # apt install exuberant-ctags	# (optional with makefile edit)
+      # mkdir -p /fuse/scst/proc	# mount point for SCST's /proc
+      # chmod 777 /fuse/scst/proc	# (not sure this is needed)
 
-      $ mkdir Usermode_SCST ; cd Usermode_SCST	# or use whatever name you want
+      $ mkdir Usermode_SCST ; cd Usermode_SCST   # or use whatever name you want
       $ svn co https://github.com/DavidButterfield/MTE.git MTE      # simpler if named: MTE
-      $ svn co https://github.com/DavidButterfield/usermode_compat.git UMC	      # UMC
+      $ svn co https://github.com/DavidButterfield/usermode_compat.git UMC            # UMC
       $ svn co https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git SCST  # SCST
 
       $ pushd MTE/trunk/src	    # build the Multithreaded Engine library
@@ -60,7 +62,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       $ [ gdb | valgrind ] scst.out -f	 # run as normal user, with or without accessories
 In another terminal window
 
-      # scstadmin -config /etc/scst.conf    # conf file formatted for /proc
+      # scstadmin -config /etc/scst.conf
       # ls -l `find /fuse -type f`
 #### Diagrams showing the relationship between UMC, MTE, and Usermode SCST
 * * *
