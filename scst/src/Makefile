@@ -163,7 +163,7 @@ include Makefile
 all:	mods
 
 mods:	$(SCST_INTF_VER_FILE)
-	$(MAKE) -C . modules
+	$(MAKE) modules
 
 modules:    $(obj-m)
 

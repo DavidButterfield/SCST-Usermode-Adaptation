@@ -147,21 +147,25 @@ export KVER = __NONE__
 USERMODELIB = $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.o
 GCCLDFLAGS = -Wl,-z,now -Wl,-O1
 
-all:
-	$(MAKE) cscope
-	# The libmte.so module should have been installed in /lib or somewhere .so files can be found
-	bash -c "if [[ ! -f /lib/libmte.so ]] ; then $(MAKE) -C $(MTE_SRC) all; fi"
-	$(MAKE) -C $(USERMODE_LIB_SRC) all
-	$(MAKE) -C $(SCST_SRC)/scst all
-	$(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o
-	$(MAKE) -C $(SCST_SRC)/iscsi-scst all
-	#
+all:	scst.out
+
+scst.out:   components
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
 	$(CC) -o scst.out $(GCCLDFLAGS) \
 		$(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o \
 		$(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o \
 		$(USERMODELIB) -lmte -lpthread -laio -ldl -lfuse -lc
+
+components: cscope check_mte
+	$(MAKE) -C $(USERMODE_LIB_SRC) all			    # usermode compatibility (UMC) library
+	$(MAKE) -C $(SCST_SRC)/scst all				    # SCST CORE
+	$(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o   # SCST-VDISK
+	$(MAKE) -C $(SCST_SRC)/iscsi-scst all			    # iSCSI-SCST
+
+check_mte:
+	# The libmte.so module should have been installed in /lib or somewhere .so files can be found
+	bash -c "if [[ ! -f /lib/libmte.so ]] ; then $(MAKE) -C $(MTE_SRC) all; fi"
 
 ################################################################################
 
@@ -176,9 +180,6 @@ extraclean: clean
 	rm -rf tags cscope.out
 
 cscope:
-	@$(MAKE) -j1 -C . _cscope
-
-_cscope:
 	@cscope -b -c -R -s$(USERMODE_LIB_SRC) -s$(SCST_SRC) -s$(SYS_SERVICE_INCL)
 	@ctags        -R   $(USERMODE_LIB_SRC)   $(SCST_SRC)   $(SYS_SERVICE_INCL)
 
