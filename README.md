@@ -55,6 +55,8 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       $ make                                # build the SCST iSCSI server binary
       $ ls -l scst.out                      # in SCST/trunk/usermode/
 
+      ### Create /etc/scst.conf and /etc/iscsi-scst.conf files (See BUGS.txt and *.sample)
+
       ### Patch SCST.pm (used by scstadmin) to know where /fuse/scst/proc is:
       ### +++/usr/local/share/perl/*/SCST/SCST.pm
       ### -my $_SCST_DIR_ =           '/proc/scsi_tgt';

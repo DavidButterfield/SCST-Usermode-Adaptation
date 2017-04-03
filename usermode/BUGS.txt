@@ -17,7 +17,7 @@ Otherwise environment variables can be used to specify where they are.
 Install needs to work right for usermode.  There needs to be a way to get the
 manpages, conf files, and other accessories installed along with the usermode
 build without attempting anything on the kernel.  The files /etc/scst.conf and
-/etc/iscsi-scst.conf need to exist to run the server.  See example files in
+/etc/iscsi-scst.conf need to exist to run the server.  See *.sample files in
 SCST/trunk/usermode/.
 
 ================================================================================
