@@ -6,15 +6,13 @@ An adaptation of the iSCSI-SCST storage server software to run entirely in userm
 This project adapts the SCST iSCSI storage server software, normally resident
 in the Linux kernel, to run entirely in usermode on an unmodified kernel.  The
 resulting executable can run as a regular (non-super) user, as long as it has
-permission to access the backing storage.
+permission to access the backing storage.  A paper describing the work in detail is
+[here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_Usermode.html
+       "A paper describing the work in detail").
 
 The adaptation uses about 80,000 lines of the SCST source code, a subset
 supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 (vdisk_fileio) backed by either a file or a block device.
-
-A paper describing the work in detail is
-[here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_Usermode.html
-       "A paper describing the work in detail").
 
 **The SCST iSCSI Usermode Adaptation depends on**
  + [Usermode Compatibility (UMC)](https://github.com/DavidButterfield/usermode_compat
@@ -22,14 +20,13 @@ A paper describing the work in detail is
     &mdash; a shim for running some Linux kernel code in usermode
  + [Multithreaded Event Engine (MTE)](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
     &mdash; a high-performance multi-threaded event dispatching engine for usermode
- + A little work would be required to run on architectures other than x86.
- + Probably even less work would be required to run on non-Linux POSIX systems with gcc.
- + It shouldn't care much (above kernel 2.6.24), but I have only tested with these:
+ + A little work would be required to run on architectures other than x86
+ + Possibly even less work would be required to run on non-Linux POSIX systems with gcc
+ + It shouldn't matter much (>= kernel 2.6.24), but I have only tested with these:
 	- Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
 	- Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
 
 **Simplest way to get started running Usermode SCST**  
-
 	sudo apt install subversion	    # if you don't have these packages
 	sudo apt install cscope
 	sudo apt install exuberant-ctags
@@ -56,13 +53,14 @@ A paper describing the work in detail is
 	# +my $_SCST_DIR_ = '/fuse/scst/proc/scsi_tgt';
 
 	SCST/trunk/usermode/scst.out -f
-    or
+or
 	gdb SCST/trunk/usermode/scst.out -f
-    or
+or
 	valgrind SCST/trunk/usermode/scst.out -f
 	
-	scstadmin -config /etc/scst.conf    # in another terminal window
-
+In another terminal window
+	scstadmin -config /etc/scst.conf
+	ls -l `find /fuse -type f`
 #### Diagrams showing the relationship between UMC, MTE, and Usermode SCST
 * * *
 ![SCST usermode service map](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_usermode_service_map.png
