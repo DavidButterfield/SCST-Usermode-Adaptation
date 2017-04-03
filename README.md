@@ -44,6 +44,8 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       $ svn co https://github.com/DavidButterfield/usermode_compat.git UMC
       $ svn co https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git SCST
 
+      $ more SCST/trunk/usermode/BUGS.txt   # ** MORE HINTS **
+
       $ pushd MTE/trunk/src                 # build the Multithreaded Engine library
       $ make
       $ sudo make install                   # needs permission for /lib, /usr/include

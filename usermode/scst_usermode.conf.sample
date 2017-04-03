@@ -1,0 +1,38 @@
+# Example simple /etc/scst.conf file for Usermode SCST
+[OPTIONS]
+KEEP_CONFIG TRUE
+ISSUE_LIP FALSE
+
+[HANDLER vdisk]
+#DEVICE <vdisk name>,<device path>,<options>,<block size>,<t10 device id>
+DEVICE null_NULLIO,/dev/zero,NULLIO,512,N000
+DEVICE zero_ZERO,/dev/zero,NV_CACHE,512,Z000
+
+DEVICE disk_sda5,/dev/sda5,,4096,sda5
+
+DEVICE file_c1,/tmp/disk_c1,NV_CACHE,512,F_c1
+DEVICE file_c2,/tmp/disk_c2,NV_CACHE,512,F_c2
+
+[GROUP Default]
+
+[GROUP cian]
+USER iqn.1993-08.org.debian:01:9778279657b7
+USER iqn.1991-05.com.microsoft:borgcube
+
+[ASSIGNMENT Default]
+DEVICE null_NULLIO,0
+DEVICE zero_ZERO,1
+
+[ASSIGNMENT cian]
+DEVICE null_NULLIO,0
+DEVICE zero_ZERO,1
+DEVICE disk_sda5,11
+DEVICE file_c1,31
+DEVICE file_c2,32
+
+[TARGETS enable]
+#HOST <wwn identifier>
+
+[TARGETS disable]
+#HOST <wwn identifier>
+

@@ -1,0 +1,24 @@
+# Example simple /etc/iscsi-scstd.conf file for Usermode SCST
+
+Target iqn.2001-04.com.example.blackbox:1
+	QueuedCommands 2048
+	RspTimeout 90
+	NOPInInterval 30
+	NOPInTimeout 30
+	MaxSessions 0
+	InitialR2T No
+	ImmediateData Yes
+	MaxConnections 1
+	MaxRecvDataSegmentLength 16773120
+	MaxXmitDataSegmentLength 16773120
+	MaxBurstLength 16773120
+	FirstBurstLength 16773120
+	DefaultTime2Wait 0
+	DefaultTime2Retain 0
+	MaxOutstandingR2T 8
+	DataPDUInOrder Yes
+	DataSequenceInOrder Yes
+	ErrorRecoveryLevel 0
+	HeaderDigest None
+	DataDigest None
+
