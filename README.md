@@ -18,15 +18,16 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
  + [Usermode Compatibility (UMC)](https://github.com/DavidButterfield/usermode_compat
 				"Usermode Compatibility for Linux Kernel Code (UMC)")
     &mdash; a shim for running some Linux kernel code in usermode
- + [Multithreaded Event Engine (MTE)](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
+ + [Multithreaded Engine (MTE)](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
     &mdash; a high-performance multi-threaded event dispatching engine for usermode
  + A little work would be required to run on architectures other than x86
- + Possibly even less work would be required to run on non-Linux POSIX systems with gcc
- + It shouldn't matter much (>= kernel 2.6.24), but I have only tested with these:
+ + Possibly even less work would be required to run on non-Linux POSIX systems with gcc and libraries
+ + It shouldn't matter much, but I have only tested with these:
 	- Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
 	- Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
 
 **Simplest way to get started running Usermode SCST**  
+
 	sudo apt install subversion	    # if you don't have these packages
 	sudo apt install cscope
 	sudo apt install exuberant-ctags
@@ -54,11 +55,14 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 
 	SCST/trunk/usermode/scst.out -f
 or
+
 	gdb SCST/trunk/usermode/scst.out -f
 or
+
 	valgrind SCST/trunk/usermode/scst.out -f
 	
 In another terminal window
+
 	scstadmin -config /etc/scst.conf
 	ls -l `find /fuse -type f`
 #### Diagrams showing the relationship between UMC, MTE, and Usermode SCST
