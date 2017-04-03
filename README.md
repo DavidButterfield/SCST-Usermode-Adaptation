@@ -14,7 +14,7 @@ The adaptation uses about 80,000 lines of the SCST source code, a subset
 supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 (vdisk_fileio) backed by either a file or a block device.
 
-**The SCST iSCSI Usermode Adaptation depends on**
+**The SCST iSCSI Usermode Adaptation depends on**  
  + [Usermode Compatibility (UMC)](https://github.com/DavidButterfield/usermode_compat
 				"Usermode Compatibility for Linux Kernel Code (UMC)")
     &mdash; a shim for running some Linux kernel code in usermode
@@ -34,10 +34,10 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 	sudo apt install cscope			# (optional with makefile edit)
 	sudo apt install exuberant-ctags	# (optional with makefile edit)
 
-	mkdir Usermode_SCST ; cd Usermode_SCST	# or whatever name you want
-	svn co https://github.com/DavidButterfield/MTE.git MTE
-	svn co https://github.com/DavidButterfield/usermode_compat.git UMC
-	svn co https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git SCST
+	mkdir Usermode_SCST ; cd Usermode_SCST	# or use whatever name you want
+	svn co https://github.com/DavidButterfield/MTE.git MTE   # simpler if use these names: MTE
+	svn co https://github.com/DavidButterfield/usermode_compat.git UMC	             # UMC
+	svn co https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git SCST         # SCST
 
 	pushd MTE/trunk/src	    # make the Multithreaded Engine library
 	make
@@ -67,7 +67,8 @@ In another terminal window
 "SCST Usermode Header and Library Inclusions")
 * * *
 
-#### Diagram showing the SCST datapath (either usermode or kernel-resident)
+**Diagram showing the datapath of SCST configured with iSCSI and vdisk_fileio**  
+(either usermode or kernel-resident)
 * * *
 ![SCST datapath](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_iSCSI_datapath.png
  "SCST Usermode Service Map")
