@@ -25,6 +25,12 @@ ifndef SYS_SERVICE_INCL
 export SYS_SERVICE_INCL = $(MY_SRC)/MTE/trunk/include
 endif
 
+# If libmte (Multithreaded Engine) is not installed on the system, this is
+# where its source code is.
+ifndef MTE_SRC
+export MTE_SRC = $(MY_SRC)/MTE/trunk/src
+endif
+
 # Path to the "emulated Linux KPI 2.6.24" usermode compatibility library
 ifndef USERMODE_LIB_SRC
 USERMODE_LIB_SRC = $(MY_SRC)/UMC/trunk/src
@@ -144,40 +150,37 @@ export SCST_INC_DIR := $(CURDIR)/../scst/include
 export src := .
 export KVER = __NONE__
 
-USERMODELIB = $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.o
 GCCLDFLAGS = -Wl,-z,now -Wl,-O1
 
 all:	cscope check_mte
+	$(MAKE) -C $(USERMODE_LIB_SRC) all	    			# UMC library
 	$(MAKE) scst.out
 
 usermode: all
 
-COMPONENTS=\
-	$(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o \
-	$(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o \
-	$(USERMODELIB)
+COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o \
+	      $(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o
+
+USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.o
 
 scst.out:   $(COMPONENTS)
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
-	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) -lmte -lpthread -laio -ldl -lfuse -lc
-
-$(USERMODELIB):
-	$(MAKE) -C $(USERMODE_LIB_SRC) all	    # usermode compatibility (UMC) library
+	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte -lpthread -laio -ldl -lfuse -lc
 
 $(SCST_SRC)/scst/src/scst.o:
-	$(MAKE) -C $(SCST_SRC)/scst all		    # SCST CORE
+	$(MAKE) -C $(SCST_SRC)/scst all					# SCST CORE
 
 $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o:
-	$(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o   # SCST-VDISK
+	$(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o	# SCST-VDISK
 
-$(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o:
+$(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o \
 $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o:
-	$(MAKE) -C $(SCST_SRC)/iscsi-scst all	    # iSCSI-SCST
+	$(MAKE) -C $(SCST_SRC)/iscsi-scst all				# iSCSI-SCST
 
 check_mte:
 	# The libmte.so module should have been installed in /lib or somewhere .so files can be found
-	bash -c "if [[ ! -f /lib/libmte.so ]] ; then $(MAKE) -C $(MTE_SRC) all; fi"
+	if [[ ! -f /lib/libmte.so ]] ; then $(MAKE) -C $(MTE_SRC) install; fi
 
 ################################################################################
 
