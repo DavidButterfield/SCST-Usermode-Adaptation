@@ -17,7 +17,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 
 **The SCST iSCSI Usermode Adaptation depends on**  
  + [Usermode Compatibility (UMC)](https://github.com/DavidButterfield/usermode_compat
-				"Usermode Compatibility for Linux Kernel Code (UMC)")
+                                 "Usermode Compatibility for Linux Kernel Code (UMC)")
     &mdash; a shim for running some Linux kernel code in usermode
  + [Multithreaded Engine (MTE)](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
     &mdash; a high-performance multi-threaded event dispatching engine for usermode
@@ -27,30 +27,30 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
  + A little more work would be required to run on architectures other than x86
  + Possibly less work would be needed to run on non-Linux POSIX systems having gcc and the libraries
  + It shouldn't matter much, but I have only tested with these:
-	- Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
-	- Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
+        - Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
+        - Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
 
 **Hints to help get started running iSCSI-SCST in usermode**  
 
-      # apt install libaio-dev		    # required
-      # apt install libfuse-dev		    # required
-      # apt install subversion		    # or github accessor of your choice
-      # apt install cscope		    # (optional with makefile edit)
-      # apt install exuberant-ctags	    # (optional with makefile edit)
+      # apt install libaio-dev              # required
+      # apt install libfuse-dev             # required
+      # apt install subversion              # or github accessor of your choice
+      # apt install cscope                  # (optional with makefile edit)
+      # apt install exuberant-ctags         # (optional with makefile edit)
 
       $ mkdir Usermode_SCST ; cd Usermode_SCST   # or use whatever name you want for this one
       $ svn co https://github.com/DavidButterfield/MTE.git MTE   # Makefile expects these names
       $ svn co https://github.com/DavidButterfield/usermode_compat.git UMC
       $ svn co https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git SCST
 
-      $ pushd MTE/trunk/src		    # build the Multithreaded Engine library
+      $ pushd MTE/trunk/src                 # build the Multithreaded Engine library
       $ make
-      $ sudo make install		    # needs permission for /lib, /usr/include
+      $ sudo make install                   # needs permission for /lib, /usr/include
       $ popd
 
       $ cd SCST/trunk/usermode
-      $ make				    # build the SCST iSCSI server binary
-      $ ls -l scst.out			    # in SCST/trunk/usermode/
+      $ make                                # build the SCST iSCSI server binary
+      $ ls -l scst.out                      # in SCST/trunk/usermode/
 
       ### Patch SCST.pm (used by scstadmin) to know where /fuse/scst/proc is:
       ### +++/usr/local/share/perl/*/SCST/SCST.pm
