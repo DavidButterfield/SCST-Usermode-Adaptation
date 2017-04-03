@@ -20,14 +20,10 @@ A paper describing the work in detail is
  + [Usermode Compatibility (UMC)](https://github.com/DavidButterfield/usermode_compat
 				"Usermode Compatibility for Linux Kernel Code (UMC)")
     &mdash; a shim for running some Linux kernel code in usermode
-
  + [Multithreaded Event Engine (MTE)](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
     &mdash; a high-performance multi-threaded event dispatching engine for usermode
-
  + A little work would be required to run on architectures other than x86.
-
  + Probably even less work would be required to run on non-Linux POSIX systems with gcc.
-
  + It shouldn't care much (above kernel 2.6.24), but I have only tested with these:
 	- Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
 	- Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
