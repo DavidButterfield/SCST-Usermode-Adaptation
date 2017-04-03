@@ -6,7 +6,8 @@ An adaptation of the iSCSI-SCST storage server software to run entirely in userm
 This project adapts the SCST iSCSI storage server software, normally resident
 in the Linux kernel, to run entirely in usermode on an unmodified kernel.  The
 resulting executable can run as a regular (non-super) user, as long as it has
-permission to access the backing storage.  A paper describing the work in detail is
+permission to access the backing storage.  A paper describing the work and
+performance measurements is
 [here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_Usermode.html
        "A paper describing the work in detail").
 
