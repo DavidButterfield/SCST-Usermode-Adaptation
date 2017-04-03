@@ -26,8 +26,9 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 	- Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
 	- Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
 
-**Simplest way to get started running Usermode SCST**  
+**Hints to help get started running Usermode SCST**  
 
+	<SMALL>
 	sudo apt install libaio-dev		# required
 	sudo apt install libfuse-dev		# required
 	sudo apt install subversion		# or git accessor of your choice
@@ -58,6 +59,7 @@ In another terminal window
 
 	scstadmin -config /etc/scst.conf
 	ls -l `find /fuse -type f`
+	</SMALL>
 #### Diagrams showing the relationship between UMC, MTE, and Usermode SCST
 * * *
 ![SCST usermode service map](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_usermode_service_map.png
