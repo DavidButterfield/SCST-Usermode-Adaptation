@@ -58,3 +58,10 @@ A paper describing the work in detail is
 ![SCST usermode header and library inclusions](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_usermode_includes.png
 "SCST Usermode Header and Library Inclusions")
 * * *
+
+#### Diagram showing the SCST datapath (either usermode or kernel-resident)
+* * *
+![SCST datapath](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_iSCSI_datapath.png
+ "SCST Usermode Service Map")
+* * *
+
