@@ -4,15 +4,17 @@ An adaptation of the iSCSI-SCST storage server software to run entirely in userm
 *David A. Butterfield*
 
 This project adapts the SCST iSCSI storage server software, normally resident
-in the Linux kernel, to run entirely in usermode on an unmodified kernel.
+in the Linux kernel, to run entirely in usermode on an unmodified kernel.  The
+resulting executable can run as a regular (non-super) user, as long as it has
+permission to access the backing storage.
 
-The adaptation uses about 80,000 lines of SCST code, a subset supporting the
-iSCSI transport type, and SCSI Block Commands backed by either a file or a
-block device.
+The adaptation uses about 80,000 lines of the SCST source code, a subset
+supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
+(vdisk_fileio) backed by either a file or a block device.
 
 A paper describing the work in detail is
 [here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_Usermode.html
-       "A paper describing the work in detail is here").
+       "A paper describing the work in detail").
 
 **The SCST iSCSI Usermode Adaptation depends on**
  + [Usermode Compatibility (UMC)](https://github.com/DavidButterfield/usermode_compat
@@ -22,9 +24,17 @@ A paper describing the work in detail is
  + [Multithreaded Event Engine (MTE)](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
     &mdash; a high-performance multi-threaded event dispatching engine for usermode
 
-**Things to do to get started running Usermode SCST**
+ + A little work would be required to run on architectures other than x86.
 
-	sudo apt install subversion
+ + Probably even less work would be required to run on non-Linux POSIX systems with gcc.
+
+ + It shouldn't care much (above kernel 2.6.24), but I have only tested with these:
+	- Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
+	- Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
+
+**Simplest way to get started running Usermode SCST**  
+
+	sudo apt install subversion	    # if you don't have these packages
 	sudo apt install cscope
 	sudo apt install exuberant-ctags
 	sudo apt install libaio-dev
@@ -37,18 +47,25 @@ A paper describing the work in detail is
 	svn co https://github.com/DavidButterfield/usermode_compat.git UMC
 	svn co https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git SCST
 
-	pushd MTE/trunk/src
-	make; sudo make install		# adds to /lib and /usr/include
+	pushd MTE/trunk/src	    # make the Multithreaded Engine library
+	make; sudo make install	    # install needs permission to add to /lib and /usr/include
 	popd
 
-	pushd SCST/trunk/usermode
+	pushd SCST/trunk/usermode   # make the SCST iSCSI server binary
 	make
-	popd
 
-	# Patch scst_admin to know where /fuse/scst/proc is
+	# Patch SCST.pm (used by scstadmin) to know where /fuse/scst/proc is:
+	# +++/usr/local/share/perl/*/SCST/SCST.pm
+	# -my $_SCST_DIR_ =           '/proc/scsi_tgt';
+	# +my $_SCST_DIR_ = '/fuse/scst/proc/scsi_tgt';
 
 	SCST/trunk/usermode/scst.out -f
-	scstadmin -config /etc/scst.conf	XXXXX
+    or
+	gdb SCST/trunk/usermode/scst.out -f
+    or
+	valgrind SCST/trunk/usermode/scst.out -f
+	
+	scstadmin -config /etc/scst.conf    # in another terminal window
 
 #### Diagrams showing the relationship between UMC, MTE, and Usermode SCST
 * * *
