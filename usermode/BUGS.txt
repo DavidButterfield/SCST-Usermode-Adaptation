@@ -33,3 +33,9 @@ Then try this
     fusermount -u /fuse/scst/proc
 
 ================================================================================
+
+If you forget to create /fuse writable by the user running scst.out, it should
+fail gracefully instead of stupidly.
+
+================================================================================
+

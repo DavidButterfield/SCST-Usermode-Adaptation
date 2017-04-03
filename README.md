@@ -37,8 +37,6 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       # apt install subversion          # or github accessor of your choice
       # apt install cscope              # (optional with makefile edit)
       # apt install exuberant-ctags     # (optional with makefile edit)
-      # mkdir -p /fuse/scst/proc        # mount point for SCST's /proc
-      # chmod 777 /fuse/scst/proc       # (not sure this is needed)
 
       $ mkdir Usermode_SCST ; cd Usermode_SCST   # or use whatever name you want
       $ svn co https://github.com/DavidButterfield/MTE.git MTE      # simpler if named: MTE
@@ -59,7 +57,13 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       ### -my $_SCST_DIR_ =           '/proc/scsi_tgt';
       ### +my $_SCST_DIR_ = '/fuse/scst/proc/scsi_tgt';
 
-      $ [ gdb | valgrind ] scst.out -f  # run as normal user, with or without accessories
+      # mkdir -p  /var/lib/scst/vdev_mode_pages /var/lib/scst/pr
+      # chmod 777 /var/lib/scst/vdev_mode_pages	/var/lib/scst/pr # or otherwise writable by scst's UID
+
+      # mkdir -p /fuse/scst/proc ; chmod 777 /fuse/scst/proc     # mount point for SCST's /proc
+      ### Edit /etc/fuse.conf and uncomment the line with "user_allow_other"
+
+      $ [ gdb | valgrind ] ./scst.out -f  # run as normal user, with or without accessories
 In another terminal window
 
       # scstadmin -config /etc/scst.conf
