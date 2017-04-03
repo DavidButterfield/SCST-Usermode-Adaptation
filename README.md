@@ -30,7 +30,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 	- Linux 3.13.0-101-generic #148-Ubuntu SMP x86_64
 	- Linux 4.4.0-70-generic    #91-Ubuntu SMP x86_64 GNU/Linux
 
-**Hints to help get started running iSCSI-SCST in usermode**
+**Hints to help get started running iSCSI-SCST in usermode**  
 
       # apt install libaio-dev          # required
       # apt install libfuse-dev         # required
@@ -58,7 +58,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       ### +my $_SCST_DIR_ = '/fuse/scst/proc/scsi_tgt';
 
       # mkdir -p  /var/lib/scst/vdev_mode_pages /var/lib/scst/pr
-      # chmod 777 /var/lib/scst/vdev_mode_pages	/var/lib/scst/pr # or otherwise writable by scst's UID
+      # chmod 777 /var/lib/scst/vdev_mode_pages /var/lib/scst/pr # or otherwise writable by scst's UID
 
       # mkdir -p /fuse/scst/proc ; chmod 777 /fuse/scst/proc     # mount point for SCST's /proc
       ### Edit /etc/fuse.conf and uncomment the line with "user_allow_other"
