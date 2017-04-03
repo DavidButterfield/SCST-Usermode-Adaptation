@@ -67,7 +67,7 @@ In another terminal window
 "SCST Usermode Header and Library Inclusions")
 * * *
 
-**Diagram showing the datapath of SCST configured with iSCSI and vdisk_fileio**  
+**Diagram showing the datapath of SCST configured with iSCSI and vdisk_fileio**
 (either usermode or kernel-resident)
 * * *
 ![SCST datapath](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_iSCSI_datapath.png
