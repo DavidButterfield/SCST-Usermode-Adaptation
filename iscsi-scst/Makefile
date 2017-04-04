@@ -219,12 +219,8 @@ else	########## SCST_USERMODE ##########
 # Second pass we are in iscsi-scst/kernel and get the Makefile therein
 -include ../kernel/Makefile	    # set the object component variables
 
-all: progs mods
-
-progs: include/iscsi_scst_itf_ver.h
+all: include/iscsi_scst_itf_ver.h
 	$(MAKE) -C usr
-
-mods: include/iscsi_scst_itf_ver.h
 	$(MAKE) -C kernel -f ../Makefile modules
 
 modules:    $(obj-m)
