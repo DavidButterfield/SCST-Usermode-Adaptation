@@ -57,13 +57,9 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       $ make                                # build the SCST iSCSI server binary
       $ ls -l scst.out                      # in SCST/trunk/usermode/
 
-      ### Create /etc/scst.conf and /etc/iscsi-scst.conf files in SCST /proc format (See *.sample)
-
       # make scstadm_install		    # patched to know where /fuse/scst/proc is
 
-      ### +++/usr/local/share/perl/*/SCST/SCST.pm
-      ### -my $_SCST_DIR_ =           '/proc/scsi_tgt';
-      ### +my $_SCST_DIR_ = '/fuse/scst/proc/scsi_tgt';
+      ### Manually create /etc/iscsi-scst.conf and /etc/scst_usermode.conf in SCST /proc format (See *.sample)
 
       # mkdir -p  /var/lib/scst/vdev_mode_pages /var/lib/scst/pr
       # chmod 777 /var/lib/scst/vdev_mode_pages /var/lib/scst/pr   # or otherwise writable by SCST's UID
@@ -74,7 +70,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       $ [ gdb | valgrind ] ./scst.out -f    # run as normal user, with or without accessories
 In another terminal window
 
-      # scstadmin -config /etc/scst.conf
+      # scstadmin -config /etc/scst_usermode.conf
       # ls -l `find /fuse -type f`
 #### Diagrams showing the relationship between UMC, MTE, and Usermode SCST
 * * *
