@@ -1553,6 +1553,7 @@ static int scst_prepare_space(struct scst_cmd *cmd)
 		else if (r == 0) {
 			if (unlikely(cmd->bufflen == 0)) {
 				/* See comment in scst_alloc_space() */
+				//XXX There is no comment in scst_alloc_space()
 				if (cmd->sg == NULL)
 					goto alloc;
 			}

@@ -83,6 +83,7 @@ static struct scst_trace_log vdisk_local_trace_tbl[] = {
 #define SCST_FIO_VENDOR			"SCST_FIO"
 #define SCST_BIO_VENDOR			"SCST_BIO"
 /* 4 byte ASCII Product Revision Level - left aligned */
+	   //XXX Is SCST_FIO_REV really "left aligned" here?
 #define SCST_FIO_REV			" 330"
 
 #define MAX_USN_LEN			(20+1) /* For '\0' */
@@ -2094,7 +2095,12 @@ static int vdisk_format_dif(struct scst_cmd *cmd, uint64_t start_lba,
 			res = err;
 			goto out_set_fs;
 		} else if (err < full_len) {
-			/*
+			/* If a write() is interrupted by a signal handler before
+			 * any bytes are written, then the call fails with the
+			 * error EINTR; if it is interrupted after at least one
+			 * byte has been written, the call succeeds, and returns
+			 * the number of bytes written  --  manpage write(2)
+			 *
 			 * Probably that's wrong, but sometimes write() returns
 			 * value less, than requested. Let's restart.
 			 */
