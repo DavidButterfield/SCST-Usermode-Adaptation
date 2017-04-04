@@ -66,7 +66,7 @@ MY_CFLAGS += -DCONN_SIRQ_READ		    # Drive read directly off data_ready callback
 # MY_CFLAGS += -DSCST_USERMODE_AIO	    # Prototype implemention of blockio using AIO
 
 # Select /proc model rather than /sys model (simulating 2.6.24, which has no sysfs)
-MY_CFLAGS += -DCONFIG_SCST_PROC
+# MY_CFLAGS += -DCONFIG_SCST_PROC	    # this gets set in other Makefiles
 
 ifdef SYS_SERVICE_INCL
 MY_CFLAGS += -I$(SYS_SERVICE_INCL)
