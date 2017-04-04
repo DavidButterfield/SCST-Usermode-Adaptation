@@ -49,7 +49,7 @@
 #define CONFIG_SCST_PER_DEVICE_CMD_COUNT_LIMIT
 #endif
 
-/* #define CONFIG_SCST_PROC */
+#define CONFIG_SCST_PROC
 
 #ifdef CONFIG_SCST_PROC
 #include <linux/proc_fs.h>
