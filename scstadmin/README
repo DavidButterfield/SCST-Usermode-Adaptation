@@ -1,0 +1,273 @@
+SCST Configuration/Administration scripts. Here you'll find scstadmin which reads
+a configuration file /etc/scst.conf, or one if your choosing. With it you can manually
+or automatically configure every aspect of SCST incuding enabling/disabling target mode
+on your target SCSI controller. The old directory contains scst_db which uses a mysql
+backend database to configure SCST but doesn't handle all the things scstadmin handles.
+The perl module SCST::SCST is very generic and tries to handle error checking as well.
+
+The init script was written for debian but should work on most distributions.
+
+
+	scstadmin.sysfs
+			Use this version if you've disabled procfs support in SCST.
+	scstadmin.procfs
+			This is the default version which uses the older procfs.
+
+	scst-0.8.22	This is the SCST Perl module required by scstadmin and scst_db.
+	scst-0.9.00	This is the SCST Perl module to be used with SCST compiled
+                        for sysfs. Note, the current version of scstadmin will NOT yet
+                        work with this module.
+
+	scstadmin	Script which can accept operations on a command line or from
+			a configuration file. See scst.conf. For command help,
+				#> scstadmin
+
+	scst.conf	Configuration file for scst script. Usually stored
+			in /etc.
+
+	examples	Configuration examples.
+
+	init.d/scst	Init script to start SCST on boot which uses scstadmin.
+
+
+INSTALLING
+----------
+
+Now do the normal:
+
+make
+make install
+
+This installs scstadmin, the init.d script and the perl module. If you want SCST to
+startup and configure automatically upon boot, enable SCST using your favorite
+SysV init editor.
+
+NOTE: The init.d startup & shutdown scripts now depend on lsb-core. Ensure you have
+lsb-core installed or 'make install' will fail. Make sure /usr/lib/lsb/install_initd
+exists.
+
+
+GETTING HELP
+------------
+
+The new scstadmin has many more options than the olde procfs version to see
+them, type:
+
+scstadmin --help
+
+
+CONVERTING FROM PROCFS (scst version 1.x)
+-----------------------------------------
+
+The new scstadmin uses a different configuration file format. However,
+scstadmin will convert your old configuration file for you. No special
+arguments are required, simply:
+
+scstadmin -config <old config file>
+
+Take note of warnings issued by scstadmin. Manually fix configuration
+errors using scstadmin. Once you're satisfied your running configuration is
+what you expect, save it by typing:
+
+scstadmin -write_config <new config file>
+
+Be sure to review this new configuration file to ensure it matches.
+
+
+CREATING A CONFIGURATION FROM SCRATCH
+-------------------------------------
+
+* DEVICES *
+
+Devices are defined by their handler. Commonly used handlers are dev_disk,
+dev_cdrom, vdisk_fileio, vdisk_blockio and vcdrom.
+
+To list all the available handlers, type:
+
+scstadmin -list_handler
+
+Physical devices used for passthrough handlers like dev_disk and dev_cdrom
+are defined by their H:C:I:L :
+
+HANDLER dev_disk {
+	DEVICE 1:0:0:0
+}
+
+HANDLER dev_cdrom {
+	DEVICE 2:0:0:0
+}
+
+Virtual devices are opened through special CREATE attributes. For example, a 
+virtual disk named "disk1" pointing to a disk partition /dev/hda1 would be look
+like:
+
+HANDLER vdisk_fileio {
+	DEVICE disk1 {
+		filename /dev/hda1
+	}
+}
+
+To list all the available CREATE attributes for a given handler, type:
+
+scstadmin -list_hnd_attr <handler>
+
+* ASSIGNING DEVICES TO TARGET AND INITIATORS *
+
+Now we can assign the device to a target driver. To get a list of available
+drivers, type:
+
+scstadmin -list_driver
+
+To list all available targets, type:
+
+scstadmin -list_target
+
+Now we can build our configuration assigning disk1 to LUN 0 for all initiators:
+
+TARGET_DRIVER qla2x00t {
+	TARGET 25:00:00:f0:98:87:92:f3 {
+		LUN 0 disk1
+
+		enabled 1
+	}
+}
+
+NOTE: We added the attribute "enabled" and set it to "1". Without this attribute
+set to 1, this target will be disabled and no initiators have access to its
+LUNs.
+
+This assigns disk1 to LUN 0 using default attributes. To list all available LUN
+CREATE attributes, type:
+
+scstadmin -list_tgt_attr <target> -driver <driver>
+
+An example would be to use the CREATE attribute "read_only" to force the LUN to
+be read-only:
+
+TARGET_DRIVER qla2x00t {
+	TARGET 25:00:00:f0:98:87:92:f3 {
+		LUN 0 disk1 {
+			read_only 1
+		}
+
+		# Assign LUN 1 to passthrough device 1:0:0:0
+		LUN 1 1:0:0:0
+
+		enabled 1
+	}
+}
+
+Since LUNs 0 and 1 will now be available to all targets, we may want to
+establish groups to restrict which LUNs are available to which initiators.
+To do that, we use the GROUP clause within the TARGET clause:
+
+TARGET_DRIVER qla2x00t {
+	TARGET 25:00:00:f0:98:87:92:f3 {
+		GROUP production {
+			LUN 0 disk1 {
+				read_only 1
+			}
+
+			INITIATOR 25:00:00:f0:99:87:94:a3
+		}
+
+		GROUP development {
+			LUN 0 1:0:0:0
+			INITIATOR 25:00:00:f0:99:87:94:a4
+		}
+
+		# Allow a CDROM device to be LUN 1 for all initiators
+		LUN 1 2:0:0:0
+
+		enabled 1
+	}
+}
+
+For drivers which support virtual targets, like iSCSI, scstadmin will simply
+create them on the fly:
+
+TARGET_DRIVER iscsi {
+	enabled 1
+
+	IncomingUser "joe 12charsecret"
+
+	TARGET iqn.2006-10.net.vlnb:tgt {
+		IncomingUser "joe 12charsecret"
+
+		LUN 0 disk1
+
+		enabled 1
+	}
+}
+
+Notice we included a new attribute "IncomingUser" This is a dynamic attribute
+which allows an initiator to scan for LUNs, if added at the driver level, and
+attach to LUNs if added at the target level. To retrieve a list of available
+driver dynamic attributes, type:
+
+scstadmin -list_drv_attr <driver>
+
+To retrieve a list of available target dynamic attributes, type:
+
+scstadmin -list_tgt_attr <target> -driver <driver>
+
+Other attributes called non-key attributes may also be defined, assuming they
+are writable. These can be listed using any of the above -list commands using
+the extra -nonkey option:
+
+scstadmin -list_tgt_attr <target> -driver <driver> -nonkey
+
+* EXAMPLE CONFIGURATION *
+
+A complete configuration using the above examples would look like:
+
+HANDLER dev_disk {
+	DEVICE 1:0:0:0
+}
+
+HANDLER dev_cdrom {
+	DEVICE 2:0:0:0
+}
+
+HANDLER vdisk_fileio {
+	DEVICE disk1 {
+		filename /dev/hda1
+	}
+}
+
+TARGET_DRIVER qla2x00t {
+	TARGET 25:00:00:f0:98:87:92:f3 {
+		GROUP production {
+			LUN 0 disk1 {
+				read_only 1
+			}
+
+			INITIATOR 25:00:00:f0:99:87:94:a3
+		}
+
+		GROUP development {
+			LUN 0 1:0:0:0
+			INITIATOR 25:00:00:f0:99:87:94:a4
+		}
+
+		# Allow a CDROM device to be LUN 1 for all initiators
+		LUN 1 2:0:0:0
+
+		enabled 1
+	}
+}
+
+TARGET_DRIVER iscsi {
+	enabled 1
+
+	IncomingUser "joe 12charsecret"
+
+	TARGET iqn.2006-10.net.vlnb:tgt {
+		IncomingUser "joe 12charsecret"
+
+		LUN 0 disk1
+
+		enabled 1
+	}
+}
+
