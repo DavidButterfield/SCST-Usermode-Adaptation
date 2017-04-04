@@ -10,7 +10,7 @@ use IO::File;
 use strict;
 use Carp qw(cluck);
 
-my $_SCST_DIR_           = '/proc/scsi_tgt';
+my $_SCST_DIR_           = '/fuse/scst/proc/scsi_tgt';
 my $_SCST_IO_            = $_SCST_DIR_.'/scsi_tgt';
 my $_SCST_VDISK_IO_      = $_SCST_DIR_.'/vdisk/vdisk';
 my $_SCST_VCDROM_IO_     = $_SCST_DIR_.'/vcdrom/vcdrom';
