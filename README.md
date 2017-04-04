@@ -16,10 +16,10 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 (vdisk_fileio) backed by either a file or a block device.
 
 **The SCST iSCSI Usermode Adaptation depends on**  
- + [Usermode Compatibility (UMC)](https://github.com/DavidButterfield/usermode_compat
+ + [Usermode Compatibility (UMC)](https://github.com/DavidButterfield/usermode_compat#user-content-usermode_compat
                                  "Usermode Compatibility for Linux Kernel Code (UMC)")
     &mdash; a shim for running some Linux kernel code in usermode
- + [Multithreaded Engine (MTE)](https://github.com/DavidButterfield/MTE "Multithreaded Engine (libmte)")
+ + [Multithreaded Engine (MTE)](https://github.com/DavidButterfield/MTE#user-content-mte "Multithreaded Engine (libmte)")
     &mdash; a high-performance multi-threaded event dispatching engine for usermode
  + SCST files in this repo began as a snapshot of
    [https://sourceforge.net/projects/scst](https://sourceforge.net/projects/scst "SCST svn -r7105")
