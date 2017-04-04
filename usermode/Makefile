@@ -154,7 +154,12 @@ GCCLDFLAGS = -Wl,-z,now -Wl,-O1
 
 all:	cscope check_mte
 	$(MAKE) -C $(USERMODE_LIB_SRC) all	    			# UMC library
-	$(MAKE) scst.out
+	$(MAKE) -C $(SCST_SRC)/scst all					# SCST CORE
+	$(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o	# SCST-VDISK
+	$(MAKE) -C $(SCST_SRC)/iscsi-scst all				# iSCSI-SCST
+	# Gather up all the objects we need from SCST kernel and daemon code;
+	# Link SCST with the usermode compatibility module, libmte, and other libraries;
+	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte -lpthread -laio -ldl -lfuse -lc
 
 usermode: all
 
@@ -162,14 +167,6 @@ COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst
 	      $(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o
 
 USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.o
-
-scst.out:   # $(COMPONENTS)
-	$(MAKE) -C $(SCST_SRC)/scst all					# SCST CORE
-	$(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o	# SCST-VDISK
-	$(MAKE) -C $(SCST_SRC)/iscsi-scst all				# iSCSI-SCST
-	# Gather up all the objects we need from SCST kernel and daemon code;
-	# Link SCST with the usermode compatibility module, libmte, and other libraries;
-	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte -lpthread -laio -ldl -lfuse -lc
 
 # $(SCST_SRC)/scst/src/scst.o:
 # 	$(MAKE) -C $(SCST_SRC)/scst all					# SCST CORE
