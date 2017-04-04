@@ -57,7 +57,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       $ make                                # build the SCST iSCSI server binary
       $ ls -l scst.out                      # in SCST/trunk/usermode/
 
-      # make scstadm_install		    # patched to know where /fuse/scst/proc is
+      # make scstadm_install                # patched to know where /fuse/scst/proc is
 
       ### Manually create /etc/iscsi-scst.conf and /etc/scst_usermode.conf in SCST /proc format (See *.sample)
 
