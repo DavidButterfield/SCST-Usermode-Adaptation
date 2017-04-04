@@ -46,6 +46,8 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 
       $ more SCST/trunk/usermode/BUGS.txt   # ** MORE HINTS **
 
+      # make enable_proc
+
       $ pushd MTE/trunk/src                 # build the Multithreaded Engine library
       $ make
       $ sudo make install                   # needs permission for /lib, /usr/include
@@ -55,7 +57,9 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       $ make                                # build the SCST iSCSI server binary
       $ ls -l scst.out                      # in SCST/trunk/usermode/
 
-      ### Create /etc/scst.conf and /etc/iscsi-scst.conf files (See BUGS.txt and *.sample)
+      ### Create /etc/scst.conf and /etc/iscsi-scst.conf files in SCST /proc format (See *.sample)
+
+      # make scstadm_install
 
       ### Patch SCST.pm (used by scstadmin) to know where /fuse/scst/proc is:
       ### +++/usr/local/share/perl/*/SCST/SCST.pm
