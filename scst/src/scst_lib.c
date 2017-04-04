@@ -4701,8 +4701,13 @@ static void scst_del_acg(struct scst_acg *acg)
 				 acg_dev_list_entry)
 		scst_del_acg_dev(acg_dev, true);
 
+#ifndef NOT_SCST_7105	//XXX Does this handle procfs?
 	list_for_each_entry(acn, &acg->acn_list, acn_list_entry)
 		scst_acn_sysfs_del(acn);
+#else	//XXX This was my earlier local fix.  Which is better?
+	list_for_each_entry_safe(acn, acnt, &acg->acn_list, acn_list_entry)
+		scst_del_free_acn(acn, false);
+#endif
 
 #ifdef CONFIG_SCST_PROC
 	list_del(&acg->acg_list_entry);
