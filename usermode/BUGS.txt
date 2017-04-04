@@ -24,7 +24,7 @@ SCST/trunk/usermode/.
 
 This can be ignored:
     cannot find isert_scst in /proc/devices - make sure the module is loaded
-
+                ^^^^^
 ================================================================================
 
 After starting "scst.out -f", pressing CTRL-C (SIGINT) is intended to initiate
@@ -37,7 +37,8 @@ intended manner.  (It only engages once, so it's OK to repeat the key quickly.)
 If scstadmin gives this:
     Failed to obtain SCST version information. Is the scst module loaded?
 
-Then try this
+The usual reason is that the server program (scst.out) is not running.
+Otherwise it could be a "stuck fuse", which might be helped by this:
     fusermount -u /fuse/scst/proc
 
 ================================================================================
