@@ -7,11 +7,12 @@ ISSUE_LIP FALSE
 #DEVICE <vdisk name>,<device path>,<options>,<block size>,<t10 device id>
 DEVICE null_NULLIO,/dev/zero,NULLIO,512,N000
 DEVICE zero_ZERO,/dev/zero,NV_CACHE,512,Z000
+DEVICE zero_BZERO,/dev/zero,BLOCKIO,512,BZ000
 
-DEVICE disk_sda5,/dev/sda5,,4096,sda5
+# DEVICE disk_sda5,/dev/sda5,,4096,sda5
 
-DEVICE file_c1,/tmp/disk_c1,NV_CACHE,512,F_c1
-DEVICE file_c2,/tmp/disk_c2,NV_CACHE,512,F_c2
+# DEVICE file_c1,/tmp/disk_c1,NV_CACHE,512,F_c1
+# DEVICE file_c2,/tmp/disk_c2,NV_CACHE,512,F_c2
 
 [GROUP Default]
 
@@ -19,16 +20,29 @@ DEVICE file_c2,/tmp/disk_c2,NV_CACHE,512,F_c2
 USER iqn.1993-08.org.debian:01:9778279657b7
 USER iqn.1991-05.com.microsoft:borgcube
 
+[GROUP blackbox]
+USER iqn.1993-08.org.debian:01:928b829848f
+
 [ASSIGNMENT Default]
 DEVICE null_NULLIO,0
 DEVICE zero_ZERO,1
+DEVICE zero_BZERO,2
 
 [ASSIGNMENT cian]
 DEVICE null_NULLIO,0
 DEVICE zero_ZERO,1
-DEVICE disk_sda5,11
-DEVICE file_c1,31
-DEVICE file_c2,32
+DEVICE zero_BZERO,2
+# DEVICE disk_sda5,11
+# DEVICE file_c1,31
+# DEVICE file_c2,32
+
+[ASSIGNMENT blackbox]
+DEVICE null_NULLIO,0
+DEVICE zero_ZERO,1
+DEVICE zero_BZERO,2
+# DEVICE disk_sda5,11
+# DEVICE file_c1,31
+# DEVICE file_c2,32
 
 [TARGETS enable]
 #HOST <wwn identifier>

@@ -1,6 +1,6 @@
 # Example simple /etc/iscsi-scstd.conf file for Usermode SCST
 
-Target iqn.2001-04.com.example.blackbox:1
+Target iqn.2001-04.com.example.frobozz:1
 	QueuedCommands 2048
 	RspTimeout 90
 	NOPInInterval 30
