@@ -3838,6 +3838,7 @@ static int scst_exec_check_sn(struct scst_cmd **active_cmd)
 				/* dev->qerr can be changed behind our back */
 				q = cmd->dev->qerr;
 				/* ACCESS_ONCE doesn't work for bit fields */
+				/* XXX Seems pretty useless for automatics, too */
 				qerr = ACCESS_ONCE(q);
 
 				switch (qerr) {
