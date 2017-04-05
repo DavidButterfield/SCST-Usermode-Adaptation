@@ -39,8 +39,12 @@ alternative scst_usermode.conf name as the "scstadmin -config" argument.
 
 ================================================================================
 scstadmin seems to get SCST.pm from random places like /etc/perl that don't
-always get updated by "make scstadm_install".  If scstadmin "failed to obtain...
-information", check that the SCST.pm being used is current with this repo.
+always get updated by "make scstadm_install".  This confusion is probably what's
+happening if scstadmin prints lines about trying to find or open "/proc..."
+rather than "/fuse/scst/proc/..."
+
+  WARNING: handlerDevices():
+    Failed to open handler IO /proc/scsi_tgt/vdisk/vdisk, assuming disabled.
 
 ================================================================================
 STARTUP/SHUTDOWN
