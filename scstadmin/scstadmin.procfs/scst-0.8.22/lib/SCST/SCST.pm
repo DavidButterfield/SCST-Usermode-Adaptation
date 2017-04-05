@@ -131,6 +131,7 @@ sub new {
 	my $scstVersion = $self->scstVersion();
 
 	if ($scstVersion == -1) {
+	    # not optimal...
 	    print "(".$_SCST_DIR_." not found, also trying /fuse/scst".$_SCST_DIR_.")\n";
 	    $_SCST_DIR_           = '/fuse/scst'.$_SCST_DIR_;
 	    $_SCST_VERSION_IO_    = $_SCST_DIR_.'/version';
@@ -140,6 +141,8 @@ sub new {
 	    $_SCST_GROUPS_DIR_    = $_SCST_DIR_.'/groups';
 	    $_SCST_SGV_STATS_     = $_SCST_DIR_.'/sgv';
 	    $_SCST_SESSIONS_      = $_SCST_DIR_.'/sessions';
+	    %_IO_MAP_ = ($VDISK_TYPE => $_SCST_VDISK_IO_,
+			$VCDROM_TYPE => $_SCST_VCDROM_IO_);
 	    $scstVersion = $self->scstVersion();
 	}
 
