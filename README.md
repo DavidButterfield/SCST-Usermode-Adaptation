@@ -3,11 +3,11 @@
 An adaptation of the iSCSI-SCST storage server software to run entirely in usermode on an unmodified Linux kernel  
 *David A. Butterfield*
 
-This project adapts the SCST iSCSI storage server software, normally resident
-in the Linux kernel, to run entirely in usermode on an unmodified kernel.  The
-resulting executable can run as a regular (non-super) user, as long as it has
-permission to access the backing storage.  A paper describing the work and
-performance study is
+This project adapts the SCST iSCSI storage server software, which normally
+resides in the Linux kernel, to run entirely in usermode on an unmodified
+kernel.  The resulting executable can run as a regular (non-super) user, as long
+as it has permission to access the backing storage.  A paper describing the work
+and performance study is
 [here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_Usermode.html
        "A paper describing the work in detail").
 
@@ -59,10 +59,10 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 
       # make scstadm_install                # patched to know where /fuse/scst/proc is
 
-      ### Manually create /etc/iscsi-scst.conf and /etc/scst_usermode.conf in SCST /proc format (See *.sample)
+      ### Manually create /etc/{iscsi-scst,scst_usermode}.conf in SCST /proc format (See *.sample)
 
       # mkdir -p  /var/lib/scst/vdev_mode_pages /var/lib/scst/pr
-      # chmod 777 /var/lib/scst/vdev_mode_pages /var/lib/scst/pr   # or otherwise writable by SCST's UID
+      # chmod 777 /var/lib/scst/vdev_mode_pages /var/lib/scst/pr   # or writable by SCST's UID
 
       # mkdir -p /fuse/scst/proc ; chmod 777 /fuse/scst/proc       # mount point for SCST's /proc
       ### Edit /etc/fuse.conf and uncomment the line with "user_allow_other"
