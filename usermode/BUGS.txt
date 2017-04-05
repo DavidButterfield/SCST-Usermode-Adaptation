@@ -1,50 +1,66 @@
-Bugs, observations, notes, etc...
+SCST Usermode Bugs, Observations, Notes, etc...
 ================================================================================
-
-If switching between making a kernel-based SCST build and making a Usermode
-build in the same set of directories, issue "make extraclean" between.
-
+INSTALL/BUILD
 ================================================================================
+Three repositories are needed to build Usermode SCST.  Makefile default paths
+work if they are set up under a common directory "foo" (or whatever name) thus:
 
-Three workspaces are needed.  Makefile defaults work if they are set up under
-a common directory thus:
-    SCST/trunk	    UMC/trunk	    MTE/trunk
+    foo/SCST/trunk	foo/UMC/trunk	foo/MTE/trunk
 
 Otherwise environment variables can be used to specify where they are.
 
 ================================================================================
-
-Install needs to work right for usermode.  There needs to be a way to get the
-manpages, conf files, and other accessories installed along with the usermode
-build without attempting anything on the kernel.  The files /etc/scst.conf and
-/etc/iscsi-scst.conf need to exist to run the server.  See *.sample files in
-SCST/trunk/usermode/.
+It is no longer necessary to manually patch the SCST.pm (used by scstadmin) to
+help it know about the "/fuse/scst" prefix to the "/proc/scst_tgt" path when
+running in usermode [as mentioned on page 2 of the paper].  The script installed
+from this repo by "make scstadm_install" will try prepending "/fuse/scst" to the
+/proc pathname if the expected version file is not found the usual place.
 
 ================================================================================
+If switching between making a kernel-based SCST build and making a Usermode
+build in the same set of directories, issue "make extraclean" in between.
 
-This can be ignored:
+================================================================================
+BUG:  "make install" needs to work right for usermode.  There needs to be a way
+to get the manpages, conf files, and other accessories installed along with the
+usermode build without attempting anything on the kernel.
+
+At present the /etc/scst.conf and /etc/iscsi-scst.conf files need to be created
+manually to configure the server.  See SCST/trunk/usermode/*.sample
+
+Note that SCST in Usermode presently uses SCST's PROCFS logic, emulating its
+calls with a shim to fuse(8).  So the scst.conf text file is in the scst.conf
+PROCFS format (different from the scst.conf SYSFS format).
+
+scst.conf can be renamed as convenient (e.g. scst_usermode.conf) to avoid
+conflict with the configuration file for a kernel-based server on the same
+machine (I have never actually tried doing that).  Just remember to use your
+alternative scst_usermode.conf name as the "scstadmin -config" argument.
+
+================================================================================
+STARTUP/SHUTDOWN
+================================================================================
+This warning at startup of scst.out can be ignored:
     cannot find isert_scst in /proc/devices - make sure the module is loaded
                 ^^^^^
 ================================================================================
-
-After starting "scst.out -f", pressing CTRL-C (SIGINT) is intended to initiate
-a graceful shutdown; however it sometimes requires pressing repeatedly before
-the shutdown eventually engages.  Once it has engaged it then shuts down in the
-intended manner.  (It only engages once, so it's OK to repeat the key quickly.)
-
-================================================================================
-
 If scstadmin gives this:
     Failed to obtain SCST version information. Is the scst module loaded?
 
 The usual reason is that the server program (scst.out) is not running.
 Otherwise it could be a "stuck fuse", which might be helped by this:
     fusermount -u /fuse/scst/proc
+(I think you have to restart the server after that.)
 
 ================================================================================
+BUG:  If you forget to create /fuse writable by the UID running scst.out, it
+should fail gracefully instead of stupidly.
 
-If you forget to create /fuse writable by the user running scst.out, it should
-fail gracefully instead of stupidly.
+================================================================================
+After starting "scst.out -f", pressing CTRL-C (SIGINT) is intended to initiate
+a graceful shutdown; however it sometimes requires pressing repeatedly before
+the shutdown eventually engages.  Once it has engaged it then shuts down in the
+intended manner.  (It only engages once, so it's OK to repeat the key quickly.)
 
 ================================================================================
 
