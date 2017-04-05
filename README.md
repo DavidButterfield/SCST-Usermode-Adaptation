@@ -40,6 +40,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       # apt install subversion              # or github accessor of your choice
       # apt install cscope                  # (optional with makefile edit)
       # apt install exuberant-ctags         # (optional with makefile edit)
+      # apt install valgrind                # (optional)
 
       $ mkdir Usermode_SCST ; cd Usermode_SCST   # or use whatever name you want for this one
       $ svn co https://github.com/DavidButterfield/MTE.git MTE   # Makefile expects these names
@@ -53,11 +54,12 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       $ sudo make install                   # needs permission for /lib, /usr/include
       $ popd
 
-      $ cd SCST/trunk/usermode
+      $ cd SCST/trunk
+      $ sudo make scstadm_install           # patched to know where /fuse/scst/proc is
+
+      $ cd usermode
       $ make                                # build the SCST iSCSI server binary
       $ ls -l scst.out                      # in SCST/trunk/usermode/
-
-      # make scstadm_install                # patched to know where /fuse/scst/proc is
 
       ### Manually create /etc/{iscsi-scst,scst_usermode}.conf in SCST /proc format (See *.sample)
 
