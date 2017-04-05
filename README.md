@@ -47,8 +47,6 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 
       $ more SCST/trunk/usermode/BUGS.txt   # ** MORE HINTS **
 
-      # make enable_proc
-
       $ pushd MTE/trunk/src                 # build the Multithreaded Engine library
       $ make
       $ sudo make install                   # needs permission for /lib, /usr/include
