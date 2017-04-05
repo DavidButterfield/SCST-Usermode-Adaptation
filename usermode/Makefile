@@ -63,10 +63,10 @@ MY_CFLAGS += -DSCST_USERMODE		    # Tell C source files to use SCST_USERMODE ada
 MY_CFLAGS += -DCONFIG_SCST_TEST_IO_IN_SIRQ  # Allow I/O from soft-interrupt handlers
 MY_CFLAGS += -DCONN_LOCAL_READ		    # Attempt conn read from pp_done handler
 MY_CFLAGS += -DCONN_SIRQ_READ		    # Drive read directly off data_ready callback
-# MY_CFLAGS += -DSCST_USERMODE_AIO	    # Prototype implemention of blockio using AIO
+MY_CFLAGS += -DSCST_USERMODE_AIO	    # Prototype implemention of blockio using AIO
 
 # Select /proc model rather than /sys model (simulating 2.6.24, which has no sysfs)
-# MY_CFLAGS += -DCONFIG_SCST_PROC	    # this gets set in other Makefiles
+# MY_CFLAGS += -DCONFIG_SCST_PROC	    # set in other Makefiles after "make enable_proc"
 
 ifdef SYS_SERVICE_INCL
 MY_CFLAGS += -I$(SYS_SERVICE_INCL)
@@ -144,7 +144,6 @@ export EXTRA_CFLAGS += $(MY_CFLAGS)
 # LOCAL_CFLAGS appears to be used instead of EXTRA_CFLAGS in real usermode makefiles
 export LOCAL_CFLAGS += $(MY_CFLAGS)
 
-export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
 export INFINIBAND_ENABLED := false
 export SCST_INC_DIR := $(CURDIR)/../scst/include
 export src := .
@@ -152,8 +151,10 @@ export KVER = __NONE__
 
 GCCLDFLAGS = -Wl,-z,now -Wl,-O1
 
+export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
+
 usermode all:	cscope check_mte
-	$(MAKE) -C $(USERMODE_LIB_SRC) all	    			# UMC library
+	$(MAKE) -C $(USERMODE_LIB_SRC) all				# UMC library
 	$(MAKE) -C $(SCST_SRC)/scst all					# SCST CORE
 	$(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o	# SCST-VDISK
 	$(MAKE) -C $(SCST_SRC)/iscsi-scst all				# iSCSI-SCST
@@ -168,16 +169,6 @@ scst.out:   $(COMPONENTS)
 	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte -lpthread -laio -ldl -lfuse -lc
 
 USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.o
-
-# $(SCST_SRC)/scst/src/scst.o:
-# 	$(MAKE) -C $(SCST_SRC)/scst all					# SCST CORE
-# 
-# $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o:
-# 	$(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o	# SCST-VDISK
-# 
-# $(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o \
-# $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o:
-# 	$(MAKE) -C $(SCST_SRC)/iscsi-scst all				# iSCSI-SCST
 
 check_mte:
 	# The libmte.so module should have been installed in /lib or somewhere .so files can be found

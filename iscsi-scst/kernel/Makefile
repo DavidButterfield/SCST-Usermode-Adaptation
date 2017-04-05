@@ -43,11 +43,8 @@ iscsi-scst-objs	:= iscsi.o nthread.o config.o digest.o \
 ifndef SCST_USERMODE
 iscsi-scst-objs	:= $(iscsi-scst-objs) event.o
 else
-
 iscsi-scst-objs	:= $(iscsi-scst-objs) scst_compat.o
-
-clean:
-
-extraclean: clean
-
 endif
+
+clean extraclean:
+	rm -rf .tmp_versions *.o *.ko .*.o.cmd .*.ko.cmd *.mod.c

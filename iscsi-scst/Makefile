@@ -57,7 +57,10 @@ ifeq ($(INSTALL_MOD_PATH),)
 endif
 
 INSTALL_DIR := $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/extra
+
+ifndef INFINIBAND_ENABLED
 INFINIBAND_ENABLED = $(shell if grep -wq 'ib_register_client' $$(dirname "$(KDIR)")/modules.symbols; then echo true; else echo false; fi)
+endif
 
 all: progs mods
 
@@ -246,8 +249,14 @@ uninstall:
 		$(DESTDIR)$(MANDIR)/man8/iscsi-scst-adm.8 \
 		# $(DESTDIR)$(SBINDIR)/iscsi-scstd \
 
-KMOD := $(shell pwd)/kernel
-KDIR=$(KMOD)
+# Hack our way down to the subdirectories for clean and extraclean
+ifndef SUBDIRS
+KDIR	    :=.
+else
+KDIR	    :=$(SUBDIRS)
+endif
+KMOD	    :=./kernel
+ISERTMOD    :=$(KMOD)/isert-scst
 
 endif	########## SCST_USERMODE ##########
 

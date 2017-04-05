@@ -160,9 +160,7 @@ else	########## SCST_USERMODE ##########
 PATCHLEVEL=UMC
 include Makefile
 
-all:	mods
-
-mods:	$(SCST_INTF_VER_FILE)
+all scst mods:	$(SCST_INTF_VER_FILE)
 	$(MAKE) modules
 
 modules:    $(obj-m)
