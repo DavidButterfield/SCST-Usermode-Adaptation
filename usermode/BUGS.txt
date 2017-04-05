@@ -38,6 +38,11 @@ machine (I have never actually tried doing that).  Just remember to use your
 alternative scst_usermode.conf name as the "scstadmin -config" argument.
 
 ================================================================================
+scstadmin seems to get SCST.pm from random places like /etc/perl that don't
+always get updated by "make scstadm_install".  If scstadmin "failed to obtain...
+information", check that the SCST.pm being used is current with this repo.
+
+================================================================================
 STARTUP/SHUTDOWN
 ================================================================================
 This warning at startup of scst.out can be ignored:
@@ -48,6 +53,7 @@ If scstadmin gives this:
     Failed to obtain SCST version information. Is the scst module loaded?
 
 The usual reason is that the server program (scst.out) is not running.
+Or it could be that scstadmin is finding an old SCST.pm, not usermode aware.
 Otherwise it could be a "stuck fuse", which might be helped by this:
     fusermount -u /fuse/scst/proc
 (I think you have to restart the server after that.)
