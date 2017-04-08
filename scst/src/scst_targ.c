@@ -5647,7 +5647,7 @@ int scst_cmd_thread(void *arg)
 {
 	struct scst_cmd_thread_t *thr = arg;
 	struct scst_cmd_threads *p_cmd_threads = thr->thr_cmd_threads;
-	bool someth_done, p_locked, thr_locked;
+	bool someth_done;
 
 	TRACE_ENTRY();
 
@@ -5662,6 +5662,8 @@ int scst_cmd_thread(void *arg)
 
 	wake_up_all(&p_cmd_threads->ioctx_wq);
 
+	/* Hold both locks for the test_cmd_threads() checks */
+	/* Lock acquisition order is always:  First p_cmd_threads, Then thr */
 	spin_lock_irq(&p_cmd_threads->cmd_list_lock);
 	spin_lock(&thr->thr_cmd_list_lock);
 	while (!kthread_should_stop()) {
@@ -5683,12 +5685,17 @@ int scst_cmd_thread(void *arg)
 			finish_wait(&p_cmd_threads->cmd_list_waitQ, &wait);
 		}
 
+		/* Drop both locks now that we are through the test_cmd_threads() checks */
+		spin_unlock(&thr->thr_cmd_list_lock);
+		spin_unlock_irq(&p_cmd_threads->cmd_list_lock);
+
 		if (tm_dbg_is_release()) {
-			spin_unlock_irq(&p_cmd_threads->cmd_list_lock);
 			tm_dbg_check_released_cmds();
-			spin_lock_irq(&p_cmd_threads->cmd_list_lock);
 		}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)
+again:
+#endif
 		/*
 		 * Idea of this code is to have local queue be more prioritized
 		 * comparing to the more global queue as 2:1, as well as the
@@ -5697,43 +5704,29 @@ int scst_cmd_thread(void *arg)
 		 * Why 2:1? 2 is average number of intermediate commands states
 		 * reaching this point here.
 		 */
-
-		p_locked = true;
-		thr_locked = true;
 		do {
 			int thr_cnt;
-
+			struct scst_cmd *cmd;
 			someth_done = false;
-again:
-			if (!list_empty(&p_cmd_threads->active_cmd_list)) {
-				struct scst_cmd *cmd;
 
-				if (!p_locked) {
-					if (thr_locked) {
-						spin_unlock_irq(&thr->thr_cmd_list_lock);
-						thr_locked = false;
-					}
-					spin_lock_irq(&p_cmd_threads->cmd_list_lock);
-					p_locked = true;
-					goto again;
+			for (thr_cnt = 0; thr_cnt < 1; thr_cnt++) {
+				cmd = NULL;
+				spin_lock_irq(&p_cmd_threads->cmd_list_lock);
+
+				if (!list_empty(&p_cmd_threads->active_cmd_list)) {
+					cmd = list_first_entry(&p_cmd_threads->active_cmd_list,
+								typeof(*cmd), cmd_list_entry);
+
+					TRACE_DBG("Deleting cmd %p from active cmd list", cmd);
+					list_del(&cmd->cmd_list_entry);
 				}
 
-				cmd = list_first_entry(&p_cmd_threads->active_cmd_list,
-							typeof(*cmd), cmd_list_entry);
-
-				TRACE_DBG("Deleting cmd %p from active cmd list", cmd);
-				list_del(&cmd->cmd_list_entry);
-
-				if (thr_locked) {
-					spin_unlock(&thr->thr_cmd_list_lock);
-					thr_locked = false;
-				}
 				spin_unlock_irq(&p_cmd_threads->cmd_list_lock);
-				p_locked = false;
+
+				if (!cmd) break;
 
 				if (cmd->cmd_thr == NULL) {
-					TRACE_DBG("Assigning thread %p on cmd %p",
-						thr, cmd);
+					TRACE_DBG("Assigning thread %p on cmd %p", thr, cmd);
 					cmd->cmd_thr = thr;
 				}
 
@@ -5741,52 +5734,29 @@ again:
 				someth_done = true;
 			}
 
-			if (thr_locked && p_locked) {
-				/* We need to maintain order of locks and unlocks */
-				spin_unlock(&thr->thr_cmd_list_lock);
-				spin_unlock(&p_cmd_threads->cmd_list_lock);
+			for (thr_cnt = 0; thr_cnt < 2; thr_cnt++) {
+				cmd = NULL;
+
 				spin_lock(&thr->thr_cmd_list_lock);
-				p_locked = false;
-			} else if (!thr_locked) {
-				if (p_locked) {
-					spin_unlock_irq(&p_cmd_threads->cmd_list_lock);
-					p_locked = false;
+
+				if (!list_empty(&thr->thr_active_cmd_list)) {
+					cmd = list_first_entry(&thr->thr_active_cmd_list,
+							       typeof(*cmd), cmd_list_entry);
+
+					TRACE_DBG("Deleting cmd %p from thr active cmd list", cmd);
+					list_del(&cmd->cmd_list_entry);
 				}
-				spin_lock_irq(&thr->thr_cmd_list_lock);
-				thr_locked = true;
-			}
 
-			thr_cnt = 0;
-			while (!list_empty(&thr->thr_active_cmd_list)) {
-				struct scst_cmd *cmd = list_first_entry(
-							&thr->thr_active_cmd_list,
-							typeof(*cmd), cmd_list_entry);
+				spin_unlock(&thr->thr_cmd_list_lock);
 
-				TRACE_DBG("Deleting cmd %p from thr active cmd list", cmd);
-				list_del(&cmd->cmd_list_entry);
-
-				spin_unlock_irq(&thr->thr_cmd_list_lock);
-				thr_locked = false;
+				if (!cmd) break;
 
 				scst_process_active_cmd(cmd, false);
 
 				someth_done = true;
-
-				if (++thr_cnt == 2)
-					break;
-				else {
-					spin_lock_irq(&thr->thr_cmd_list_lock);
-					thr_locked = true;
-				}
 			}
+
 		} while (someth_done);
-
-		EXTRACHECKS_BUG_ON(p_locked);
-
-		if (thr_locked) {
-			spin_unlock_irq(&thr->thr_cmd_list_lock);
-			thr_locked = false;
-		}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)
 		if (scst_poll_ns > 0) {
