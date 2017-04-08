@@ -1039,8 +1039,79 @@ out:
 	return res;
 }
 
+/* Called under CONN->rd_lock and BHs disabled, but will drop it inside, then
+ * reacquire.  Returns -1 if conn closed (if so do not reference it further).
+ *
+ * Otherwise the return value denotes the number of additional bytes needed to
+ * satisfy the current read request -- if this is zero the request was satisfied
+ * (all bytes requested were read).
+ *
+ * If the read was satisfied, conn->rd_state is returned to the state it was in
+ * when the function was called.
+ *
+ * If the read was NOT satisfied, conn->rd_state is *usually* set to _IDLE
+ * (because it has nothing to do until more data shows up); but if more data
+ * arrived after input processing but before the conn was relocked, then
+ * rd_state will be returned to the state it was in when the function was called.
+ *
+ * Thus it is possible to return with the read UNsatisfied, and yet the conn is NOT
+ * IDLE.  In all cases, caller is responsible to see that processing continues if
+ * the new state on return (still under lock) is not IDLE.
+ *
+ * Note we are polling the socket descriptors in EDGE triggered mode -- if zero is
+ * returned from this function, the caller remains responsible to receive data
+ * without any further notifications until the socket is exhausted -- before that
+ * time there may not be any further notification callbacks.
+ */
+int scst_try_one_rd(struct iscsi_conn * conn)
+{
+	int closed = 0, rc;
+	unsigned short rd_state_previous = conn->rd_state;
+	TRACE_ENTRY();
+
+	lockdep_assert_held(&conn->rd_lock);
+
+	sBUG_ON(conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING);
+	conn->rd_data_ready = 0;
+	conn->rd_state = ISCSI_CONN_RD_STATE_PROCESSING;
+#ifdef CONFIG_SCST_EXTRACHECKS
+	sBUG_ON(conn->rd_task != NULL);
+	conn->rd_task = current;
+#endif
+	conn_rd_unlock(conn);	/* we own conn read by _STATE_PROCESSING now */
+
+	rc = process_read_io(conn, &closed);
+		/*** Note that conn may now no longer exist ***/
+
+	if (unlikely(closed)) return -1;
+	/* conn still exists */
+
+	conn_rd_lock(conn);	/* relock the conn */
+
+	if (unlikely(conn->conn_tm_active)) {
+		conn_rd_unlock(conn);
+		iscsi_check_tm_data_wait_timeouts(conn, false);
+		conn_rd_lock(conn);
+	}
+
+#ifdef CONFIG_SCST_EXTRACHECKS
+	sBUG_ON(conn->rd_task != current);
+	conn->rd_task = NULL;
+#endif
+
+	/* Modify state from PROCESSING and return held lock to caller */
+	if ((rc == 0) || conn->rd_data_ready) {	    /*** Received a message ***/
+	    conn->rd_state = rd_state_previous;
+	} else {				    /*** Awaiting a message ***/
+	    conn->rd_state = ISCSI_CONN_RD_STATE_IDLE;
+	}
+
+	TRACE_EXIT();
+	return rc;
+}
+
 /*
- * Called under rd_lock and BHs disabled, but will drop it inside,
+ * Called under POOL->rd_lock and BHs disabled, but will drop it inside,
  * then reacquire.
  */
 static void scst_do_job_rd(struct iscsi_thread_pool *p)
@@ -1048,47 +1119,48 @@ static void scst_do_job_rd(struct iscsi_thread_pool *p)
 	__releases(&rd_lock)
 {
 	TRACE_ENTRY();
-
 	/*
 	 * We delete/add to tail connections to maintain fairness between them.
+	 * 
+	 * XXX It is not clear that equality of IOPS opportunity is really
+	 *     "fair" compared with equality of bandwidth opportunity, which
+	 *     depends on the I/O size of each initiator's workload.
 	 */
 
 	while (!list_empty(&p->rd_list)) {
-		int closed = 0, rc;
+		int rc;
 		struct iscsi_conn *conn = list_first_entry(&p->rd_list,
 			typeof(*conn), rd_list_entry);
 
+		sBUG_ON(conn->rd_state != ISCSI_CONN_RD_STATE_IN_LIST);
 		list_del(&conn->rd_list_entry);
+		conn_pool_rd_unlock(p);		/* UNLOCK POOL command list */
 
-		sBUG_ON(conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING);
-		conn->rd_data_ready = 0;
-		conn->rd_state = ISCSI_CONN_RD_STATE_PROCESSING;
-#ifdef CONFIG_SCST_EXTRACHECKS
-		conn->rd_task = current;
-#endif
-		spin_unlock_bh(&p->rd_lock);
+		/* We have taken a read-ready conn from the list -- try the read */
+		conn_rd_lock(conn);		/* LOCK CONN */
 
-		rc = process_read_io(conn, &closed);
+		rc = scst_try_one_rd(conn);
 
-		spin_lock_bh(&p->rd_lock);
+		/* We are holding conn->rd_lock, so this next line of code
+		 * means our lock acquisition order is CONN FIRST, THEN POOL
+		 */
+		conn_pool_rd_lock(p);		/* RELOCK POOL command list */
 
-		if (unlikely(closed))
-			continue;
-
-		if (unlikely(conn->conn_tm_active)) {
-			spin_unlock_bh(&p->rd_lock);
-			iscsi_check_tm_data_wait_timeouts(conn, false);
-			spin_lock_bh(&p->rd_lock);
+		if (unlikely(rc < 0)) {
+			/* conn closed -- don't try to unlock it */
+			continue;   /* proceed to next conn awaiting service */
 		}
 
-#ifdef CONFIG_SCST_EXTRACHECKS
-		conn->rd_task = NULL;
-#endif
-		if ((rc == 0) || conn->rd_data_ready) {
+		if (conn->rd_state != ISCSI_CONN_RD_STATE_IDLE) {
+			sBUG_ON(conn->rd_state != ISCSI_CONN_RD_STATE_IN_LIST);
 			list_add_tail(&conn->rd_list_entry, &p->rd_list);
-			conn->rd_state = ISCSI_CONN_RD_STATE_IN_LIST;
-		} else
-			conn->rd_state = ISCSI_CONN_RD_STATE_IDLE;
+		} else {
+			/* Waiting for more data */
+			sBUG_ON(rc == 0);
+		}
+
+		/* Lock correctness does not depend on unlock order or strict nesting */
+		conn_rd_unlock(conn);		/* UNLOCK CONN */
 	}
 
 	TRACE_EXIT();
@@ -1116,13 +1188,13 @@ int istrd(void *arg)
 	if (rc != 0)
 		PRINT_ERROR("Setting CPU affinity failed: %d", rc);
 
-	spin_lock_bh(&p->rd_lock);
+	conn_pool_rd_lock(p);
 	while (!kthread_should_stop()) {
 		wait_event_locked(p->rd_waitQ, test_rd_list(p), lock_bh,
 				  p->rd_lock);
 		scst_do_job_rd(p);
 	}
-	spin_unlock_bh(&p->rd_lock);
+	conn_pool_rd_unlock(p);
 
 	/*
 	 * If kthread_should_stop() is true, we are guaranteed to be
@@ -1314,10 +1386,10 @@ void req_add_to_write_timeout_list(struct iscsi_cmnd *req)
 	 * lock for rd_lock.
 	 */
 	if (unlikely(set_conn_tm_active)) {
-		spin_lock_bh(&conn->conn_thr_pool->rd_lock);
+		conn_rd_lock(req->conn);
 		TRACE_MGMT_DBG("Setting conn_tm_active for conn %p", conn);
 		conn->conn_tm_active = 1;
-		spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
+		conn_rd_unlock(req->conn);
 	}
 
 out:

@@ -78,6 +78,9 @@ struct iscsi_thread {
 
 struct iscsi_thread_pool {
 	spinlock_t rd_lock;
+	#define conn_pool_rd_lock(pool)   spin_lock_bh(  &(pool)->rd_lock)
+	#define conn_pool_rd_unlock(pool) spin_unlock_bh(&(pool)->rd_lock)
+
 	struct list_head rd_list;
 	wait_queue_head_t rd_waitQ;
 
@@ -278,6 +281,9 @@ struct iscsi_conn {
 	unsigned short active_close:1;
 	unsigned short deleting:1;
 	unsigned short conn_tm_active:1;
+	spinlock_t rd_lock;
+	#define conn_rd_lock(conn)	spin_lock_bh(  &(conn)->rd_lock)
+	#define conn_rd_unlock(conn)	spin_unlock_bh(&(conn)->rd_lock)
 
 	struct list_head rd_list_entry;
 
@@ -591,6 +597,7 @@ extern int iscsi_send(struct iscsi_conn *conn);
 extern void iscsi_get_page_callback(struct page *page);
 extern void iscsi_put_page_callback(struct page *page);
 #endif
+extern int scst_try_one_rd(struct iscsi_conn * conn);
 extern int istrd(void *arg);
 extern int istwr(void *arg);
 extern void iscsi_task_mgmt_affected_cmds_done(struct scst_mgmt_cmd *scst_mcmd);
