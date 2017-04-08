@@ -281,13 +281,13 @@ static int iscsi_tgt_params_set(struct iscsi_session *session,
 			conn->data_rsp_timeout = session->tgt_params.rsp_timeout * HZ;
 			conn->nop_in_interval = session->tgt_params.nop_in_interval * HZ;
 			conn->nop_in_timeout = session->tgt_params.nop_in_timeout * HZ;
-			spin_lock_bh(&conn->conn_thr_pool->rd_lock);
+			conn_rd_lock(conn);
 			if (!conn->closing && (conn->nop_in_interval > 0)) {
 				TRACE_DBG("Schedule Nop-In work for conn %p", conn);
 				schedule_delayed_work(&conn->nop_in_delayed_work,
 					conn->nop_in_interval + ISCSI_ADD_SCHED_TIME);
 			}
-			spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
+			conn_rd_unlock(conn);
 		}
 	} else {
 		GET_PARAM(params, info, iparams, queued_cmnds);

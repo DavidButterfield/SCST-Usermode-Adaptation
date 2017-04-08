@@ -2361,7 +2361,7 @@ static void __cmnd_abort(struct iscsi_cmnd *cmnd)
 	 * Lock to sync with iscsi_check_tm_data_wait_timeouts(), including
 	 * CMD_ABORTED bit set.
 	 */
-	spin_lock_bh(&conn->conn_thr_pool->rd_lock);
+	conn_rd_lock(conn);
 
 	/*
 	 * We suppose that preliminary commands completion is tested by
@@ -2375,7 +2375,7 @@ static void __cmnd_abort(struct iscsi_cmnd *cmnd)
 	TRACE_MGMT_DBG("Setting conn_tm_active for conn %p", conn);
 	conn->conn_tm_active = 1;
 
-	spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
+	conn_rd_unlock(conn);
 
 	/*
 	 * We need the lock to sync with req_add_to_write_timeout_list() and
