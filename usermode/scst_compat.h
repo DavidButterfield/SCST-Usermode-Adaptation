@@ -89,15 +89,15 @@ struct scsi_device {
 };
 
 #define queue_max_hw_sectors(rq)	0xffff //XXX OK?
-#define to_scsi_device(device)		(void *)FATAL(to_scsi_device)
+#define to_scsi_device(device)		FATAL(to_scsi_device, NULL)
 #define generic_unplug_device(rq)	DO_NOTHING()
 #define QUEUE_FLAG_BIDI			IGNORED
 
-#define ip_compute_csum(data, len)	FATAL(ip_compute_csum)
+#define ip_compute_csum(data, len)	FATAL(ip_compute_csum, 0)
 #define dlm_new_lockspace(name, namelen, lockspace, flags, lvblen) \
-					FATAL(dlm_new_lockspace)
+					FATAL(dlm_new_lockspace, 0)
 #define scsi_execute(dev, cdb, direction, buf, bufsize, sense, timeout, x, y) \
-					FATAL(scsi_execute)
+					FATAL(scsi_execute, 0)
 
 int scsi_reset_provider(struct scsi_device * sdev, int flags);
 #define SCSI_TRY_RESET_DEVICE		IGNORED
