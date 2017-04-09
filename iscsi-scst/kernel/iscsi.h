@@ -294,6 +294,18 @@ struct iscsi_conn {
 	#define conn_rd_lock(conn)	spin_lock_bh(  &(conn)->rd_lock)
 	#define conn_rd_unlock(conn)	spin_unlock_bh(&(conn)->rd_lock)
 
+#ifdef ADAPTIVE_NAGLE
+	uint8_t tcp_nagle;		/* current socket TCP_NODELAY state */
+	unsigned long cpu_busy_count[4];    /* reads done in IDLE-BUSY cycle */
+	unsigned int cpu_busy_idx;
+	/* stats */
+	unsigned long cpu_idles;	    /* since last stats print */
+	unsigned long max_cpu_busy_count;   /* since last stats print */
+	unsigned long stat_cpu_busy_count;  /* since last stats print */
+	unsigned long read_nodelay;	    /* reads done while NODELAY set */
+	unsigned long read_nagle;	    /* reads done while NODELAY unset */
+#endif
+
 	struct list_head rd_list_entry;
 
 #ifdef CONFIG_SCST_EXTRACHECKS

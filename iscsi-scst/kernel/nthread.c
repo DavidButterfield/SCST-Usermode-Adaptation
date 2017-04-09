@@ -1039,6 +1039,131 @@ out:
 	return res;
 }
 
+#ifdef ADAPTIVE_NAGLE	    /* Dynamically enable and disable Nagle mode */
+
+/* XXX I expect the ADAPTIVE_NAGLE logic to require some modification to work
+ * well when SCST is resident in the kernel and the scst_do_job_rd() function is
+ * in use; because in that configuration one thread can service multiple
+ * sessions from that function, only going to sleep (and subsequently incurring
+ * the scheduling latency) when all sessions become idle concurrently.
+ *
+ * The algorithm here assumes the differing model seen in the usermode build,
+ * where there is one Session Thread per session, which sleeps when the session
+ * is idle.  I *would* expect the logic here to show the same benefit in the
+ * kernel for the case where the server is handling a single session using a
+ * single reader thread.
+ *
+ * Probably the algorithm could be modified to also handle the shared session-
+ * thread model used in the kernel.  I would expect its benefits to be most
+ * visible in kernel-based SCST when running a single session to the target.
+ */
+#ifndef SCST_USERMODE
+#warning ADAPTIVE_NAGLE being compiled without SCST_USERMODE (success unlikely)
+#endif
+
+/* TUNE: These affect workloads with a CPU-bound Session Thread.  Tuned for
+ * reasonable behavior at all three CPU-bound I/O sizes (512, 1024, 1536 byte)
+ * using single-session Read over 1Gb Ethernet MTU=9000 CPU 2400 MHz.  Some
+ * compromise between I/O sizes in the tuning, leaving room for more clever
+ * decision criteria.  I would not expect it to depend on network bandwidth or
+ * CPU speed, as those seem inherent in the "CPU-bound" test.  Probably these
+ * should be adjustable via sysfs/procfs.  XXX
+ *
+ * nagle_threshold = 0	implies always running in Nagle mode, NO flush on IDLE
+ *
+ * nagle_threshold = 1 and
+ * nagle_margin = 0	implies always running in Nagle mode, flush on IDLE
+ *
+ * nagle_threshold > 1	implies sometimes running in Nagle mode
+ *
+ * nagle_threshold = oo	implies never running in Nagle mode
+ */
+static unsigned long nagle_threshold = 96;  /* count to enter Nagle mode */
+static unsigned long nagle_margin = 40;	    /* additional count to stay there */
+
+/* Set Adaptive Nagle parameters for test purposes */
+static unsigned char params_set = 0;
+static inline void set_params(void)
+{
+	if (params_set) return;
+	params_set = 1;
+
+	string_t s1;
+	if ((s1=getenv("nagle_threshold"))) nagle_threshold = atol(s1);
+	PRINT_INFO("nagle_threshold=%lu", nagle_threshold);
+	if ((s1=getenv("nagle_margin"))) nagle_margin = atol(s1);
+	PRINT_INFO("nagle_margin=%lu", nagle_margin);
+}
+
+/* Disable Nagle's algorithm */
+static inline void enable_tcp_nodelay(struct socket * sock)
+{
+	mm_segment_t const oldfs = get_fs();
+	set_fs(get_ds());
+	int opt = 1;
+	sock->ops->setsockopt(sock, SOL_TCP, TCP_NODELAY,
+			      (void __force __user *)&opt, sizeof(opt));
+	set_fs(oldfs);
+}
+
+/* Enable Nagle's algorithm */
+static inline void disable_tcp_nodelay(struct socket * sock)
+{
+	mm_segment_t const oldfs = get_fs();
+	set_fs(get_ds());
+	int opt = 0;
+	sock->ops->setsockopt(sock, SOL_TCP, TCP_NODELAY,
+			      (void __force __user *)&opt, sizeof(opt));
+	set_fs(oldfs);
+}
+
+/* conn->cpu_busy_count[] holds the maximum busy_counts attained by the last few
+ * IDLE-BUSY cycles.  cpu_busy_idx points at the "current" count, with counts of
+ * prior cycles recorded circularly in the array starting from there.
+ *
+ * cpu_busy_count_ptr(conn, 0) returns a pointer to the count for the current
+ * cycle; cpu_busy_count_ptr(conn, 1) for the last previous cycle, etc.
+ */
+static inline uint64_t * cpu_busy_count_ptr(struct iscsi_conn * conn, unsigned int idx)
+{
+    assert(idx < ARRAY_SIZE(conn->cpu_busy_count));
+    return &conn->cpu_busy_count[(conn->cpu_busy_idx + idx) % ARRAY_SIZE(conn->cpu_busy_count)];
+}
+
+/* Return the busy_count for the current IDLE-BUSY cycle */
+static inline uint64_t cpu_busy_count_get(struct iscsi_conn * conn)
+{
+    return *cpu_busy_count_ptr(conn, 0);
+}
+
+/* Increment and return the busy_count for the current IDLE-BUSY cycle */
+static inline uint64_t cpu_busy_count_incr(struct iscsi_conn * conn)
+{
+    return ++*cpu_busy_count_ptr(conn, 0);
+}
+
+/* Advance circular history index for a new IDLE-BUSY cycle -- decrementing it
+ * so positive offsets from it refer to increasingly remote cycles.
+ */
+static inline void cpu_busy_count_new(struct iscsi_conn * conn)
+{
+    conn->cpu_busy_idx = (conn->cpu_busy_idx ?: ARRAY_SIZE(conn->cpu_busy_count)) - 1;
+    *cpu_busy_count_ptr(conn, 0) = 0;
+}
+
+/* Return the average busy count of the last few IDLE-BUSY cycles */
+static inline uint64_t cpu_busy_count_avg(struct iscsi_conn * conn)
+{
+    uint64_t sum = 0;
+    int i;
+    for (i = 0; i < ARRAY_SIZE(conn->cpu_busy_count); i++) {
+	sum += *cpu_busy_count_ptr(conn, i);
+    }
+    return sum / ARRAY_SIZE(conn->cpu_busy_count);
+}
+
+#endif
+
 /* Called under CONN->rd_lock and BHs disabled, but will drop it inside, then
  * reacquire.  Returns -1 if conn closed (if so do not reference it further).
  *
@@ -1080,6 +1205,10 @@ int scst_try_one_rd(struct iscsi_conn * conn)
 #endif
 	conn_rd_unlock(conn);	/* we own conn read by _STATE_PROCESSING now */
 
+#ifdef ADAPTIVE_NAGLE
+	set_params();		//XXX
+#endif
+
 	rc = process_read_io(conn, &closed);
 		/*** Note that conn may now no longer exist ***/
 
@@ -1102,8 +1231,68 @@ int scst_try_one_rd(struct iscsi_conn * conn)
 	/* Modify state from PROCESSING and return held lock to caller */
 	if ((rc == 0) || conn->rd_data_ready) {	    /*** Received a message ***/
 	    conn->rd_state = rd_state_previous;
+#ifdef ADAPTIVE_NAGLE
+	    cpu_busy_count_incr(conn);	/* tally another read since last idle */
+	    /* highest number of ops between two idles since last stat print */
+	    if (conn->max_cpu_busy_count < cpu_busy_count_get(conn)) {
+		conn->max_cpu_busy_count = cpu_busy_count_get(conn);
+	    }
+	    ++conn->stat_cpu_busy_count;    /* another read since stat print */
+	    if (conn->tcp_nagle) {
+		/* tally another read in Nagle mode since last stat print */
+		++conn->read_nagle;
+	    } else {
+		/* tally another read in NODELAY mode since last stat print */
+		++conn->read_nodelay;
+		/* We are currently in NODELAY mode -- if we seem to be
+		 * streaming, enable Nagle's algorithm, which will remain
+		 * enabled until the next time we go idle wanting another
+		 * incoming request.  Until then the Session Thread will be
+		 * CPU-bound.
+		 *
+		 * To avoid entering Nagle mode too early due to spikes in the
+		 * busy_count:  not only must we cross the threshold, the
+		 * previous few cycles must have averaged at least half the
+		 * threshold.
+		 *
+		 * XXX BUG: cycles that started in Nagle mode from the outset
+		 * should count all their cycles against the margin, which is
+		 * the survival count needed while running in Nagle mode to stay
+		 * there when going IDLE.
+		 */
+		if (cpu_busy_count_get(conn) >= nagle_threshold &&
+			(nagle_threshold == 0 ||
+			    cpu_busy_count_avg(conn) >= (nagle_threshold + nagle_margin) / 2)) {
+		    disable_tcp_nodelay(conn->sock);	/* enable Nagle's algorithm */
+		    conn->tcp_nagle = 1;
+		}
+	    }
+#endif
 	} else {				    /*** Awaiting a message ***/
 	    conn->rd_state = ISCSI_CONN_RD_STATE_IDLE;
+#ifdef ADAPTIVE_NAGLE
+	    /* End of a string of work -- flush any partial output packets */
+	    if (conn->tcp_nagle && nagle_threshold > 0) {
+		/* Disable Nagle and flush accumulating partial packet */
+		enable_tcp_nodelay(conn->sock);
+		/* This uses memory of last few IDLE-BUSY cycles to facilitate
+		 * early return to Nagle mode of a generally-CPU-bound stream
+		 * resuming after a temporary interruption.  Often there will be
+		 * a pattern with most of QD arriving in one cycle and one or
+		 * two other OPs arriving in a cycle by themselves.  If this
+		 * cycle or any of the last few cycles survived *beyond the
+		 * margin* after Nagle's mode was enabled, leave it enabled so
+		 * the next cycle will begin with it that way from the outset.
+		 */
+		if (	    *cpu_busy_count_ptr(conn, 0) >= nagle_threshold + nagle_margin ||
+			    *cpu_busy_count_ptr(conn, 1) >= nagle_threshold + nagle_margin ||
+			    *cpu_busy_count_ptr(conn, 2) >= nagle_threshold + nagle_margin) {
+		    disable_tcp_nodelay(conn->sock);	/* reenable Nagle */
+		} else conn->tcp_nagle = 0;
+	    }
+	    ++conn->cpu_idles;	      /* idle periods since last stats print */
+	    cpu_busy_count_new(conn); /* advance the busy_count history index */
+#endif
 	}
 
 	TRACE_EXIT();

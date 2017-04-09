@@ -64,6 +64,7 @@ MY_CFLAGS += -DCONFIG_SCST_TEST_IO_IN_SIRQ  # Allow I/O from soft-interrupt hand
 MY_CFLAGS += -DCONN_LOCAL_READ		    # Attempt conn read from pp_done handler
 MY_CFLAGS += -DCONN_SIRQ_READ		    # Drive read directly off data_ready callback
 MY_CFLAGS += -DSCST_USERMODE_AIO	    # Prototype implemention of blockio using AIO
+# MY_CFLAGS += -DADAPTIVE_NAGLE		    # Experimental Adaptive Nagle optimization
 
 # Select /proc model rather than /sys model (simulating 2.6.24, which has no sysfs)
 # MY_CFLAGS += -DCONFIG_SCST_PROC	    # set in other Makefiles after "make enable_proc"

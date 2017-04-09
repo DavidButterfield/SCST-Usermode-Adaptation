@@ -91,12 +91,49 @@ static int print_digest_state(char *p, size_t size, unsigned long flags)
 	return pos;
 }
 
+static int print_busy_state(char *p, size_t size, struct iscsi_conn *conn)
+{
+	int pos = 0;
+#ifdef ADAPTIVE_NAGLE
+	unsigned long read_tot, pct_nagle, avg_busy;
+
+	if (conn->closing) {
+		goto out;
+	}
+
+	read_tot = conn->stat_cpu_busy_count ?: 1;
+	pct_nagle = (100000 * conn->read_nagle + read_tot/2) / read_tot;
+	avg_busy = (100 * conn->stat_cpu_busy_count + conn->cpu_idles/2)
+						        / (conn->cpu_idles?:1);
+
+	pos += scnprintf(&p[pos], size - pos, "mode=%s busy=%lu",
+		 conn->tcp_nagle?"NAGLE":"NODELAY", conn->cpu_busy_count[0]);
+
+	pos += scnprintf(&p[pos], size - pos,
+		 " max_busy=%lu avg_busy=%lu.%02lu"
+		 " idles=%lu Nagle=%lu.%03lu%% (%lu/%lu)",
+		 conn->max_cpu_busy_count,
+		 avg_busy/100, avg_busy%100, conn->cpu_idles, pct_nagle/1000,
+		 pct_nagle%1000, conn->read_nagle, conn->stat_cpu_busy_count);
+
+	/* Reset cpu-busy stats each time we print them */
+	conn->max_cpu_busy_count = 0;
+	conn->stat_cpu_busy_count = 0;
+	conn->cpu_idles = 0;
+	conn->read_nagle = 0;
+	conn->read_nodelay = 0;
+
+out:
+#endif
+	return pos;
+}
+
 /* target_mutex supposed to be locked */
 void conn_info_show(struct seq_file *seq, struct iscsi_session *session)
 {
 	struct iscsi_conn *conn;
 	struct sock *sk;
-	char buf[64];
+	char buf[256];
 
 	lockdep_assert_held(&session->target->target_mutex);
 
@@ -132,6 +169,9 @@ void conn_info_show(struct seq_file *seq, struct iscsi_session *session)
 			break;
 		}
 		seq_printf(seq, "\t\tcid:%u ip:%s ", conn->cid, buf);
+		if (print_busy_state(buf, sizeof(buf), conn)) {
+			seq_printf(seq, "%s ", buf);
+		}
 		print_conn_state(buf, sizeof(buf), conn);
 		seq_printf(seq, "state:%s ", buf);
 		print_digest_state(buf, sizeof(buf), conn->hdigest_type);
