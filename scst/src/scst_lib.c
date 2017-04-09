@@ -4793,6 +4793,7 @@ static void scst_put_acg_work(struct work_struct *work)
 
 void scst_put_acg(struct scst_acg *acg)
 {
+#ifndef SCST_USERMODE
 	struct scst_acg_put_work *put_work;
 	bool rc;
 
@@ -4815,7 +4816,13 @@ void scst_put_acg(struct scst_acg *acg)
 	 */
 	rc = queue_work(scst_release_acg_wq, &put_work->work);
 	WARN_ON_ONCE(!rc);
-	return;
+#else
+	/* Somehow the put_work never makes it to scst_put_acg_work before
+	 * shutdown, if we schedule it; so call it directly for a clean
+	 * valgrind/mem_arena output.	    XXXX Investigate
+	 */
+	kref_put(&acg->acg_kref, scst_release_acg);
+#endif
 }
 
 void scst_get_acg(struct scst_acg *acg)
@@ -7535,6 +7542,10 @@ int scst_alloc_space(struct scst_cmd *cmd)
 	flags = atomic ? SGV_POOL_NO_ALLOC_ON_CACHE_MISS : 0;
 	if (cmd->no_sgv)
 		flags |= SGV_POOL_ALLOC_NO_CACHED;
+
+#ifdef VALGRIND
+	flags |= SGV_POOL_ALLOC_NO_CACHED;  /* valgrind wants to see frees happen */
+#endif
 
 	cmd->sg = sgv_pool_alloc(tgt_dev->pools[raw_smp_processor_id()],
 			cmd->bufflen, gfp_mask, flags, &cmd->sg_cnt, &cmd->sgv,
@@ -14734,6 +14745,8 @@ out_unlock:
 	return;
 }
 
+#ifndef SCST_USERMODE			/* unlink */
+
 /* Abstract vfs_unlink() for different kernel versions (as possible) */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
 void scst_vfs_unlink_and_put(struct nameidata *nd)
@@ -14775,6 +14788,8 @@ void scst_path_put(struct nameidata *nd)
 }
 EXPORT_SYMBOL(scst_path_put);
 #endif
+
+#endif /* !SCST_USERMODE */
 
 int scst_copy_file(const char *src, const char *dest)
 {
@@ -14875,7 +14890,8 @@ out:
 int scst_remove_file(const char *name)
 {
 	int res = 0;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+#ifdef SCST_USERMODE                   /* unlink */
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
 	struct nameidata nd;
 #else
 	struct path path;
@@ -14886,7 +14902,10 @@ int scst_remove_file(const char *name)
 
 	set_fs(KERNEL_DS);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+#ifdef SCST_USERMODE                   /* unlink */
+       res = UMC_kernelize(unlink(name));
+       expect_noerr(res, "unlink(\"%s\")", name);
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
 	res = path_lookup(name, 0, &nd);
 	if (!res)
 		scst_vfs_unlink_and_put(&nd);

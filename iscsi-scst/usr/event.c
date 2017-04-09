@@ -30,6 +30,11 @@
 #include <linux/netlink.h>
 #include <arpa/inet.h>
 
+#ifdef SCST_USERMODE
+#include <pthread.h>
+extern void SCST_exit(void);
+#endif
+
 #include <scst_const.h>
 
 #include "iscsid.h"
@@ -1074,7 +1079,12 @@ retry:
 		 * thread is expected to exit when this happens.
 		 */
 		log_info("kernel module shutdown -- daemon exits");
+#ifndef SCST_USERMODE			/* daemon shutdown */
 		exit(1);
+#else /* SCST_USERMODE */
+		SCST_exit();		/* shutdown all the "kernel" modules */
+		pthread_exit(NULL);
+#endif /* SCST_USERMODE */
 	}
 
 	log_debug(1, "target %u, session %#" PRIx64 ", conn %u, code %u, cookie %d",
