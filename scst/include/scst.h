@@ -4074,6 +4074,9 @@ static inline bool scst_cmd_prelim_completed(struct scst_cmd *cmd)
 
 static inline enum scst_exec_context __scst_estimate_context(bool atomic)
 {
+#ifdef SCST_USERMODE
+	return SCST_CONTEXT_SAME;
+#else
 	if (in_irq())
 		return SCST_CONTEXT_TASKLET;
 /*
@@ -4093,6 +4096,7 @@ static inline enum scst_exec_context __scst_estimate_context(bool atomic)
 #else
 	return SCST_CONTEXT_THREAD;
 #endif
+#endif /* !SCST_USERMODE */
 }
 
 static inline enum scst_exec_context scst_estimate_context(void)

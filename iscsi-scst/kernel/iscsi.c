@@ -234,7 +234,11 @@ unlock_cont:
 
 	cmnd->scst_state = ISCSI_CMD_STATE_RESTARTED;
 
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+	scst_restart_cmd(cmnd->scst_cmd, status, SCST_CONTEXT_DIRECT);
+#else
 	scst_restart_cmd(cmnd->scst_cmd, status, SCST_CONTEXT_THREAD);
+#endif
 
 out:
 	TRACE_EXIT();
@@ -2941,7 +2945,9 @@ void cmnd_tx_start(struct iscsi_cmnd *cmnd)
 
 	iscsi_extracheck_is_wr_thread(conn);
 
+#ifndef SCST_USERMODE
 	set_cork(conn->sock, 1);
+#endif
 
 	conn->write_iop = conn->write_iov;
 	conn->write_iop->iov_base = (void __force __user *)(&cmnd->pdu.bhs);
@@ -3049,7 +3055,9 @@ void cmnd_tx_end(struct iscsi_cmnd *cmnd)
 		}
 	}
 
+#ifndef SCST_USERMODE
 	set_cork(cmnd->conn->sock, 0);
+#endif
 	return;
 }
 
@@ -3381,7 +3389,26 @@ static void iscsi_tcp_preprocessing_done(struct iscsi_cmnd *req)
 		 */
 		cmnd_get(req);
 		req->scst_state = ISCSI_CMD_STATE_AFTER_PREPROC;
+
+#ifndef CONN_LOCAL_READ			/* try reading data from pp_done callback */
 		iscsi_make_conn_rd_active(req->conn);
+#else
+		conn_rd_lock(req->conn);
+
+		if (req->conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING) {
+			req->conn->rd_data_ready = 1;
+		} else {
+			/* Try to read the data we want right now */
+			int rc = scst_try_one_rd(req->conn);
+			if (rc < 0) {
+				/* closed */
+			} else {
+				iscsi_make_conn_rd_active(req->conn);
+			}
+		}
+
+		conn_rd_unlock(req->conn);
+#endif
 		if (unlikely(req->conn->closing)) {
 			TRACE_DBG("Waking up closing conn %p", req->conn);
 			wake_up(&req->conn->read_state_waitQ);
@@ -4094,7 +4121,11 @@ struct scst_tgt_template iscsi_template = {
 	.sg_tablesize = 0xFFFF /* no limit */,
 	.threads_num = 0,
 	.no_clustering = 1,
+#ifdef SCST_USERMODE
+	.xmit_response_atomic = 1,
+#else
 	.xmit_response_atomic = 0,
+#endif
 #ifndef CONFIG_SCST_PROC
 	.tgtt_attrs = iscsi_attrs,
 	.tgt_attrs = iscsi_tgt_attrs,
@@ -4279,7 +4310,12 @@ create:
 
 	list_add_tail(&p->thread_pools_list_entry, &iscsi_thread_pools_list);
 
-	for (j = 0; j < 2; j++) {
+#ifdef SCST_USERMODE			/* only create writer threads */
+	j = 1;		    /* only create writer threads */
+#else
+	j = 0;		    /* create reader and writer threads */
+#endif
+	for ( ; j < 2; j++) {
 		for (i = 0; i < count; i++) {
 			t = kmalloc(sizeof(*t), GFP_KERNEL);
 			if (t == NULL) {
