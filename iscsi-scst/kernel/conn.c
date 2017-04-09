@@ -45,9 +45,11 @@ static int print_conn_state(char *p, size_t size, struct iscsi_conn *conn)
 
 	switch (conn->rd_state) {
 	case ISCSI_CONN_RD_STATE_PROCESSING:
+	case ISCSI_CONN_RD_STATE_AWAKE:
 		pos += scnprintf(&p[pos], size - pos, "%s", "read_processing ");
 		break;
 	case ISCSI_CONN_RD_STATE_IN_LIST:
+	case ISCSI_CONN_RD_STATE_WAKING:
 		pos += scnprintf(&p[pos], size - pos, "%s", "in_read_list ");
 		break;
 	}
@@ -423,12 +425,20 @@ void iscsi_make_conn_rd_active(struct iscsi_conn *conn)
 	conn->rd_data_ready = 1;
 
 	if (conn->rd_state == ISCSI_CONN_RD_STATE_IDLE) {
+#ifndef SCST_USERMODE			/* schedule conn_read_wakeup_handler */
 		struct iscsi_thread_pool *p = conn->conn_thr_pool;
 		conn_pool_rd_lock(p);
 		list_add_tail(&conn->rd_list_entry, &p->rd_list);
 		conn->rd_state = ISCSI_CONN_RD_STATE_IN_LIST;
 		wake_up(&p->rd_waitQ);
 		conn_pool_rd_unlock(p);
+#else
+		/* Schedule an ASAP "softirq" callback to rd_wakeup_handler */
+		conn->rd_state = ISCSI_CONN_RD_STATE_WAKING;
+		sys_callback_schedule(conn->sock->rd_poll_event_task,
+				      iscsi_conn_rd_wakeup_handler,
+				      conn->sock->sk, 0, E_OK, "sock read wakeup");
+#endif
 	}
 
 	conn_rd_unlock(conn);
@@ -533,17 +543,47 @@ static void iscsi_data_ready(struct sock *sk, int len)
 
 	TRACE_ENTRY();
 
+#ifndef CONN_SIRQ_READ			/* read conn directly from event thread */
 	iscsi_make_conn_rd_active(conn);
+#else
+	/* Drive the receive directly out of the notification (SIRQ) handler */
+	conn_rd_lock(conn);
 
+	if (conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING) {
+		conn->rd_data_ready = 1;
+	} else {
+		conn->rd_state = ISCSI_CONN_RD_STATE_AWAKE;
+		while (conn->rd_state == ISCSI_CONN_RD_STATE_AWAKE) {
+			if (scst_try_one_rd(conn) < 0)  {
+				return;	    /*closed*/
+			}
+		}
+	}
+
+	conn_rd_unlock(conn);
+#endif
+
+#ifndef SCST_USERMODE			/* calls to old entry points unnecessary */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0))
 	conn->old_data_ready(sk);
 #else
 	conn->old_data_ready(sk, len);
 #endif
+#endif
 
 	TRACE_EXIT();
 	return;
 }
+
+#ifdef SCST_USERMODE			/* define iscsi_conn_rd_wakeup_handler */
+void iscsi_conn_rd_wakeup_handler(void * env, uintptr_t arg, errno_t err)
+{
+	assert_eq(err, E_OK);
+	assert_eq(arg, 0);
+	struct sock * sk = env;
+	iscsi_data_ready(sk, 0);
+}
+#endif
 
 void __iscsi_write_space_ready(struct iscsi_conn *conn)
 {

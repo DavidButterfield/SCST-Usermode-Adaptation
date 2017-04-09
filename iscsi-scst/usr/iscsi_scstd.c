@@ -826,6 +826,11 @@ static void init_max_params(void)
 	return;
 }
 
+#ifdef SCST_USERMODE			/* intercept nl_open --> SCST_nl_open */
+extern int SCST_nl_open(void);
+#define nl_open() SCST_nl_open()
+#endif
+
 int main(int argc, char **argv)
 {
 	int ch, longindex;

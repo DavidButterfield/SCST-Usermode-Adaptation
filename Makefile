@@ -40,6 +40,8 @@ endif
 SCST_DIR=scst
 DOC_DIR=doc
 SCSTADM_DIR=scstadmin
+
+ifndef SCST_USERMODE
 QLA_INI_DIR=qla2x00t_git
 QLA_DIR=qla2x00t_git/qla2x00-target
 QLA_OLD_INI_DIR=qla2x00t
@@ -51,8 +53,22 @@ SCST_LOCAL_DIR=scst_local
 MVSAS_DIR=mvsas_tgt
 FCST_DIR=fcst
 EMULEX_DIR=emulex
+else			    # Usermode only uses a subset
+QLA_INI_DIR=/dev/null
+QLA_DIR=/dev/null
+QLA_OLD_INI_DIR=/dev/null
+QLA_OLD_DIR=/dev/null
+LSI_DIR=/dev/null
+USR_DIR=/dev/null
+SRP_DIR=/dev/null
+SCST_LOCAL_DIR=/dev/null
+MVSAS_DIR=/dev/null
+FCST_DIR=/dev/null
+EMULEX_DIR=/dev/null
+endif
 
 ISCSI_DIR=iscsi-scst
+SCST_USERMODE_DIR=usermode
 
 REVISION ?= $(shell if svn info >/dev/null 2>&1;			 \
 		    then svn info | sed -n 's/^Revision:[[:blank:]]*//p';\
@@ -209,6 +225,10 @@ extraclean:
 	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
 	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
 	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
+
+.PHONY: usermode
+usermode:
+	@if [ -d $(SCST_USERMODE_DIR) ]; then cd $(SCST_USERMODE_DIR) && $(MAKE) all; fi
 
 tags:
 	find . -type f -name "*.[ch]" | ctags --c-kinds=+p --fields=+iaS --extra=+q -e -L-

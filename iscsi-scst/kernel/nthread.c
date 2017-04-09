@@ -1119,6 +1119,9 @@ static void scst_do_job_rd(struct iscsi_thread_pool *p)
 	__releases(&rd_lock)
 {
 	TRACE_ENTRY();
+#ifdef SCST_USERMODE
+        sBUG_ON("SCST_USERMODE should never reach this point");
+#endif
 	/*
 	 * We delete/add to tail connections to maintain fairness between them.
 	 * 
@@ -1399,7 +1402,6 @@ out:
 
 static int write_data(struct iscsi_conn *conn)
 {
-	mm_segment_t oldfs;
 	struct file *file;
 	struct iovec *iop;
 	struct socket *sock;
@@ -1434,20 +1436,29 @@ static int write_data(struct iscsi_conn *conn)
 	saved_size = size;
 	iop = conn->write_iop;
 	count = conn->write_iop_used;
+	flags = MSG_DONTWAIT | MSG_NOSIGNAL;
+	sg = write_cmnd->sg;
 
 	if (iop) {
 		while (1) {
-			loff_t off = 0;
 			int rest;
 
 			sBUG_ON(count > ARRAY_SIZE(conn->write_iov));
 retry:
-			oldfs = get_fs();
+			{
+#ifndef SCST_USERMODE
+			loff_t off = 0;
+			mm_segment_t oldfs = get_fs();
 			set_fs(KERNEL_DS);
 			res = vfs_writev(file,
 					 (struct iovec __force __user *)iop,
 					 count, &off, 0);
 			set_fs(oldfs);
+#else
+			struct msghdr msg = { .msg_iov = iop, .msg_iovlen = count };
+			res = UMC_kernelize(sendmsg(file->fd, &msg, flags | (sg ? MSG_MORE : 0)));
+#endif
+			}
 			TRACE_WRITE("sid %#Lx, cid %u, res %d, iov_len %zd",
 				    (unsigned long long int)conn->session->sid,
 				    conn->cid, res, iop->iov_len);
@@ -1482,7 +1493,6 @@ retry:
 		}
 	}
 
-	sg = write_cmnd->sg;
 	if (unlikely(sg == NULL)) {
 		PRINT_INFO("WARNING: Data missed (cmd %p)!", write_cmnd);
 		res = 0;
@@ -1505,7 +1515,6 @@ retry:
 		sock_sendpage = sock->ops->sendpage;
 #endif
 
-	flags = MSG_DONTWAIT;
 	sg_size = size;
 
 	if (sg != write_cmnd->rsp_sg) {
@@ -1573,6 +1582,12 @@ retry:
 			spin_unlock(&net_priv_lock);
 		}
 #endif
+
+#ifdef SCST_USERMODE
+  #define page_info(page) page_to_pfn(page)
+#else
+  #define page_info(page) ((page)->index)
+#endif
 		sendsize = min(size, length);
 		if (size <= sendsize) {
 retry2:
@@ -1582,7 +1597,7 @@ retry2:
 				"page %p)", (sendpage != sock_no_sendpage) ?
 						"sendpage" : "sock_no_sendpage",
 				(unsigned long long int)conn->session->sid,
-				conn->cid, res, page->index,
+				conn->cid, res, page_info(page),
 				offset, size, write_cmnd, page);
 			if (unlikely(res <= 0)) {
 				if (res == -EINTR)
@@ -1610,7 +1625,7 @@ retry1:
 			(sendpage != sock_no_sendpage) ? "sendpage" :
 							 "sock_no_sendpage",
 			(unsigned long long)conn->session->sid, conn->cid,
-			res, page->index, offset, sendsize, size,
+			res, page_info(page), offset, sendsize, size,
 			write_cmnd, page);
 		if (unlikely(res <= 0)) {
 			if (res == -EINTR)

@@ -23,6 +23,13 @@
 #include <linux/module.h>
 #include <net/sock.h>
 
+#ifdef SCST_USERMODE			/* resolve symbol conflicts */
+  extern void iscsi_conn_rd_wakeup_handler(void *, uintptr_t, errno_t);
+  /* Rename some kernel-code symbols that conflict with daemon-code symbols */
+  #define conn_free                     SCST_kconn_free
+  #define session_free                  SCST_ksession_free
+#endif
+
 #ifdef INSIDE_KERNEL_TREE
 #include <scst/scst.h>
 #include <scst/iscsi_scst.h>
@@ -194,6 +201,8 @@ struct iscsi_session {
 #define ISCSI_CONN_RD_STATE_IDLE		0
 #define ISCSI_CONN_RD_STATE_IN_LIST		1
 #define ISCSI_CONN_RD_STATE_PROCESSING		2
+#define ISCSI_CONN_RD_STATE_WAKING		10
+#define ISCSI_CONN_RD_STATE_AWAKE		11
 
 #define ISCSI_CONN_WR_STATE_IDLE		0
 #define ISCSI_CONN_WR_STATE_IN_LIST		1
