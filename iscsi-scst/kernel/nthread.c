@@ -1687,7 +1687,7 @@ static int tx_padding(struct iscsi_cmnd *cmnd, int state)
 	int res, rest = cmnd->conn->write_size;
 	struct msghdr msg = {.msg_flags = MSG_NOSIGNAL | MSG_DONTWAIT};
 	struct kvec iov;
-	static const uint32_t padding;
+	static uint32_t padding;
 
 	BUG_ON(rest < 1);
 	BUG_ON(rest >= sizeof(uint32_t));
@@ -1695,7 +1695,8 @@ static int tx_padding(struct iscsi_cmnd *cmnd, int state)
 
 	TRACE_DBG("Sending %d padding bytes (cmd %p)", rest, cmnd);
 
-	iov.iov_base = (char *)(&padding) + (sizeof(uint32_t) - rest);
+	//XXX Is there some reason to bother to end-align the base??
+	iov.iov_base = &padding + (sizeof(uint32_t) - rest);
 	iov.iov_len = rest;
 
 	res = kernel_sendmsg(cmnd->conn->sock, &msg, &iov, 1, rest);
