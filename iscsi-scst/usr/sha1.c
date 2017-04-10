@@ -133,7 +133,7 @@ void sha1_final(struct sha1_ctx *ctx, u8 *out)
 	int padding = (SHA1_BLOCK_BYTES - SHA1_COUNTER_BYTES) - (offset + 1);
 	int i;
 
-	*p++ = 0x80;
+	*p++ = (char)0x80;
 
 	if (padding < 0) {
 		memset(p, 0, (padding + SHA1_COUNTER_BYTES));
