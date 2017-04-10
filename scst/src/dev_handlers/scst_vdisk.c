@@ -4089,14 +4089,14 @@ static int vdisk_sup_vpd(uint8_t *buf, struct scst_cmd *cmd,
 	char *page_list = &buf[4], *p = page_list;
 
 	*p++ = 0x0; /* this page */
-	*p++ = 0x80; /* unit serial number */
-	*p++ = 0x83; /* device identification */
-	*p++ = 0x86; /* extended inquiry */
+	*p++ = (char)0x80; /* unit serial number */
+	*p++ = (char)0x83; /* device identification */
+	*p++ = (char)0x86; /* extended inquiry */
 	if (cmd->dev->type == TYPE_DISK) {
-		*p++ = 0xB0; /* block limits */
-		*p++ = 0xB1; /* block device characteristics */
+		*p++ = (char)0xB0; /* block limits */
+		*p++ = (char)0xB1; /* block device characteristics */
 		if (virt_dev->thin_provisioned)
-			*p++ = 0xB2; /* thin provisioning */
+			*p++ = (char)0xB2; /* thin provisioning */
 	}
 	buf[3] = p - page_list; /* page length */
 
