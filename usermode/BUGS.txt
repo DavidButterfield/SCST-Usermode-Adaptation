@@ -17,6 +17,10 @@ from this repo by "make scstadm_install" will try prepending "/fuse/scst" to the
 /proc pathname if the expected version file is not found the usual place.
 
 ================================================================================
+
+Run "make enable_proc" before trying "make usermode" or "cd usermode; make"
+
+================================================================================
 If switching between making a kernel-based SCST build and making a Usermode
 build in the same set of directories, issue "make extraclean" in between.
 
