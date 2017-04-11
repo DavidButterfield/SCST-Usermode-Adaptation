@@ -264,9 +264,9 @@ cscope:
 	@ctags        -R . $(USERMODE_LIB_SRC)   $(SCST_SRC)
 
 ls:
-	@ls     -ad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) $(SYS_SERVICE_INCL) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
+	@ls     -ad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
 
 l:
-	@ls -lsrtad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) $(SYS_SERVICE_INCL) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
+	@ls -lsrtad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
 
 .PHONY:	all components check_mte valgrind clean extraclean cscope ls l
