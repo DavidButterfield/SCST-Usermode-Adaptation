@@ -22,7 +22,9 @@ endif
 # API header files should be in /usr/include.  Otherwise SYS_SERVICE_INCL
 # specifies where they are:
 ifndef SYS_SERVICE_INCL
-export SYS_SERVICE_INCL = $(MY_SRC)/MTE/trunk/include
+export SYS_SERVICE_INCL = $(shell if [ -d $(MY_SRC)/MTE/trunk/include ]; \
+				  then echo -I$(MY_SRC)/MTE/trunk/include; \
+				  fi)
 endif
 
 # If libmte (Multithreaded Engine) is not installed on the system, this is
@@ -41,7 +43,10 @@ ifndef SCST_SRC
 export SCST_SRC = $(CURDIR)/..
 endif
 
-# MY_CFLAGS += -O3
+# MY_CFLAGS are used when compiling the kernel code or daemon code
+# EXTRA_CFLAGS are used when compiling the kernel code
+
+MY_CFLAGS += -O3
 # MY_CFLAGS += -O2
 # MY_CFLAGS += -O1
 
@@ -59,18 +64,14 @@ endif
 
 ################################################################################
 
-MY_CFLAGS += -DSCST_USERMODE		    # Tell C source files to use SCST_USERMODE adaptations
-MY_CFLAGS += -DCONFIG_SCST_TEST_IO_IN_SIRQ  # Allow I/O from soft-interrupt handlers
-MY_CFLAGS += -DCONN_LOCAL_READ		    # Attempt conn read from pp_done handler
-MY_CFLAGS += -DCONN_SIRQ_READ		    # Drive read directly off data_ready callback
-MY_CFLAGS += -DSCST_USERMODE_AIO	    # Prototype implemention of blockio using AIO
+MY_CFLAGS += -DSCST_USERMODE			# Tell C source files to use SCST_USERMODE adaptations
+MY_CFLAGS += $(SYS_SERVICE_INCL)
 
-# Select /proc model rather than /sys model (simulating 2.6.24, which has no sysfs)
-# MY_CFLAGS += -DCONFIG_SCST_PROC	    # set in other Makefiles after "make enable_proc"
-
-ifdef SYS_SERVICE_INCL
-MY_CFLAGS += -I$(SYS_SERVICE_INCL)
-endif
+EXTRA_CFLAGS += -DCONFIG_SCST_TEST_IO_IN_SIRQ	# Allow I/O from soft-interrupt handlers
+EXTRA_CFLAGS += -DCONN_LOCAL_READ		# Attempt conn read from pp_done handler
+EXTRA_CFLAGS += -DCONN_SIRQ_READ		# Drive read directly off data_ready callback
+EXTRA_CFLAGS += -DSCST_USERMODE_AIO		# Prototype implemention of blockio using AIO
+# EXTRA_CFLAGS += -DADAPTIVE_NAGLE		# Experimental Adaptive Nagle optimization
 
 # Force scst_compat.h to be #included at the start of every kernel.c file, for usermode shims
 EXTRA_CFLAGS += -include $(SCST_SRC)/usermode/scst_compat.h
@@ -92,45 +93,46 @@ EXTRA_CFLAGS += -isystem /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
 WFLAGS_WARN += -Wall
 WFLAGS_WARN += -Wextra
 WFLAGS_WARN += -Wundef
-WFLAGS_WARN += -Winit-self
 WFLAGS_WARN += -Wstrict-prototypes
-WFLAGS_WARN += -Wlogical-op
-WFLAGS_WARN += -Wjump-misses-init
-WFLAGS_WARN += -Wcast-align
-WFLAGS_WARN += -Wold-style-definition 
-WFLAGS_WARN += -Wredundant-decls
-WFLAGS_WARN += -Wbad-function-cast
-WFLAGS_WARN += -Wmissing-declarations
 WFLAGS_WARN += -Wmissing-prototypes
+WFLAGS_WARN += -Wmissing-declarations
+WFLAGS_WARN += -Wjump-misses-init
+WFLAGS_WARN += -Winit-self
+WFLAGS_WARN += -Wlogical-op
+WFLAGS_WARN += -Wbad-function-cast
+WFLAGS_WARN += -Wcast-align
 WFLAGS_WARN += -Wnested-externs
-# WFLAGS_WARN += -Wswitch-enum		#  XXXXX when debugs on
+WFLAGS_WARN += -Wold-style-definition 
+WFLAGS_WARN += -Wmissing-include-dirs
+WFLAGS_WARN += -Wfloat-conversion
 
 ### Inhibit (or leave unenabled) some warnings for now because they are too noisy today
-						# Number of Warnings
-# WFLAGS_WARN += -Wmissing-include-dirs		#  2
-# WFLAGS_WARN += -Wunsafe-loop-optimizations	#  1
-
-# WFLAGS_WARN += -Wcast-qual			# 75 (60 of those are "container_of")
-# WFLAGS_WARN += -Wwrite-strings		# 75 (same ones as -Wcast-qual)
-
-WFLAGS_INHIBIT += -Wno-redundant-decls		# 37
+                                                # Number of Warnings
+# WFLAGS_WARN += -Wunsafe-loop-optimizations	#    1
+# WFLAGS_WARN += -Wredundant-decls		#    3
+# WFLAGS_WARN += -Wswitch-enum			#   39
 
 ### These format warnings all have to do with using a long value with a long long specifier
-# WFLAGS_WARN += -Wformat=2			# 44, all %ll[dux] with [unsigned] long
-WFLAGS_INHIBIT += -Wno-format			# all these warnings occur also with -Wformat[=1]
+# WFLAGS_WARN += -Wformat=2			#   68, all %ll[dux] with [unsigned] long
+WFLAGS_INHIBIT += -Wno-format			#     	(all)
 
 ### These are probably not worth much effort, but maybe a check that the code looks OK
-# WFLAGS_WARN += -Wpointer-arith		# 38			(XXX half mine)
-# WFLAGS_WARN += -Wshadow			# 25
-# WFLAGS_WARN += -Wswitch-default		# 56 
+# WFLAGS_WARN += -Wcast-qual			#   71
+# WFLAGS_WARN += -Wswitch-default		#   59
+# WFLAGS_WARN += -Wshadow			#   21
 
 ### These are probably not worth any effort
-# WFLAGS_WARN += -Wconversion			# 500+
-# WFLAGS_WARN += -Wsign-conversion		# 500+
-WFLAGS_INHIBIT += -Wno-sign-compare		# 29
-WFLAGS_INHIBIT += -Wno-pointer-sign		# 37
+# WFLAGS_WARN += -Wwrite-strings		#   27	gives strings a "const"
+						#	leading to "discarded-qualifiers"
+WFLAGS_INHIBIT += -Wno-pointer-sign             #   48  (all)
+WFLAGS_INHIBIT += -Wno-sign-compare             #   64	(extra)
+# WFLAGS_WARN += -Wpointer-arith		#   67	(pedandic)
+WFLAGS_INHIBIT += -Wno-unused-parameter		#   73	(extra)
+# WFLAGS_WARN += -Wconversion			#  746
+# WFLAGS_INHIBIT += -Wno-sign-conversion        # 1960	(conversion)
 
-WFLAGS_INHIBIT += -Wno-unused-parameter		# silly
+export EXTRA_WFLAGS := $(WFLAGS_WARN) $(WFLAGS_INHIBIT)
+export EXTRA_CFLAGS := $(EXTRA_CFLAGS) $(EXTRA_WFLAGS)
 
 ################################################################################
 
@@ -174,6 +176,8 @@ check_mte:
 	# The libmte.so module should have been installed in /lib or somewhere .so files can be found
 	if [[ ! -f /lib/libmte.so ]] ; then $(MAKE) -C $(MTE_SRC) install; fi
 
+# XXX Add 2perf/2debug stuff
+
 ################################################################################
 
 VALGRIND_OPTS = --leak-check=full --show-leak-kinds=all --num-callers=30 --track-fds=yes --sim-hints=no-nptl-pthread-stackcache --track-origins=yes
@@ -190,13 +194,13 @@ extraclean:
 	make -C .. $@
 
 cscope:
-	@cscope -b -c -R -s$(USERMODE_LIB_SRC) -s$(SCST_SRC) -s$(SYS_SERVICE_INCL)
+	@cscope -b -c -R -s$(USERMODE_LIB_SRC) -s$(SCST_SRC)
 	@ctags        -R   $(USERMODE_LIB_SRC)   $(SCST_SRC)   $(SYS_SERVICE_INCL)
 
 ls:
-	@ls     -ad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) $(SYS_SERVICE_INCL) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
+	@ls     -ad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
 
 l:
-	@ls -lsrtad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) $(SYS_SERVICE_INCL) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
+	@ls -lsrtad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
 
 .PHONY:	all components check_mte valgrind clean extraclean cscope ls l

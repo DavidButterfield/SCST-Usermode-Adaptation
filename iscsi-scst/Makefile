@@ -199,13 +199,14 @@ endif
 
 else	########## SCST_USERMODE ##########
 
-# Ignore error the first pass when in iscsi-scst directory;
-# Second pass we are in iscsi-scst/kernel and get the Makefile therein
--include ../kernel/Makefile	    # set the object component variables
+ifdef MAKE_PASS2
+# PASS2 we are in iscsi-scst/kernel and include the Makefile therein
+include ../kernel/Makefile	    # set the object component variables
+endif
 
 all: include/iscsi_scst_itf_ver.h
 	$(MAKE) -C usr
-	$(MAKE) -C kernel -f ../Makefile modules
+	$(MAKE) -C kernel MAKE_PASS2=MAKE_PASS2 -f ../Makefile modules
 
 modules:    $(obj-m)
 
@@ -213,7 +214,7 @@ $(obj-m):   $(iscsi-scst-objs)
 	$(LD) -r -o $@ $(iscsi-scst-objs)
 
 %.o: %.c
-	$(CC) -c -o $(@) -I../../include $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+	$(CC) -c -o $(@) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
 
 install: all
 	# @install -vD -m 755 usr/iscsi-scstd $(DESTDIR)$(SBINDIR)/iscsi-scstd
@@ -250,6 +251,7 @@ include/iscsi_scst_itf_ver.h: include/iscsi_scst.h
 	echo -n "ISCSI_VERSION_STRING \"_" >>include/iscsi_scst_itf_ver.h
 	echo "`sha1sum include/iscsi_scst.h|awk '{printf $$1}'`\"" >>include/iscsi_scst_itf_ver.h
 
+ifndef MAKE_PASS2
 clean:
 	$(MAKE) -C usr $@
 	$(MAKE) -C $(KDIR) SUBDIRS=$(KMOD) $@
@@ -360,6 +362,7 @@ conftest/use_pre_440_wr_structure/result-$(KVER).txt:			\
 	conftest/use_pre_440_wr_structure/Makefile
 	echo "$(call run_conftest,use_pre_440_wr_structure,		\
 		-DUSE_PRE_440_WR_STRUCTURE)" >"$@"
+endif
 
 2release:
 	sed -i.aa s/"^E\?XTRA_CFLAGS += \-DCONFIG_SCST_EXTRACHECKS"/"#EXTRA_CFLAGS += \-DCONFIG_SCST_EXTRACHECKS"/ $(KMOD)/Makefile
