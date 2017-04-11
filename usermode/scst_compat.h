@@ -17,6 +17,8 @@
 
 #include "usermode_lib.h"
 
+#define __compiler_offsetof(TYPE, MEMBER) __builtin_offsetof(TYPE, MEMBER) /* misc.h */
+
 /* Invoked by iscsi_scstd.c:main() via kernel_open() / create_and_open_dev() */
 /* Whatever we return from SCST_init gets passed back to us in SCST_ctldev_ioctl(fd_arg) */
 extern int  SCST_init(const char *dev, int readonly);
