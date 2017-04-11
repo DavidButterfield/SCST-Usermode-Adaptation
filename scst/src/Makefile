@@ -189,7 +189,7 @@ INSTALL_DIR_H := $(DESTDIR)$(PREFIX)/include/scst
 enable-Wextra = $(shell uname_r="$$(uname -r)"; if [ "$${uname_r%.el5}" = "$${uname_r}" ]; then echo "$(1)"; fi)
 
 EXTRA_CFLAGS += -I$(SCST_INC_DIR) $(call enable-Wextra,-Wextra \
-	-Wno-unused-parameter -Wno-missing-field-initializers) \
+	-Wno-unused-parameter) \
 	$(shell [ -n "${CONFIG_SCST_NO_DLM}" ] && echo -DCONFIG_SCST_NO_DLM)
 
 EXTRA_CFLAGS += $(EXTRA_WFLAGS)
