@@ -2774,8 +2774,15 @@ struct scst_ext_blocker {
 
 	ext_blocker_done_fn_t ext_blocker_done_fn;
 	int ext_blocker_data_len;
-	uint8_t ext_blocker_data[];
+
+	uint8_t ext_blocker_data[0] __attribute__ ((aligned (__alignof__(void *))));
+	void * ext_blocker_waitq;   /* same address as ext_blocker_data */
 };
+
+char validate_ext_blocker[- /* ext_blocker_data and ext_blocker_waitq must match */
+    (offsetof(struct scst_ext_blocker, ext_blocker_waitq) !=
+     offsetof(struct scst_ext_blocker, ext_blocker_data))
+    ];
 
 /*
  * SCST device
@@ -4748,7 +4755,7 @@ static inline uint32_t scst_cmd_get_dif_exp_ref_tag(struct scst_cmd *cmd)
 	if (cmd->cdb_len == 32)
 		return get_unaligned_be32(&cmd->cdb[20]);
 	else
-		return cmd->lba & 0xFFFFFFFF;
+		return (uint32_t)(cmd->lba);
 }
 
 /*
@@ -5553,9 +5560,9 @@ static inline uint32_t get_unaligned_be24(const uint8_t *const p)
 
 static inline void put_unaligned_be24(const uint32_t v, uint8_t *const p)
 {
-	p[0] = v >> 16;
-	p[1] = v >>  8;
-	p[2] = v >>  0;
+	p[0] = (uint8_t)(v >> 16);
+	p[1] = (uint8_t)(v >>  8);
+	p[2] = (uint8_t)(v >>  0);
 }
 
 #if defined(CONFIG_SCST_DEBUG) || defined(CONFIG_SCST_TRACING)
