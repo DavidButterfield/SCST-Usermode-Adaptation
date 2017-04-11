@@ -111,10 +111,10 @@ SCST_ctldev_ioctl(int fd_arg, unsigned int cmd, unsigned long arg)
 
     if (ret < 0) {
 	/* Translate kernel-style error return to usermode-style */
-	errno = -ret;
+	errno = (int)-ret;
 	ret = -1;
     }
-    return ret;
+    return (int)ret;
 }
 
 extern void SCST_param_remove_num_threads(void);
@@ -234,8 +234,8 @@ event_send(uint32_t tid, uint64_t sid, uint32_t cid, uint32_t cookie,
 	.cid = cid,
 	.code = code,
 	.cookie = cookie,
-	.param1_size = param1 ? strlen(param1) : 0,
-	.param2_size = param2 ? strlen(param2) : 0,
+	.param1_size = param1 ? (u32)strlen(param1) : 0,
+	.param2_size = param2 ? (u32)strlen(param2) : 0,
     };
 
     /* Assumes writev(2) is OK with zero-length iov_len elements (XXXX check) */
@@ -246,7 +246,7 @@ event_send(uint32_t tid, uint64_t sid, uint32_t cid, uint32_t cookie,
 	[3] = { .iov_base = _unconstify(param2), .iov_len = event.param2_size },   //XXX
     };
 
-    return UMC_kernelize(writev(SCST_nl_fdwrite, iov, ARRAY_SIZE(iov)));
+    return (errno_t)UMC_kernelize64(writev(SCST_nl_fdwrite, iov, ARRAY_SIZE(iov)));
 }
 
 /******************************************************************************/
