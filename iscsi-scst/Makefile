@@ -214,7 +214,7 @@ $(obj-m):   $(iscsi-scst-objs)
 	$(LD) -r -o $@ $(iscsi-scst-objs)
 
 %.o: %.c
-	$(CC) -c -o $(@) -I../../include $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+	$(CC) -c -o $(@) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
 
 install: all
 	# @install -vD -m 755 usr/iscsi-scstd $(DESTDIR)$(SBINDIR)/iscsi-scstd
