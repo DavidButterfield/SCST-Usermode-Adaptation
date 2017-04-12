@@ -2779,10 +2779,10 @@ struct scst_ext_blocker {
 	void * ext_blocker_waitq;   /* same address as ext_blocker_data */
 };
 
-char validate_ext_blocker[- /* ext_blocker_data and ext_blocker_waitq must match */
+static char __attribute__((__unused__))	/* assert_static_global() */
+validate_ext_blocker[-	/* ext_blocker_data and ext_blocker_waitq must match */
     (offsetof(struct scst_ext_blocker, ext_blocker_waitq) !=
-     offsetof(struct scst_ext_blocker, ext_blocker_data))
-    ];
+     offsetof(struct scst_ext_blocker, ext_blocker_data)) ];
 
 /*
  * SCST device
