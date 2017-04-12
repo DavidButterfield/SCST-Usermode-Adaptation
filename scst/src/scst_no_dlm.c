@@ -63,7 +63,7 @@ static void scst_no_dlm_pr_write_unlock(struct scst_device *dev,
 
 static bool scst_no_dlm_reserved(struct scst_device *dev)
 {
-	return (dev->reserved_by != NULL);
+	return dev->reserved_by;
 }
 
 static void scst_no_dlm_res_lock(struct scst_device *dev,

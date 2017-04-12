@@ -100,7 +100,7 @@ static int iscsi_session_alloc(struct iscsi_target *target,
 
 	if (!session->sess_params.rdma_extensions) {
 		err = iscsi_threads_pool_get(
-			scst_get_acg_tgt_priv(session->scst_sess->acg) != NULL,
+			(bool)scst_get_acg_tgt_priv(session->scst_sess->acg),
 			&session->scst_sess->acg->acg_cpu_mask,
 			&session->sess_thr_pool);
 		if (err != 0)
