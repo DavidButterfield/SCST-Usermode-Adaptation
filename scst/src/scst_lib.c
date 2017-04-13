@@ -4430,6 +4430,7 @@ int scst_acg_add_lun(struct scst_acg *acg, struct kobject *parent,
 		acg_dev->acg_dev_dif_guard_format = SCST_DIF_GUARD_FORMAT_CRC;
 	} else
 		acg_dev->acg_dev_dif_guard_format =
+		    acg->tgt &&	    /* sometimes NULL */
 			acg->tgt->tgt_hw_dif_ip_supported && !dev->dev_dif_ip_not_supported ?
 							SCST_DIF_GUARD_FORMAT_IP :
 							SCST_DIF_GUARD_FORMAT_CRC;
@@ -4696,8 +4697,13 @@ static void scst_del_acg(struct scst_acg *acg)
 				 acg_dev_list_entry)
 		scst_del_acg_dev(acg_dev, true);
 
+#ifndef NOT_SCST_7105	//XXX Does this handle procfs?
 	list_for_each_entry(acn, &acg->acn_list, acn_list_entry)
 		scst_acn_sysfs_del(acn);
+#else	//XXX This was my earlier local fix.  Which is better?
+	list_for_each_entry_safe(acn, acnt, &acg->acn_list, acn_list_entry)
+		scst_del_free_acn(acn, false);
+#endif
 
 #ifdef CONFIG_SCST_PROC
 	list_del(&acg->acg_list_entry);
@@ -4724,7 +4730,8 @@ static void scst_free_acg(struct scst_acg *acg)
 	struct scst_acn *acn, *acnt;
 	struct scst_tgt *tgt = acg->tgt;
 
-	TRACE_DBG("Freeing acg %s/%s", tgt->tgt_name, acg->acg_name);
+	TRACE_DBG("Freeing acg %s/%s",
+		  tgt?tgt->tgt_name:"(tgt=NULL)", acg->acg_name);
 
 	list_for_each_entry_safe(acg_dev, acg_dev_tmp, &acg->acg_dev_list,
 			acg_dev_list_entry) {
@@ -4782,6 +4789,7 @@ static void scst_put_acg_work(struct work_struct *work)
 
 void scst_put_acg(struct scst_acg *acg)
 {
+#ifndef SCST_USERMODE
 	struct scst_acg_put_work *put_work;
 
 	put_work = kmalloc(sizeof(*put_work), GFP_KERNEL | __GFP_NOFAIL);
@@ -4802,6 +4810,13 @@ void scst_put_acg(struct scst_acg *acg)
 	 * avoid deep recursion and a stack overflow.
 	 */
 	WARN_ON_ONCE(!queue_work(scst_release_acg_wq, &put_work->work));
+#else
+	/* Somehow the put_work never makes it to scst_put_acg_work before
+	 * shutdown, if we schedule it; so call it directly for a clean
+	 * valgrind/mem_arena output.	    XXXX Investigate
+	 */
+	kref_put(&acg->acg_kref, scst_release_acg);
+#endif
 }
 
 void scst_get_acg(struct scst_acg *acg)
@@ -5136,6 +5151,7 @@ int scst_tgt_dev_setup_threads(struct scst_tgt_dev *tgt_dev)
 				       tgtt->threads_num);
 		break;
 	}
+	case SCST_THREADS_POOL_TYPE_INVALID:
 	default:
 		PRINT_CRIT_ERROR("Unknown threads pool type %d (dev %s)",
 			dev->threads_pool_type, dev->virt_name);
@@ -6120,8 +6136,6 @@ static void scst_ws_write_cmd_finished(struct scst_cmd *cmd)
 	wsp->ws_cur_in_flight--;
 
 	if (cmd->status != 0) {
-		int rc;
-
 		TRACE_DBG("Write cmd %p (ws cmd %p) finished not successfully",
 			cmd, ws_cmd);
 		sBUG_ON(cmd->resp_data_len != 0);
@@ -6551,8 +6565,6 @@ static void scst_cwr_read_cmd_finished(struct scst_cmd *cmd)
 	TRACE_DBG("READ cmd %p finished (cwr cmd %p)", cmd, cwr_cmd);
 
 	if (cmd->status != 0) {
-		int rc;
-
 		TRACE_DBG("Read cmd %p (cwr cmd %p) finished not successfully",
 			cmd, cwr_cmd);
 		sBUG_ON(cmd->resp_data_len != 0);
@@ -7509,6 +7521,10 @@ int scst_alloc_space(struct scst_cmd *cmd)
 	flags = atomic ? SGV_POOL_NO_ALLOC_ON_CACHE_MISS : 0;
 	if (cmd->no_sgv)
 		flags |= SGV_POOL_ALLOC_NO_CACHED;
+
+#ifdef VALGRIND
+	flags |= SGV_POOL_ALLOC_NO_CACHED;  /* valgrind wants to see frees happen */
+#endif
 
 	cmd->sg = sgv_pool_alloc(tgt_dev->pools[raw_smp_processor_id()],
 			cmd->bufflen, gfp_mask, flags, &cmd->sg_cnt, &cmd->sgv,
@@ -9265,6 +9281,9 @@ static int scst_do_dif(struct scst_cmd *cmd,
 		res = generate_fn(cmd);
 		break;
 
+	case SCST_DIF_CHECK_APP_TAG:
+	case SCST_DIF_CHECK_GUARD_TAG:
+	case SCST_DIF_CHECK_REF_TAG:
 	default:
 		EXTRACHECKS_BUG_ON(1);
 		/* go through */
@@ -11691,15 +11710,15 @@ uint64_t scst_unpack_lun(const uint8_t *lun, int len)
 	case 2:
 		break;
 	case 8:
-		if ((*((__be64 *)lun) & cpu_to_be64(0x0000FFFFFFFFFFFFLL)) != 0)
+		if ((*((__be64 const *)lun) & cpu_to_be64(0x0000FFFFFFFFFFFFLL)) != 0)
 			goto out_err;
 		break;
 	case 4:
-		if (*((__be16 *)&lun[2]) != 0)
+		if (*((__be16 const *)&lun[2]) != 0)
 			goto out_err;
 		break;
 	case 6:
-		if (*((__be32 *)&lun[2]) != 0)
+		if (*((__be32 const *)&lun[2]) != 0)
 			goto out_err;
 		break;
 	case 1:
@@ -13494,6 +13513,7 @@ static void scst_process_qerr(struct scst_cmd *cmd)
 	/* dev->qerr can be changed behind our back */
 	q = dev->qerr;
 	qerr = READ_ONCE(q); /* READ_ONCE() doesn't work for bit fields */
+			     /* XXX Seems pretty useless for automatics, too */
 
 	TRACE_DBG("Processing QErr %d for cmd %p", qerr, cmd);
 
@@ -13866,10 +13886,10 @@ EXPORT_SYMBOL(scst_reassign_retained_sess_states);
 char *scst_get_next_lexem(char **token_str)
 {
 	char *p, *q;
-	static const char blank = '\0';
+	static char blank = '\0';
 
 	if ((token_str == NULL) || (*token_str == NULL))
-		return (char *)&blank;
+		return &blank;
 
 	for (p = *token_str; (*p != '\0') && (isspace(*p) || (*p == '=')); p++)
 		;
@@ -14570,7 +14590,7 @@ int scst_ext_block_dev(struct scst_device *dev, ext_blocker_done_fn_t done_fn,
 		DECLARE_WAIT_QUEUE_HEAD_ONSTACK(w);
 
 		b->ext_blocker_done_fn = scst_sync_ext_blocking_done;
-		*((void **)&b->ext_blocker_data[0]) = &w;
+		b->ext_blocker_waitq = &w;
 
 		wait_event_locked(w, (dev->on_dev_cmd_count == 0),
 			lock_bh, dev->dev_lock);
@@ -14667,6 +14687,8 @@ out_unlock:
 	return;
 }
 
+#ifndef SCST_USERMODE			/* unlink */
+
 /* Abstract vfs_unlink() for different kernel versions (as possible) */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
 void scst_vfs_unlink_and_put(struct nameidata *nd)
@@ -14708,6 +14730,8 @@ void scst_path_put(struct nameidata *nd)
 }
 EXPORT_SYMBOL(scst_path_put);
 #endif
+
+#endif /* !SCST_USERMODE */
 
 int scst_copy_file(const char *src, const char *dest)
 {
@@ -14808,7 +14832,8 @@ out:
 int scst_remove_file(const char *name)
 {
 	int res = 0;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+#ifdef SCST_USERMODE                   /* unlink */
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
 	struct nameidata nd;
 #else
 	struct path path;
@@ -14819,7 +14844,10 @@ int scst_remove_file(const char *name)
 
 	set_fs(KERNEL_DS);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+#ifdef SCST_USERMODE                   /* unlink */
+       res = UMC_kernelize(unlink(name));
+       expect_noerr(res, "unlink(\"%s\")", name);
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
 	res = path_lookup(name, 0, &nd);
 	if (!res)
 		scst_vfs_unlink_and_put(&nd);
@@ -14870,7 +14898,7 @@ int scst_write_file_transactional(const char *name, const char *name1,
 
 	pos = signature_len+1;
 
-	res = vfs_write(file, (void __force __user *)buf, size, &pos);
+	res = vfs_write(file, (void const __force __user *)buf, size, &pos);
 	if (res != size)
 		goto write_error;
 
@@ -14881,7 +14909,7 @@ int scst_write_file_transactional(const char *name, const char *name1,
 	}
 
 	pos = 0;
-	res = vfs_write(file, (void __force __user *)signature, signature_len, &pos);
+	res = vfs_write(file, (void const __force __user *)signature, signature_len, &pos);
 	if (res != signature_len)
 		goto write_error;
 

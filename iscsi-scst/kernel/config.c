@@ -1095,7 +1095,7 @@ out:
 	return res;
 }
 
-static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static long ioctl_impl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	long err;
 
@@ -1172,7 +1172,7 @@ out:
 	return err;
 }
 
-static int open(struct inode *inode, struct file *file)
+static int open_impl(struct inode *inode, struct file *file)
 {
 	bool already;
 
@@ -1222,9 +1222,9 @@ static int release(struct inode *inode, struct file *filp)
 
 const struct file_operations ctr_fops = {
 	.owner		= THIS_MODULE,
-	.unlocked_ioctl	= ioctl,
-	.compat_ioctl	= ioctl,
-	.open		= open,
+	.unlocked_ioctl	= ioctl_impl,
+	.compat_ioctl	= ioctl_impl,
+	.open		= open_impl,
 	.release	= release,
 };
 

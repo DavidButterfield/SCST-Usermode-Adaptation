@@ -2774,8 +2774,15 @@ struct scst_ext_blocker {
 
 	ext_blocker_done_fn_t ext_blocker_done_fn;
 	int ext_blocker_data_len;
-	uint8_t ext_blocker_data[];
+
+	uint8_t ext_blocker_data[0] __attribute__ ((aligned (__alignof__(void *))));
+	void * ext_blocker_waitq;   /* same address as ext_blocker_data */
 };
+
+static char __attribute__((__unused__))	/* assert_static_global() */
+validate_ext_blocker[-	/* ext_blocker_data and ext_blocker_waitq must match */
+    (offsetof(struct scst_ext_blocker, ext_blocker_waitq) !=
+     offsetof(struct scst_ext_blocker, ext_blocker_data)) ];
 
 /*
  * SCST device
@@ -4067,6 +4074,9 @@ static inline bool scst_cmd_prelim_completed(struct scst_cmd *cmd)
 
 static inline enum scst_exec_context __scst_estimate_context(bool atomic)
 {
+#ifdef SCST_USERMODE
+	return SCST_CONTEXT_SAME;
+#else
 	if (in_irq())
 		return SCST_CONTEXT_TASKLET;
 /*
@@ -4081,11 +4091,13 @@ static inline enum scst_exec_context __scst_estimate_context(bool atomic)
 	else if (in_atomic())
 		return SCST_CONTEXT_DIRECT_ATOMIC;
 	else
+		//XXX Isn't this backwards?  Could it explain "non-reliability"?
 		return atomic ? SCST_CONTEXT_DIRECT :
 				SCST_CONTEXT_DIRECT_ATOMIC;
 #else
 	return SCST_CONTEXT_THREAD;
 #endif
+#endif /* !SCST_USERMODE */
 }
 
 static inline enum scst_exec_context scst_estimate_context(void)
@@ -4743,7 +4755,7 @@ static inline uint32_t scst_cmd_get_dif_exp_ref_tag(struct scst_cmd *cmd)
 	if (cmd->cdb_len == 32)
 		return get_unaligned_be32(&cmd->cdb[20]);
 	else
-		return cmd->lba & 0xFFFFFFFF;
+		return (uint32_t)(cmd->lba);
 }
 
 /*
@@ -4946,6 +4958,11 @@ void scst_aen_done(struct scst_aen *aen);
 
 static inline struct scatterlist *__sg_next_inline(struct scatterlist *sg)
 {
+#if 0	// XXX This triggers
+	WARN(sg_is_last(sg),
+	       "sg=%p *sg={ link=%lx offset=%u length=%u }",
+	       sg, sg->page_link, sg->offset, sg->length);
+#endif
 	sg++;
 	if (unlikely(sg_is_chain(sg)))
 		sg = sg_chain_ptr(sg);
@@ -5490,6 +5507,7 @@ int scst_get_max_lun_commands(struct scst_session *sess, uint64_t lun);
 
 void scst_dev_inquiry_data_changed(struct scst_device *dev);
 
+#ifndef wait_event_locked
 /*
  * Has to be put here open coded, because Linux doesn't have equivalent, which
  * allows exclusive wake ups of threads in LIFO order. We need it to let (yet)
@@ -5532,6 +5550,7 @@ if (!(condition)) {							\
 	} while (!(condition));						\
 	finish_wait(&(wq), &__wait);					\
 }
+#endif
 
 /* Only use get_unaligned_be24() if reading p - 1 is allowed. */
 static inline uint32_t get_unaligned_be24(const uint8_t *const p)
@@ -5541,9 +5560,9 @@ static inline uint32_t get_unaligned_be24(const uint8_t *const p)
 
 static inline void put_unaligned_be24(const uint32_t v, uint8_t *const p)
 {
-	p[0] = v >> 16;
-	p[1] = v >>  8;
-	p[2] = v >>  0;
+	p[0] = (uint8_t)(v >> 16);
+	p[1] = (uint8_t)(v >>  8);
+	p[2] = (uint8_t)(v >>  0);
 }
 
 #if defined(CONFIG_SCST_DEBUG) || defined(CONFIG_SCST_TRACING)

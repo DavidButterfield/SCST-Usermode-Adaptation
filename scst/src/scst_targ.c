@@ -906,6 +906,7 @@ active:
 		scst_schedule_tasklet(cmd);
 		break;
 
+	case SCST_CONTEXT_SAME:
 	default:
 		PRINT_ERROR("Context %x is undefined, using the thread one",
 			pref_context);
@@ -1552,6 +1553,7 @@ static int scst_prepare_space(struct scst_cmd *cmd)
 		else if (r == 0) {
 			if (unlikely(cmd->bufflen == 0)) {
 				/* See comment in scst_alloc_space() */
+				//XXX There is no comment in scst_alloc_space()
 				if (cmd->sg == NULL)
 					goto alloc;
 			}
@@ -1904,6 +1906,7 @@ static void scst_process_redirect_cmd(struct scst_cmd *cmd,
 		scst_schedule_tasklet(cmd);
 		break;
 
+	case SCST_CONTEXT_SAME:
 	default:
 		PRINT_ERROR("Context %x is unknown, using the thread one",
 			    context);
@@ -3468,6 +3471,10 @@ static int scst_do_real_exec(struct scst_cmd *cmd)
 		  scsi_dev->host->host_no, scsi_dev->channel, scsi_dev->id,
 		  (u64)scsi_dev->lun);
 
+#ifdef SCST_USERMODE
+        BUG_ON("SCST_USERMODE should never reach this point");
+#endif
+
 	scst_set_exec_start(cmd);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 30)
@@ -3831,6 +3838,7 @@ static int scst_exec_check_sn(struct scst_cmd **active_cmd)
 				/* dev->qerr can be changed behind our back */
 				q = cmd->dev->qerr;
 				/* ACCESS_ONCE doesn't work for bit fields */
+				/* XXX Seems pretty useless for automatics, too */
 				qerr = ACCESS_ONCE(q);
 
 				switch (qerr) {
@@ -4135,7 +4143,7 @@ next:
 
 	if (likely(scst_cmd_completed_good(cmd))) {
 		if (cmd->deferred_dif_read_check) {
-			int rc = scst_dif_process_read(cmd);
+			rc = scst_dif_process_read(cmd);
 
 			if (unlikely(rc != 0)) {
 				cmd->deferred_dif_read_check = 0;
@@ -5588,7 +5596,8 @@ void scst_process_active_cmd(struct scst_cmd *cmd, bool atomic)
 			sBUG();
 		}
 #endif
-		TRACE_DBG("Adding cmd %p to head of active cmd list", cmd);
+		TRACE_DBG("Adding cmd %p state %u to head of active cmd list",
+			  cmd, cmd->state);
 
 		spin_lock_irq(&cmd->cmd_threads->cmd_list_lock);
 		list_add(&cmd->cmd_list_entry,
@@ -5638,11 +5647,12 @@ int scst_cmd_thread(void *arg)
 {
 	struct scst_cmd_thread_t *thr = arg;
 	struct scst_cmd_threads *p_cmd_threads = thr->thr_cmd_threads;
-	bool someth_done, p_locked, thr_locked;
+	bool someth_done;
 
 	TRACE_ENTRY();
 
-	TRACE(TRACE_MINOR, "Processing thread %s started", current->comm);
+	TRACE(TRACE_MINOR, "Processing thread %s @ %p started on tid=%d",
+			    current->comm, current, current->pid);
 
 #if 0
 	set_user_nice(current, 10);
@@ -5653,10 +5663,22 @@ int scst_cmd_thread(void *arg)
 
 	wake_up_all(&p_cmd_threads->ioctx_wq);
 
+	/* Hold both locks for the test_cmd_threads() checks */
+	/* Lock acquisition order is always:  First p_cmd_threads, Then thr */
 	spin_lock_irq(&p_cmd_threads->cmd_list_lock);
 	spin_lock(&thr->thr_cmd_list_lock);
 	while (!kthread_should_stop()) {
 		if (!test_cmd_threads(thr)) {
+
+#ifdef SCST_USERMODE
+			/* wait_event_locked2(WAITQ, COND, LOCK, INNERLOCK) --
+			 * Wait Event with exclusive wakeup, NO timeout, and TWO spinlocks;
+			 * Lock acquisition order is LOCK, INNERLOCK;
+			 * SCST_USERMODE does not care about the "_irq" blocking, NOP here.
+			 */
+			wait_event_locked2(p_cmd_threads->cmd_list_waitQ, test_cmd_threads(thr),
+				    p_cmd_threads->cmd_list_lock, thr->thr_cmd_list_lock);
+#else
 			DEFINE_WAIT(wait);
 
 			do {
@@ -5672,14 +5694,20 @@ int scst_cmd_thread(void *arg)
 				spin_lock(&thr->thr_cmd_list_lock);
 			} while (!test_cmd_threads(thr));
 			finish_wait(&p_cmd_threads->cmd_list_waitQ, &wait);
+#endif
 		}
+
+		/* Drop both locks now that we are through the test_cmd_threads() checks */
+		spin_unlock(&thr->thr_cmd_list_lock);
+		spin_unlock_irq(&p_cmd_threads->cmd_list_lock);
 
 		if (tm_dbg_is_release()) {
-			spin_unlock_irq(&p_cmd_threads->cmd_list_lock);
 			tm_dbg_check_released_cmds();
-			spin_lock_irq(&p_cmd_threads->cmd_list_lock);
 		}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)
+again:
+#endif
 		/*
 		 * Idea of this code is to have local queue be more prioritized
 		 * comparing to the more global queue as 2:1, as well as the
@@ -5688,43 +5716,29 @@ int scst_cmd_thread(void *arg)
 		 * Why 2:1? 2 is average number of intermediate commands states
 		 * reaching this point here.
 		 */
-
-		p_locked = true;
-		thr_locked = true;
 		do {
 			int thr_cnt;
-
+			struct scst_cmd *cmd;
 			someth_done = false;
-again:
-			if (!list_empty(&p_cmd_threads->active_cmd_list)) {
-				struct scst_cmd *cmd;
 
-				if (!p_locked) {
-					if (thr_locked) {
-						spin_unlock_irq(&thr->thr_cmd_list_lock);
-						thr_locked = false;
-					}
-					spin_lock_irq(&p_cmd_threads->cmd_list_lock);
-					p_locked = true;
-					goto again;
+			for (thr_cnt = 0; thr_cnt < 1; thr_cnt++) {
+				cmd = NULL;
+				spin_lock_irq(&p_cmd_threads->cmd_list_lock);
+
+				if (!list_empty(&p_cmd_threads->active_cmd_list)) {
+					cmd = list_first_entry(&p_cmd_threads->active_cmd_list,
+								typeof(*cmd), cmd_list_entry);
+
+					TRACE_DBG("Deleting cmd %p from active cmd list", cmd);
+					list_del(&cmd->cmd_list_entry);
 				}
 
-				cmd = list_first_entry(&p_cmd_threads->active_cmd_list,
-							typeof(*cmd), cmd_list_entry);
-
-				TRACE_DBG("Deleting cmd %p from active cmd list", cmd);
-				list_del(&cmd->cmd_list_entry);
-
-				if (thr_locked) {
-					spin_unlock(&thr->thr_cmd_list_lock);
-					thr_locked = false;
-				}
 				spin_unlock_irq(&p_cmd_threads->cmd_list_lock);
-				p_locked = false;
+
+				if (!cmd) break;
 
 				if (cmd->cmd_thr == NULL) {
-					TRACE_DBG("Assigning thread %p on cmd %p",
-						thr, cmd);
+					TRACE_DBG("Assigning thread %p on cmd %p", thr, cmd);
 					cmd->cmd_thr = thr;
 				}
 
@@ -5732,52 +5746,29 @@ again:
 				someth_done = true;
 			}
 
-			if (thr_locked && p_locked) {
-				/* We need to maintain order of locks and unlocks */
-				spin_unlock(&thr->thr_cmd_list_lock);
-				spin_unlock(&p_cmd_threads->cmd_list_lock);
+			for (thr_cnt = 0; thr_cnt < 2; thr_cnt++) {
+				cmd = NULL;
+
 				spin_lock(&thr->thr_cmd_list_lock);
-				p_locked = false;
-			} else if (!thr_locked) {
-				if (p_locked) {
-					spin_unlock_irq(&p_cmd_threads->cmd_list_lock);
-					p_locked = false;
+
+				if (!list_empty(&thr->thr_active_cmd_list)) {
+					cmd = list_first_entry(&thr->thr_active_cmd_list,
+							       typeof(*cmd), cmd_list_entry);
+
+					TRACE_DBG("Deleting cmd %p from thr active cmd list", cmd);
+					list_del(&cmd->cmd_list_entry);
 				}
-				spin_lock_irq(&thr->thr_cmd_list_lock);
-				thr_locked = true;
-			}
 
-			thr_cnt = 0;
-			while (!list_empty(&thr->thr_active_cmd_list)) {
-				struct scst_cmd *cmd = list_first_entry(
-							&thr->thr_active_cmd_list,
-							typeof(*cmd), cmd_list_entry);
+				spin_unlock(&thr->thr_cmd_list_lock);
 
-				TRACE_DBG("Deleting cmd %p from thr active cmd list", cmd);
-				list_del(&cmd->cmd_list_entry);
-
-				spin_unlock_irq(&thr->thr_cmd_list_lock);
-				thr_locked = false;
+				if (!cmd) break;
 
 				scst_process_active_cmd(cmd, false);
 
 				someth_done = true;
-
-				if (++thr_cnt == 2)
-					break;
-				else {
-					spin_lock_irq(&thr->thr_cmd_list_lock);
-					thr_locked = true;
-				}
 			}
+
 		} while (someth_done);
-
-		EXTRACHECKS_BUG_ON(p_locked);
-
-		if (thr_locked) {
-			spin_unlock_irq(&thr->thr_cmd_list_lock);
-			thr_locked = false;
-		}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)
 		if (scst_poll_ns > 0) {
@@ -5821,7 +5812,8 @@ go:
 
 	scst_ioctx_put(p_cmd_threads);
 
-	TRACE(TRACE_MINOR, "Processing thread %s finished", current->comm);
+	TRACE(TRACE_MINOR, "Processing thread %s @ %p finished on tid=%d",
+			   current->comm, current, current->pid);
 
 	TRACE_EXIT();
 	return 0;
@@ -6824,6 +6816,10 @@ static int scst_target_reset(struct scst_mgmt_cmd *mcmd)
 		if (dev->scsi_dev == NULL)
 			continue;
 
+#ifdef SCST_USERMODE
+		BUG_ON("SCST_USERMODE should never reach this point");
+#endif
+
 		list_for_each_entry(d, &host_devs, tm_dev_list_entry) {
 			if (dev->scsi_dev->host->host_no ==
 				    d->scsi_dev->host->host_no) {
@@ -6843,6 +6839,10 @@ static int scst_target_reset(struct scst_mgmt_cmd *mcmd)
 	 */
 
 	list_for_each_entry(dev, &host_devs, tm_dev_list_entry) {
+#ifdef SCST_USERMODE
+		BUG_ON("SCST_USERMODE should never reach this point");
+#endif
+
 		/* dev->scsi_dev must be non-NULL here */
 		TRACE(TRACE_MGMT, "Resetting host %d bus ",
 			dev->scsi_dev->host->host_no);
@@ -6915,6 +6915,10 @@ static int scst_lun_reset(struct scst_mgmt_cmd *mcmd)
 	scst_call_dev_task_mgmt_fn_received(mcmd, tgt_dev);
 
 	if (dev->scsi_dev != NULL) {
+#ifdef SCST_USERMODE
+		BUG_ON("SCST_USERMODE should never reach this point");
+#endif
+
 		TRACE(TRACE_MGMT, "Resetting host %d bus ",
 		      dev->scsi_dev->host->host_no);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
@@ -7431,7 +7435,6 @@ static int scst_mgmt_affected_cmds_done(struct scst_mgmt_cmd *mcmd)
 		list_for_each_entry(s, &tgt->sess_list, sess_list_entry) {
 			for (i = 0; i < SESS_TGT_DEV_LIST_HASH_SIZE; i++) {
 				struct list_head *head = &s->sess_tgt_dev_list[i];
-				struct scst_tgt_dev *tgt_dev;
 
 				list_for_each_entry(tgt_dev, head,
 						sess_tgt_dev_list_entry) {

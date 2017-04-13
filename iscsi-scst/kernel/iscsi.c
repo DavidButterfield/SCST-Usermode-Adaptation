@@ -234,7 +234,11 @@ unlock_cont:
 
 	cmnd->scst_state = ISCSI_CMD_STATE_RESTARTED;
 
+#ifdef CONFIG_SCST_TEST_IO_IN_SIRQ
+	scst_restart_cmd(cmnd->scst_cmd, status, SCST_CONTEXT_DIRECT);
+#else
 	scst_restart_cmd(cmnd->scst_cmd, status, SCST_CONTEXT_THREAD);
+#endif
 
 out:
 	TRACE_EXIT();
@@ -509,6 +513,8 @@ void cmnd_done(struct iscsi_cmnd *cmnd)
 			if (cmnd->sg != &dummy_sg)
 				scst_free_sg(cmnd->sg, cmnd->sg_cnt);
 #ifdef CONFIG_SCST_DEBUG
+			//XXX What if a BUG makes correct behavior depend on this?
+			//XXX The bug will disappear whenever you enable debugging!
 			cmnd->own_sg = 0;
 			cmnd->sg = NULL;
 			cmnd->sg_cnt = -1;
@@ -2149,6 +2155,7 @@ static int scsi_cmnd_start(struct iscsi_cmnd *req)
 	req->scst_state = ISCSI_CMD_STATE_RX_CMD;
 	conn->rx_task = current;
 	scst_cmd_init_stage1_done(scst_cmd, SCST_CONTEXT_DIRECT, 0);
+	conn->rx_task = NULL;
 
 	if (req->scst_state != ISCSI_CMD_STATE_RX_CMD)
 		res = req->conn->transport->iscsit_receive_cmnd_data(req);
@@ -2353,7 +2360,7 @@ static void __cmnd_abort(struct iscsi_cmnd *cmnd)
 	 * Lock to sync with iscsi_check_tm_data_wait_timeouts(), including
 	 * CMD_ABORTED bit set.
 	 */
-	spin_lock_bh(&conn->conn_thr_pool->rd_lock);
+	conn_rd_lock(conn);
 
 	/*
 	 * We suppose that preliminary commands completion is tested by
@@ -2367,7 +2374,7 @@ static void __cmnd_abort(struct iscsi_cmnd *cmnd)
 	TRACE_MGMT_DBG("Setting conn_tm_active for conn %p", conn);
 	conn->conn_tm_active = 1;
 
-	spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
+	conn_rd_unlock(conn);
 
 	/*
 	 * We need the lock to sync with req_add_to_write_timeout_list() and
@@ -2911,7 +2918,7 @@ out:
 	return;
 }
 
-static void set_cork(struct socket *sock, int on)
+static inline void set_cork(struct socket *sock, int on)
 {
 	int opt = on;
 	mm_segment_t oldfs;
@@ -2933,7 +2940,9 @@ void cmnd_tx_start(struct iscsi_cmnd *cmnd)
 
 	iscsi_extracheck_is_wr_thread(conn);
 
+#ifndef SCST_USERMODE
 	set_cork(conn->sock, 1);
+#endif
 
 	conn->write_iop = conn->write_iov;
 	conn->write_iop->iov_base = (void __force __user *)(&cmnd->pdu.bhs);
@@ -3041,7 +3050,9 @@ void cmnd_tx_end(struct iscsi_cmnd *cmnd)
 		}
 	}
 
+#ifndef SCST_USERMODE
 	set_cork(cmnd->conn->sock, 0);
+#endif
 	return;
 }
 
@@ -3373,7 +3384,26 @@ static void iscsi_tcp_preprocessing_done(struct iscsi_cmnd *req)
 		 */
 		cmnd_get(req);
 		req->scst_state = ISCSI_CMD_STATE_AFTER_PREPROC;
+
+#ifndef CONN_LOCAL_READ			/* try reading data from pp_done callback */
 		iscsi_make_conn_rd_active(req->conn);
+#else
+		conn_rd_lock(req->conn);
+
+		if (req->conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING) {
+			req->conn->rd_data_ready = 1;
+		} else {
+			/* Try to read the data we want right now */
+			int rc = scst_try_one_rd(req->conn);
+			if (rc < 0) {
+				/* closed */
+			} else {
+				iscsi_make_conn_rd_active(req->conn);
+			}
+		}
+
+		conn_rd_unlock(req->conn);
+#endif
 		if (unlikely(req->conn->closing)) {
 			TRACE_DBG("Waking up closing conn %p", req->conn);
 			wake_up(&req->conn->read_state_waitQ);
@@ -4086,7 +4116,11 @@ struct scst_tgt_template iscsi_template = {
 	.sg_tablesize = 0xFFFF /* no limit */,
 	.threads_num = 0,
 	.no_clustering = 1,
+#ifdef SCST_USERMODE
+	.xmit_response_atomic = 1,
+#else
 	.xmit_response_atomic = 0,
+#endif
 #ifndef CONFIG_SCST_PROC
 	.tgtt_attrs = iscsi_attrs,
 	.tgt_attrs = iscsi_tgt_attrs,
@@ -4232,7 +4266,7 @@ create:
 	if (p == NULL) {
 		PRINT_ERROR("Unable to allocate iSCSI thread pool (size %zd)",
 			sizeof(*p));
-		res = -ENOMEM;
+		res = -ENOMEM;	    //XXX Should this be "res = 0;" ?
 		if (!list_empty(&iscsi_thread_pools_list)) {
 			PRINT_WARNING("%s", "Using global iSCSI thread pool "
 				"instead");
@@ -4271,7 +4305,12 @@ create:
 
 	list_add_tail(&p->thread_pools_list_entry, &iscsi_thread_pools_list);
 
-	for (j = 0; j < 2; j++) {
+#ifdef SCST_USERMODE			/* only create writer threads */
+	j = 1;		    /* only create writer threads */
+#else
+	j = 0;		    /* create reader and writer threads */
+#endif
+	for ( ; j < 2; j++) {
 		for (i = 0; i < count; i++) {
 			t = kmalloc(sizeof(*t), GFP_KERNEL);
 			if (t == NULL) {

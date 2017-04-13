@@ -27,6 +27,18 @@
 
 #include "iscsid.h"
 
+#ifdef SCST_USERMODE  /* ioctl(ctrl_fd)-->SCST_ctldev_ioctl, create_and_open_dev-->SCST_init */
+
+#define ioctl(ctrl_fd, cmd, argp) SCST_ctldev_ioctl((ctrl_fd), (cmd), (uintptr_t)(argp))
+extern int SCST_ctldev_ioctl(int fd_arg, unsigned int cmd, unsigned long arg);
+
+#define create_and_open_dev(dev, readonly) SCST_init((dev), (readonly))
+extern int SCST_init(const char * dev, int readonly);
+
+#define close(ctlfd)	/* ctlfd not really a file descriptor */
+
+#endif /* SCST_USERMODE */
+
 #define CTL_DEVICE	"iscsi-scst-ctl"
 
 int kernel_open(void)

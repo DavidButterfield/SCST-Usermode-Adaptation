@@ -599,7 +599,7 @@ static int close_conn_thr(void *arg)
 	close_conn(conn);
 
 	TRACE_EXIT();
-	return 0;
+	do_exit(0);
 }
 
 /* No locks */
@@ -1039,8 +1039,268 @@ out:
 	return res;
 }
 
+#ifdef ADAPTIVE_NAGLE	    /* Dynamically enable and disable Nagle mode */
+
+/* XXX I expect the ADAPTIVE_NAGLE logic to require some modification to work
+ * well when SCST is resident in the kernel and the scst_do_job_rd() function is
+ * in use; because in that configuration one thread can service multiple
+ * sessions from that function, only going to sleep (and subsequently incurring
+ * the scheduling latency) when all sessions become idle concurrently.
+ *
+ * The algorithm here assumes the differing model seen in the usermode build,
+ * where there is one Session Thread per session, which sleeps when the session
+ * is idle.  I *would* expect the logic here to show the same benefit in the
+ * kernel for the case where the server is handling a single session using a
+ * single reader thread.
+ *
+ * Probably the algorithm could be modified to also handle the shared session-
+ * thread model used in the kernel.  I would expect its benefits to be most
+ * visible in kernel-based SCST when running a single session to the target.
+ */
+#ifndef SCST_USERMODE
+#warning ADAPTIVE_NAGLE being compiled without SCST_USERMODE (success unlikely)
+#endif
+
+/* TUNE: These affect workloads with a CPU-bound Session Thread.  Tuned for
+ * reasonable behavior at all three CPU-bound I/O sizes (512, 1024, 1536 byte)
+ * using single-session Read over 1Gb Ethernet MTU=9000 CPU 2400 MHz.  Some
+ * compromise between I/O sizes in the tuning, leaving room for more clever
+ * decision criteria.  I would not expect it to depend on network bandwidth or
+ * CPU speed, as those seem inherent in the "CPU-bound" test.  Probably these
+ * should be adjustable via sysfs/procfs.  XXX
+ *
+ * nagle_threshold = 0	implies always running in Nagle mode, NO flush on IDLE
+ *
+ * nagle_threshold = 1 and
+ * nagle_margin = 0	implies always running in Nagle mode, flush on IDLE
+ *
+ * nagle_threshold > 1	implies sometimes running in Nagle mode
+ *
+ * nagle_threshold = oo	implies never running in Nagle mode
+ */
+static unsigned long nagle_threshold = 96;  /* count to enter Nagle mode */
+static unsigned long nagle_margin = 40;	    /* additional count to stay there */
+
+/* Set Adaptive Nagle parameters for test purposes */
+static unsigned char params_set = 0;
+static inline void set_params(void)
+{
+	if (params_set) return;
+	params_set = 1;
+
+	string_t s1;
+	if ((s1=getenv("nagle_threshold"))) nagle_threshold = atol(s1);
+	PRINT_INFO("nagle_threshold=%lu", nagle_threshold);
+	if ((s1=getenv("nagle_margin"))) nagle_margin = atol(s1);
+	PRINT_INFO("nagle_margin=%lu", nagle_margin);
+}
+
+/* Disable Nagle's algorithm */
+static inline void enable_tcp_nodelay(struct socket * sock)
+{
+	mm_segment_t const oldfs = get_fs();
+	set_fs(get_ds());
+	int opt = 1;
+	sock->ops->setsockopt(sock, SOL_TCP, TCP_NODELAY,
+			      (void __force __user *)&opt, sizeof(opt));
+	set_fs(oldfs);
+}
+
+/* Enable Nagle's algorithm */
+static inline void disable_tcp_nodelay(struct socket * sock)
+{
+	mm_segment_t const oldfs = get_fs();
+	set_fs(get_ds());
+	int opt = 0;
+	sock->ops->setsockopt(sock, SOL_TCP, TCP_NODELAY,
+			      (void __force __user *)&opt, sizeof(opt));
+	set_fs(oldfs);
+}
+
+/* conn->cpu_busy_count[] holds the maximum busy_counts attained by the last few
+ * IDLE-BUSY cycles.  cpu_busy_idx points at the "current" count, with counts of
+ * prior cycles recorded circularly in the array starting from there.
+ *
+ * cpu_busy_count_ptr(conn, 0) returns a pointer to the count for the current
+ * cycle; cpu_busy_count_ptr(conn, 1) for the last previous cycle, etc.
+ */
+static inline uint64_t * cpu_busy_count_ptr(struct iscsi_conn * conn, unsigned int idx)
+{
+    assert(idx < ARRAY_SIZE(conn->cpu_busy_count));
+    return &conn->cpu_busy_count[(conn->cpu_busy_idx + idx) % ARRAY_SIZE(conn->cpu_busy_count)];
+}
+
+/* Return the busy_count for the current IDLE-BUSY cycle */
+static inline uint64_t cpu_busy_count_get(struct iscsi_conn * conn)
+{
+    return *cpu_busy_count_ptr(conn, 0);
+}
+
+/* Increment and return the busy_count for the current IDLE-BUSY cycle */
+static inline uint64_t cpu_busy_count_incr(struct iscsi_conn * conn)
+{
+    return ++*cpu_busy_count_ptr(conn, 0);
+}
+
+/* Advance circular history index for a new IDLE-BUSY cycle -- decrementing it
+ * so positive offsets from it refer to increasingly remote cycles.
+ */
+static inline void cpu_busy_count_new(struct iscsi_conn * conn)
+{
+    conn->cpu_busy_idx = (conn->cpu_busy_idx ?: ARRAY_SIZE(conn->cpu_busy_count)) - 1;
+    *cpu_busy_count_ptr(conn, 0) = 0;
+}
+
+/* Return the average busy count of the last few IDLE-BUSY cycles */
+static inline uint64_t cpu_busy_count_avg(struct iscsi_conn * conn)
+{
+    uint64_t sum = 0;
+    int i;
+    for (i = 0; i < ARRAY_SIZE(conn->cpu_busy_count); i++) {
+	sum += *cpu_busy_count_ptr(conn, i);
+    }
+    return sum / ARRAY_SIZE(conn->cpu_busy_count);
+}
+
+#endif
+
+/* Called under CONN->rd_lock and BHs disabled, but will drop it inside, then
+ * reacquire.  Returns -1 if conn closed (if so do not reference it further).
+ *
+ * Otherwise the return value denotes the number of additional bytes needed to
+ * satisfy the current read request -- if this is zero the request was satisfied
+ * (all bytes requested were read).
+ *
+ * If the read was satisfied, conn->rd_state is returned to the state it was in
+ * when the function was called.
+ *
+ * If the read was NOT satisfied, conn->rd_state is *usually* set to _IDLE
+ * (because it has nothing to do until more data shows up); but if more data
+ * arrived after input processing but before the conn was relocked, then
+ * rd_state will be returned to the state it was in when the function was called.
+ *
+ * Thus it is possible to return with the read UNsatisfied, and yet the conn is NOT
+ * IDLE.  In all cases, caller is responsible to see that processing continues if
+ * the new state on return (still under lock) is not IDLE.
+ *
+ * Note we are polling the socket descriptors in EDGE triggered mode -- if zero is
+ * returned from this function, the caller remains responsible to receive data
+ * without any further notifications until the socket is exhausted -- before that
+ * time there may not be any further notification callbacks.
+ */
+int scst_try_one_rd(struct iscsi_conn * conn)
+{
+	int closed = 0, rc;
+	unsigned short rd_state_previous = conn->rd_state;
+	TRACE_ENTRY();
+
+	lockdep_assert_held(&conn->rd_lock);
+
+	sBUG_ON(conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING);
+	conn->rd_data_ready = 0;
+	conn->rd_state = ISCSI_CONN_RD_STATE_PROCESSING;
+#ifdef CONFIG_SCST_EXTRACHECKS
+	sBUG_ON(conn->rd_task != NULL);
+	conn->rd_task = current;
+#endif
+	conn_rd_unlock(conn);	/* we own conn read by _STATE_PROCESSING now */
+
+#ifdef ADAPTIVE_NAGLE
+	set_params();		//XXX
+#endif
+
+	rc = process_read_io(conn, &closed);
+		/*** Note that conn may now no longer exist ***/
+
+	if (unlikely(closed)) return -1;
+	/* conn still exists */
+
+	conn_rd_lock(conn);	/* relock the conn */
+
+	if (unlikely(conn->conn_tm_active)) {
+		conn_rd_unlock(conn);
+		iscsi_check_tm_data_wait_timeouts(conn, false);
+		conn_rd_lock(conn);
+	}
+
+#ifdef CONFIG_SCST_EXTRACHECKS
+	sBUG_ON(conn->rd_task != current);
+	conn->rd_task = NULL;
+#endif
+
+	/* Modify state from PROCESSING and return held lock to caller */
+	if ((rc == 0) || conn->rd_data_ready) {	    /*** Received a message ***/
+	    conn->rd_state = rd_state_previous;
+#ifdef ADAPTIVE_NAGLE
+	    cpu_busy_count_incr(conn);	/* tally another read since last idle */
+	    /* highest number of ops between two idles since last stat print */
+	    if (conn->max_cpu_busy_count < cpu_busy_count_get(conn)) {
+		conn->max_cpu_busy_count = cpu_busy_count_get(conn);
+	    }
+	    ++conn->stat_cpu_busy_count;    /* another read since stat print */
+	    if (conn->tcp_nagle) {
+		/* tally another read in Nagle mode since last stat print */
+		++conn->read_nagle;
+	    } else {
+		/* tally another read in NODELAY mode since last stat print */
+		++conn->read_nodelay;
+		/* We are currently in NODELAY mode -- if we seem to be
+		 * streaming, enable Nagle's algorithm, which will remain
+		 * enabled until the next time we go idle wanting another
+		 * incoming request.  Until then the Session Thread will be
+		 * CPU-bound.
+		 *
+		 * To avoid entering Nagle mode too early due to spikes in the
+		 * busy_count:  not only must we cross the threshold, the
+		 * previous few cycles must have averaged at least half the
+		 * threshold.
+		 *
+		 * XXX BUG: cycles that started in Nagle mode from the outset
+		 * should count all their cycles against the margin, which is
+		 * the survival count needed while running in Nagle mode to stay
+		 * there when going IDLE.
+		 */
+		if (cpu_busy_count_get(conn) >= nagle_threshold &&
+			(nagle_threshold == 0 ||
+			    cpu_busy_count_avg(conn) >= (nagle_threshold + nagle_margin) / 2)) {
+		    disable_tcp_nodelay(conn->sock);	/* enable Nagle's algorithm */
+		    conn->tcp_nagle = 1;
+		}
+	    }
+#endif
+	} else {				    /*** Awaiting a message ***/
+	    conn->rd_state = ISCSI_CONN_RD_STATE_IDLE;
+#ifdef ADAPTIVE_NAGLE
+	    /* End of a string of work -- flush any partial output packets */
+	    if (conn->tcp_nagle && nagle_threshold > 0) {
+		/* Disable Nagle and flush accumulating partial packet */
+		enable_tcp_nodelay(conn->sock);
+		/* This uses memory of last few IDLE-BUSY cycles to facilitate
+		 * early return to Nagle mode of a generally-CPU-bound stream
+		 * resuming after a temporary interruption.  Often there will be
+		 * a pattern with most of QD arriving in one cycle and one or
+		 * two other OPs arriving in a cycle by themselves.  If this
+		 * cycle or any of the last few cycles survived *beyond the
+		 * margin* after Nagle's mode was enabled, leave it enabled so
+		 * the next cycle will begin with it that way from the outset.
+		 */
+		if (	    *cpu_busy_count_ptr(conn, 0) >= nagle_threshold + nagle_margin ||
+			    *cpu_busy_count_ptr(conn, 1) >= nagle_threshold + nagle_margin ||
+			    *cpu_busy_count_ptr(conn, 2) >= nagle_threshold + nagle_margin) {
+		    disable_tcp_nodelay(conn->sock);	/* reenable Nagle */
+		} else conn->tcp_nagle = 0;
+	    }
+	    ++conn->cpu_idles;	      /* idle periods since last stats print */
+	    cpu_busy_count_new(conn); /* advance the busy_count history index */
+#endif
+	}
+
+	TRACE_EXIT();
+	return rc;
+}
+
 /*
- * Called under rd_lock and BHs disabled, but will drop it inside,
+ * Called under POOL->rd_lock and BHs disabled, but will drop it inside,
  * then reacquire.
  */
 static void scst_do_job_rd(struct iscsi_thread_pool *p)
@@ -1048,47 +1308,51 @@ static void scst_do_job_rd(struct iscsi_thread_pool *p)
 	__releases(&rd_lock)
 {
 	TRACE_ENTRY();
-
+#ifdef SCST_USERMODE
+        sBUG_ON("SCST_USERMODE should never reach this point");
+#endif
 	/*
 	 * We delete/add to tail connections to maintain fairness between them.
+	 * 
+	 * XXX It is not clear that equality of IOPS opportunity is really
+	 *     "fair" compared with equality of bandwidth opportunity, which
+	 *     depends on the I/O size of each initiator's workload.
 	 */
 
 	while (!list_empty(&p->rd_list)) {
-		int closed = 0, rc;
+		int rc;
 		struct iscsi_conn *conn = list_first_entry(&p->rd_list,
 			typeof(*conn), rd_list_entry);
 
+		sBUG_ON(conn->rd_state != ISCSI_CONN_RD_STATE_IN_LIST);
 		list_del(&conn->rd_list_entry);
+		conn_pool_rd_unlock(p);		/* UNLOCK POOL command list */
 
-		sBUG_ON(conn->rd_state == ISCSI_CONN_RD_STATE_PROCESSING);
-		conn->rd_data_ready = 0;
-		conn->rd_state = ISCSI_CONN_RD_STATE_PROCESSING;
-#ifdef CONFIG_SCST_EXTRACHECKS
-		conn->rd_task = current;
-#endif
-		spin_unlock_bh(&p->rd_lock);
+		/* We have taken a read-ready conn from the list -- try the read */
+		conn_rd_lock(conn);		/* LOCK CONN */
 
-		rc = process_read_io(conn, &closed);
+		rc = scst_try_one_rd(conn);
 
-		spin_lock_bh(&p->rd_lock);
+		/* We are holding conn->rd_lock, so this next line of code
+		 * means our lock acquisition order is CONN FIRST, THEN POOL
+		 */
+		conn_pool_rd_lock(p);		/* RELOCK POOL command list */
 
-		if (unlikely(closed))
-			continue;
-
-		if (unlikely(conn->conn_tm_active)) {
-			spin_unlock_bh(&p->rd_lock);
-			iscsi_check_tm_data_wait_timeouts(conn, false);
-			spin_lock_bh(&p->rd_lock);
+		if (unlikely(rc < 0)) {
+			/* conn closed -- don't try to unlock it */
+			continue;   /* proceed to next conn awaiting service */
 		}
 
-#ifdef CONFIG_SCST_EXTRACHECKS
-		conn->rd_task = NULL;
-#endif
-		if ((rc == 0) || conn->rd_data_ready) {
+		if (conn->rd_state != ISCSI_CONN_RD_STATE_IDLE) {
+			sBUG_ON(conn->rd_state != ISCSI_CONN_RD_STATE_IN_LIST);
 			list_add_tail(&conn->rd_list_entry, &p->rd_list);
-			conn->rd_state = ISCSI_CONN_RD_STATE_IN_LIST;
-		} else
-			conn->rd_state = ISCSI_CONN_RD_STATE_IDLE;
+		} else {
+			/* Waiting for more data */
+			sBUG_ON(rc == 0);
+		}
+
+		/* Lock correctness does not depend on unlock order or strict nesting */
+		conn_rd_unlock(conn);		/* UNLOCK CONN */
 	}
 
 	TRACE_EXIT();
@@ -1116,13 +1380,13 @@ int istrd(void *arg)
 	if (rc != 0)
 		PRINT_ERROR("Setting CPU affinity failed: %d", rc);
 
-	spin_lock_bh(&p->rd_lock);
+	conn_pool_rd_lock(p);
 	while (!kthread_should_stop()) {
 		wait_event_locked(p->rd_waitQ, test_rd_list(p), lock_bh,
 				  p->rd_lock);
 		scst_do_job_rd(p);
 	}
-	spin_unlock_bh(&p->rd_lock);
+	conn_pool_rd_unlock(p);
 
 	/*
 	 * If kthread_should_stop() is true, we are guaranteed to be
@@ -1314,10 +1578,10 @@ void req_add_to_write_timeout_list(struct iscsi_cmnd *req)
 	 * lock for rd_lock.
 	 */
 	if (unlikely(set_conn_tm_active)) {
-		spin_lock_bh(&conn->conn_thr_pool->rd_lock);
+		conn_rd_lock(req->conn);
 		TRACE_MGMT_DBG("Setting conn_tm_active for conn %p", conn);
 		conn->conn_tm_active = 1;
-		spin_unlock_bh(&conn->conn_thr_pool->rd_lock);
+		conn_rd_unlock(req->conn);
 	}
 
 out:
@@ -1327,7 +1591,6 @@ out:
 
 static int write_data(struct iscsi_conn *conn)
 {
-	mm_segment_t oldfs;
 	struct file *file;
 	struct iovec *iop;
 	struct socket *sock;
@@ -1362,20 +1625,29 @@ static int write_data(struct iscsi_conn *conn)
 	saved_size = size;
 	iop = conn->write_iop;
 	count = conn->write_iop_used;
+	flags = MSG_DONTWAIT | MSG_NOSIGNAL;
+	sg = write_cmnd->sg;
 
 	if (iop) {
 		while (1) {
-			loff_t off = 0;
 			int rest;
 
 			sBUG_ON(count > ARRAY_SIZE(conn->write_iov));
 retry:
-			oldfs = get_fs();
+			{
+#ifndef SCST_USERMODE
+			loff_t off = 0;
+			mm_segment_t oldfs = get_fs();
 			set_fs(KERNEL_DS);
 			res = vfs_writev(file,
 					 (struct iovec __force __user *)iop,
 					 count, &off, 0);
 			set_fs(oldfs);
+#else
+			struct msghdr msg = { .msg_iov = iop, .msg_iovlen = count };
+			res = (int)UMC_kernelize64(sendmsg(file->fd, &msg, flags | (sg ? MSG_MORE : 0)));
+#endif
+			}
 			TRACE_WRITE("sid %#Lx, cid %u, res %d, iov_len %zd",
 				    (unsigned long long int)conn->session->sid,
 				    conn->cid, res, iop->iov_len);
@@ -1410,7 +1682,6 @@ retry:
 		}
 	}
 
-	sg = write_cmnd->sg;
 	if (unlikely(sg == NULL)) {
 		PRINT_INFO("WARNING: Data missed (cmd %p)!", write_cmnd);
 		res = 0;
@@ -1433,7 +1704,6 @@ retry:
 		sock_sendpage = sock->ops->sendpage;
 #endif
 
-	flags = MSG_DONTWAIT;
 	sg_size = size;
 
 	if (sg != write_cmnd->rsp_sg) {
@@ -1501,6 +1771,12 @@ retry:
 			spin_unlock(&net_priv_lock);
 		}
 #endif
+
+#ifdef SCST_USERMODE
+  #define page_info(page) page_to_pfn(page)
+#else
+  #define page_info(page) ((page)->index)
+#endif
 		sendsize = min(size, length);
 		if (size <= sendsize) {
 retry2:
@@ -1510,7 +1786,7 @@ retry2:
 				"page %p)", (sendpage != sock_no_sendpage) ?
 						"sendpage" : "sock_no_sendpage",
 				(unsigned long long int)conn->session->sid,
-				conn->cid, res, page->index,
+				conn->cid, res, page_info(page),
 				offset, size, write_cmnd, page);
 			if (unlikely(res <= 0)) {
 				if (res == -EINTR)
@@ -1538,7 +1814,7 @@ retry1:
 			(sendpage != sock_no_sendpage) ? "sendpage" :
 							 "sock_no_sendpage",
 			(unsigned long long)conn->session->sid, conn->cid,
-			res, page->index, offset, sendsize, size,
+			res, page_info(page), offset, sendsize, size,
 			write_cmnd, page);
 		if (unlikely(res <= 0)) {
 			if (res == -EINTR)
@@ -1687,13 +1963,16 @@ static int tx_padding(struct iscsi_cmnd *cmnd, int state)
 	int res, rest = cmnd->conn->write_size;
 	struct msghdr msg = {.msg_flags = MSG_NOSIGNAL | MSG_DONTWAIT};
 	struct kvec iov;
-	static const uint32_t padding;
+	static uint32_t padding;
 
+	BUG_ON(rest < 1);
+	BUG_ON(rest >= (int)sizeof(uint32_t));
 	iscsi_extracheck_is_wr_thread(cmnd->conn);
 
 	TRACE_DBG("Sending %d padding bytes (cmd %p)", rest, cmnd);
 
-	iov.iov_base = (char *)(&padding) + (sizeof(uint32_t) - rest);
+	//XXX Is there some reason to bother to end-align the base??
+	iov.iov_base = &padding + (sizeof(uint32_t) - rest);
 	iov.iov_len = rest;
 
 	res = kernel_sendmsg(cmnd->conn->sock, &msg, &iov, 1, rest);

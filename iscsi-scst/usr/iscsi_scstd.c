@@ -232,14 +232,15 @@ static void create_iser_listen_socket(struct pollfd *array)
 
 	iser_fd = create_and_open_dev("isert_scst", 1);
 
-	poll_array[POLL_ISER_LISTEN].fd = iser_fd;
-	if (iser_fd != -1) {
+	if (iser_fd >= 0) {
+		poll_array[POLL_ISER_LISTEN].fd = iser_fd;
 		poll_array[POLL_ISER_LISTEN].events = POLLIN;
 
 		/* RDMAExtensions */
 		session_keys[key_rdma_extensions].max = 1;
 		session_keys[key_rdma_extensions].local_def = 1;
 	} else {
+		poll_array[POLL_ISER_LISTEN].fd = -1;
 		poll_array[POLL_ISER_LISTEN].events = 0;
 		return;
 	}
@@ -508,8 +509,11 @@ again:
 	case IOSTATE_READ_BHS:
 	case IOSTATE_READ_AHS_DATA:
 	      read_again:
+		errno = 0;	/* for the log_debug() */
 		res = read(pollfd->fd, conn->buffer, conn->rwsize);
 		if (res <= 0) {
+			log_debug(1, "read(%u, %p, %u) returned %d, errno=%u",
+			      pollfd->fd, conn->buffer, conn->rwsize, res, errno);
 			if (res == 0 || (errno != EINTR && errno != EAGAIN)) {
 				conn->state = STATE_DROP;
 				goto out;
@@ -576,6 +580,8 @@ again:
 		conn->cork_transmit(pollfd->fd);
 		res = write(pollfd->fd, conn->buffer, conn->rwsize);
 		if (res < 0) {
+			log_debug(1, "write(%u, %p, %u) returned %d, errno=%u",
+			      pollfd->fd, conn->buffer, conn->rwsize, res, errno);
 			if (errno != EINTR && errno != EAGAIN) {
 				conn->state = STATE_DROP;
 				goto out;
@@ -746,7 +752,8 @@ static void event_loop(void)
 			    (conn->state == STATE_DROP)) {
 				struct session *sess = conn->sess;
 
-				log_debug(1, "closing conn %p", conn);
+				log_debug(1, "closing conn %p state=0x%x fd=%u",
+					  conn, conn->state, pollfd->fd);
 				conn_free_pdu(conn);
 				close(pollfd->fd);
 				pollfd->fd = -1;
@@ -819,6 +826,11 @@ static void init_max_params(void)
 	return;
 }
 
+#ifdef SCST_USERMODE			/* intercept nl_open --> SCST_nl_open */
+extern int SCST_nl_open(void);
+#define nl_open() SCST_nl_open()
+#endif
+
 int main(int argc, char **argv)
 {
 	int ch, longindex;
@@ -839,8 +851,13 @@ int main(int argc, char **argv)
 	/*
 	 * Otherwise we could die in some later write() during the event_loop()
 	 * instead of getting EPIPE!
+	 *
+	 * The effects of signal(2) in a multithreaded process are unspecified,
+	 * so use sigaction(2) instead.
 	 */
-	signal(SIGPIPE, SIG_IGN);
+	struct sigaction act = (struct sigaction) { .sa_handler = SIG_IGN };
+	int rc = sigaction(SIGPIPE, &act, NULL);
+	assert(rc == 0);
 
 	while ((ch = getopt_long(argc, argv, "c:fd:s:u:g:a:p:vh", long_options, &longindex)) >= 0) {
 		switch (ch) {

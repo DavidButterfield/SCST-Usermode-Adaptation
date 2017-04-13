@@ -23,6 +23,13 @@
 #include <linux/module.h>
 #include <net/sock.h>
 
+#ifdef SCST_USERMODE			/* resolve symbol conflicts */
+  extern void iscsi_conn_rd_wakeup_handler(void *, uintptr_t, errno_t);
+  /* Rename some kernel-code symbols that conflict with daemon-code symbols */
+  #define conn_free                     SCST_kconn_free
+  #define session_free                  SCST_ksession_free
+#endif
+
 #ifdef INSIDE_KERNEL_TREE
 #include <scst/scst.h>
 #include <scst/iscsi_scst.h>
@@ -78,6 +85,9 @@ struct iscsi_thread {
 
 struct iscsi_thread_pool {
 	spinlock_t rd_lock;
+	#define conn_pool_rd_lock(pool)   spin_lock_bh(  &(pool)->rd_lock)
+	#define conn_pool_rd_unlock(pool) spin_unlock_bh(&(pool)->rd_lock)
+
 	struct list_head rd_list;
 	wait_queue_head_t rd_waitQ;
 
@@ -191,6 +201,8 @@ struct iscsi_session {
 #define ISCSI_CONN_RD_STATE_IDLE		0
 #define ISCSI_CONN_RD_STATE_IN_LIST		1
 #define ISCSI_CONN_RD_STATE_PROCESSING		2
+#define ISCSI_CONN_RD_STATE_WAKING		10
+#define ISCSI_CONN_RD_STATE_AWAKE		11
 
 #define ISCSI_CONN_WR_STATE_IDLE		0
 #define ISCSI_CONN_WR_STATE_IN_LIST		1
@@ -278,6 +290,21 @@ struct iscsi_conn {
 	unsigned short active_close:1;
 	unsigned short deleting:1;
 	unsigned short conn_tm_active:1;
+	spinlock_t rd_lock;
+	#define conn_rd_lock(conn)	spin_lock_bh(  &(conn)->rd_lock)
+	#define conn_rd_unlock(conn)	spin_unlock_bh(&(conn)->rd_lock)
+
+#ifdef ADAPTIVE_NAGLE
+	uint8_t tcp_nagle;		/* current socket TCP_NODELAY state */
+	unsigned long cpu_busy_count[4];    /* reads done in IDLE-BUSY cycle */
+	unsigned int cpu_busy_idx;
+	/* stats */
+	unsigned long cpu_idles;	    /* since last stats print */
+	unsigned long max_cpu_busy_count;   /* since last stats print */
+	unsigned long stat_cpu_busy_count;  /* since last stats print */
+	unsigned long read_nodelay;	    /* reads done while NODELAY set */
+	unsigned long read_nagle;	    /* reads done while NODELAY unset */
+#endif
 
 	struct list_head rd_list_entry;
 
@@ -591,6 +618,7 @@ extern int iscsi_send(struct iscsi_conn *conn);
 extern void iscsi_get_page_callback(struct page *page);
 extern void iscsi_put_page_callback(struct page *page);
 #endif
+extern int scst_try_one_rd(struct iscsi_conn * conn);
 extern int istrd(void *arg);
 extern int istwr(void *arg);
 extern void iscsi_task_mgmt_affected_cmds_done(struct scst_mgmt_cmd *scst_mcmd);

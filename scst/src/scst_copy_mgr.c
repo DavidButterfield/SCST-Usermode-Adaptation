@@ -193,8 +193,13 @@ struct scst_cm_retry {
 
 static void scst_cm_retry_work_fn(struct work_struct *work)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 20)
+	struct scst_cm_retry *retry = container_of(work, struct scst_cm_retry,
+						   cm_retry_work);  //XXX Right?
+#else
 	struct scst_cm_retry *retry = container_of(work, struct scst_cm_retry,
 						   cm_retry_work.work);
+#endif
 
 	TRACE_ENTRY();
 
@@ -309,7 +314,11 @@ try_retry:
 	if (imm_retry) {
 		/* Let's use work to avoid possible recursion */
 		TRACE_DBG("Immediate retry (cmd %p)", cmd);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 20)
+		schedule_work(&retry->cm_retry_work);	    //XXX Right?
+#else
 		schedule_work(&retry->cm_retry_work.work);
+#endif
 	} else {
 		TRACE_DBG("Scheduling cmd %p retry", cmd);
 		schedule_delayed_work(&retry->cm_retry_work,
