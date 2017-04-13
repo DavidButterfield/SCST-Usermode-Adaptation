@@ -397,7 +397,7 @@ struct iscsi_conn *conn_lookup(struct iscsi_session *session, u16 cid)
 	 */
 	list_for_each_entry_reverse(conn, &session->conn_list,
 					conn_list_entry) {
-		if (conn->cid == cid)
+		if (conn->cid == cid && !conn->closing)
 			return conn;
 	}
 	return NULL;
@@ -1126,7 +1126,8 @@ void iscsi_extracheck_is_rd_thread(struct iscsi_conn *conn)
 			local_bh_enable();
 		pr_emerg("rd_state %x\n", conn->rd_state);
 		pr_emerg("rd_task %p\n", conn->rd_task);
-		pr_emerg("rd_task->pid %d\n", conn->rd_task->pid);
+		if (conn->rd_task)
+		    pr_emerg("rd_task->pid %d\n", conn->rd_task->pid);
 		BUG();
 	}
 }

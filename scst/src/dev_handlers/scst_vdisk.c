@@ -137,7 +137,7 @@ static struct scst_trace_log vdisk_local_trace_tbl[] = {
 
 #define DEF_DPICZ		SCST_DPICZ_CHECK_ON_xPROT_0
 
-#define DEF_DIF_FILENAME_TMPL	(SCST_VAR_DIR "/dif_tags/%s.dif")
+#define DEF_DIF_FILENAME_TMPL	SCST_VAR_DIR "/dif_tags/%s.dif"
 
 #ifdef CONFIG_SCST_PROC
 #define VDISK_PROC_HELP		"help"
@@ -1158,6 +1158,8 @@ static int vdisk_get_file_size(const char *filename, bool blockio,
 	} else if (S_ISBLK(inode->i_mode)) {
 		inode = inode->i_bdev->bd_inode;
 	} else {
+		PRINT_ERROR("File %s unsupported mode: mode=0%o\n",
+			    filename, inode->i_mode);
 		res = -EINVAL;
 		goto out_close;
 	}
@@ -1697,6 +1699,12 @@ next:
 	}
 
 	dev->dev_rd_only = virt_dev->rd_only;
+
+#ifdef CONFIG_SCST_PROC
+	if (virt_dev->nullio && !virt_dev->file_size) {
+	    virt_dev->file_size = VDISK_NULLIO_SIZE;
+	}
+#endif
 
 	res = vdisk_reexamine(virt_dev);
 	if (res < 0)
@@ -8115,6 +8123,7 @@ static int vdev_parse_add_dev_params(struct scst_vdisk_dev *virt_dev,
 		} else if (!strcasecmp("blocksize", p)) {
 			virt_dev->blk_shift = scst_calc_block_shift(val);
 			if (virt_dev->blk_shift < 9) {
+				PRINT_ERROR("blocksize %u too small", 1<<virt_dev->blk_shift);
 				res = -EINVAL;
 				goto out;
 			}
@@ -10358,6 +10367,7 @@ static int vdisk_write_proc(char *buffer, char **start, off_t offset,
 
 			block_shift = scst_calc_block_shift(block_size);
 			if (block_shift < 9) {
+				PRINT_ERROR("blocksize %u too small", 1<<block_shift);
 				res = -EINVAL;
 				goto out_free_vdev;
 			}
@@ -10425,7 +10435,7 @@ static int vdisk_write_proc(char *buffer, char **start, off_t offset,
 			PRINT_ERROR("File path \"%s\" is not "
 				"absolute", filename);
 			res = -EINVAL;
-			goto out_up;
+			goto out_free_vdev;
 		}
 
 		virt_dev->filename = kstrdup(filename, GFP_KERNEL);

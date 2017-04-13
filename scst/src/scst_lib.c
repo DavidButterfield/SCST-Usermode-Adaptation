@@ -4430,6 +4430,7 @@ int scst_acg_add_lun(struct scst_acg *acg, struct kobject *parent,
 		acg_dev->acg_dev_dif_guard_format = SCST_DIF_GUARD_FORMAT_CRC;
 	} else
 		acg_dev->acg_dev_dif_guard_format =
+		    acg->tgt &&	    /* sometimes NULL */
 			acg->tgt->tgt_hw_dif_ip_supported && !dev->dev_dif_ip_not_supported ?
 							SCST_DIF_GUARD_FORMAT_IP :
 							SCST_DIF_GUARD_FORMAT_CRC;
@@ -4724,7 +4725,8 @@ static void scst_free_acg(struct scst_acg *acg)
 	struct scst_acn *acn, *acnt;
 	struct scst_tgt *tgt = acg->tgt;
 
-	TRACE_DBG("Freeing acg %s/%s", tgt->tgt_name, acg->acg_name);
+	TRACE_DBG("Freeing acg %s/%s",
+		  tgt?tgt->tgt_name:"(tgt=NULL)", acg->acg_name);
 
 	list_for_each_entry_safe(acg_dev, acg_dev_tmp, &acg->acg_dev_list,
 			acg_dev_list_entry) {
