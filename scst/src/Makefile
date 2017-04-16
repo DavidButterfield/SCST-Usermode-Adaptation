@@ -57,8 +57,6 @@ ifndef SCST_USERMODE
 scst-y        += scst_sysfs.o
 scst-y        += scst_dlm.o
 scst-y        += scst_event.o
-else
-#scst-y        += scst_proc.o
 endif
 
 obj-$(CONFIG_SCST)   += scst.o dev_handlers/
