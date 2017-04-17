@@ -84,7 +84,9 @@ SCST_init(const char *dev, int readonly)
     verify_noerr(err, "iscsi_init");
 
     SCST_param_create_num_threads(); 
+#ifdef CONFIG_SCST_PROC
     SCST_param_create_scst_vdisk_ID(); 
+#endif
     SCST_param_create_scst_threads(); 
     SCST_param_create_scst_max_cmd_mem(); 
     SCST_param_create_scst_max_dev_cmd_mem(); 
@@ -139,7 +141,9 @@ SCST_exit(void)
     verify_eq(err, E_OK);
 
     SCST_param_remove_num_threads(); 
+#ifdef CONFIG_SCST_PROC
     SCST_param_remove_scst_vdisk_ID(); 
+#endif
     SCST_param_remove_scst_threads(); 
     SCST_param_remove_scst_max_cmd_mem(); 
     SCST_param_remove_scst_max_dev_cmd_mem(); 

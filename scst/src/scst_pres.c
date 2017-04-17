@@ -1038,8 +1038,8 @@ write_error:
 write_error_close:
 	filp_close(file, NULL);
 #ifdef SCST_USERMODE			/* unlink */
-	res = UMC_kernelize(unlink(pr_file_name));
-	expect_noerr(res, "unlink(\"%s\")", pr_file_name);
+	res = UMC_kernelize(unlink(dev->pr_file_name));
+	expect_noerr(res, "unlink(\"%s\")", dev->pr_file_name);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
 	{
 		struct nameidata nd;

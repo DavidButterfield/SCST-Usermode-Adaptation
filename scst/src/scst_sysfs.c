@@ -3619,7 +3619,9 @@ static ssize_t scst_dev_block_show(struct kobject *kobj,
 static void scst_sysfs_ext_blocking_done(struct scst_device *dev,
 	uint8_t *data, int len)
 {
+#ifndef SCST_USERMODE
 	scst_event_queue_ext_blocking_done(dev, data, len);
+#endif
 }
 
 static ssize_t scst_dev_block_store(struct kobject *kobj,
@@ -3704,6 +3706,9 @@ static ssize_t scst_dev_block_store(struct kobject *kobj,
 
 	TRACE_MGMT_DBG("Sysfs blocking dev %s (sync %d, data_start %p, "
 		"data_len %d)", dev->virt_name, sync, data_start, data_len);
+#ifdef SCST_USERMODE
+	sync = true;	//XXXXX sysfs
+#endif
 
 	if (sync)
 		res = scst_ext_block_dev(dev, NULL, NULL, 0, SCST_EXT_BLOCK_SYNC);
