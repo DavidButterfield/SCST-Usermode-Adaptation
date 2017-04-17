@@ -53,8 +53,8 @@ scst-y        += scst_pres.o
 scst-y        += scst_no_dlm.o
 scst-y        += scst_tg.o
 scst-y        += scst_copy_mgr.o
-ifndef SCST_USERMODE
 scst-y        += scst_sysfs.o
+ifndef SCST_USERMODE
 scst-y        += scst_dlm.o
 scst-y        += scst_event.o
 endif
