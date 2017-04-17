@@ -56,7 +56,7 @@
 #include <linux/seq_file.h>
 #elif defined(RHEL_MAJOR) && RHEL_MAJOR -0 <= 5
 #error The SCST sysfs interface is not supported on RHEL 5. Please run make enable_proc.
-#elif SCST_USERMODE
+#elif defined(SCST_USERMODE)
 #warning "Development incomplete for running SYSFS in SCST_USERMODE build"
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
 #error The SCST sysfs interface is supported from kernel version 2.6.26 on. Please run make enable_proc.
