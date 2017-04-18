@@ -4953,6 +4953,11 @@ void scst_aen_done(struct scst_aen *aen);
 
 static inline struct scatterlist *__sg_next_inline(struct scatterlist *sg)
 {
+#if 0	// XXX This triggers
+	WARN(sg_is_last(sg),
+	       "sg=%p *sg={ link=%lx offset=%u length=%u }",
+	       sg, sg->page_link, sg->offset, sg->length);
+#endif
 	sg++;
 	if (unlikely(sg_is_chain(sg)))
 		sg = sg_chain_ptr(sg);
