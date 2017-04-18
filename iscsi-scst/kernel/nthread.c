@@ -1690,7 +1690,7 @@ static int tx_padding(struct iscsi_cmnd *cmnd, int state)
 	static uint32_t padding;
 
 	BUG_ON(rest < 1);
-	BUG_ON(rest >= sizeof(uint32_t));
+	BUG_ON(rest >= (int)sizeof(uint32_t));
 	iscsi_extracheck_is_wr_thread(cmnd->conn);
 
 	TRACE_DBG("Sending %d padding bytes (cmd %p)", rest, cmnd);
