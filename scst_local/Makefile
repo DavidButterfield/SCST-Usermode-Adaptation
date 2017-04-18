@@ -20,6 +20,8 @@ EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
 
 EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG -g -fno-inline -fno-inline-functions
 
+export EXTRA_CFLAGS += $(EXTRA_WFLAGS)
+
 ifneq ($(PATCHLEVEL),)
 obj-m	:= scst_local.o
 else

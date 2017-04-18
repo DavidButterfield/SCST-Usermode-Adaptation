@@ -27,6 +27,7 @@ CFLAGS += -DEXTRACHECKS
 CFLAGS += -DDEBUG -g -fno-inline -fno-inline-functions
 CFLAGS += -W -Wno-unused-parameter
 CFLAGS += $(LOCAL_CFLAGS)
+CFLAGS += $(EXTRA_WFLAGS)
 
 #CFLAGS += -DDEBUG_NOMEM
 

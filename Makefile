@@ -547,3 +547,5 @@ disable_proc: extraclean
 	mvsas mvsas_install mvsas_uninstall mvsas_clean mvsas_extraclean \
 	fcst fcst_install fcst_uninstall fcst_clean fcst_extraclean \
 	2perf 2release 2debug enable_proc disable_proc
+
+-include Warnfile   # defines EXTRA_WFLAGS wtih gcc -W options to augment standard
