@@ -31,6 +31,8 @@ ifneq ($(CONFIG_SCSI_QLA2XXX_TARGET),)
 EXTRA_CFLAGS += -DCONFIG_SCSI_QLA2XXX_TARGET=$(CONFIG_SCSI_QLA2XXX_TARGET)
 endif
 
+export EXTRA_CFLAGS += $(EXTRA_WFLAGS)
+
 ifeq ($(KVER),)
   ifeq ($(KDIR),)
     KVER := $(shell uname -r)

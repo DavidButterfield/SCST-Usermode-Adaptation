@@ -11,5 +11,6 @@ SRPTFLAGSPERF =
 EXTRA_CFLAGS += $(SRPTFLAGS$(BUILDMODE))
 
 #EXTRA_CFLAGS += -Wextra -Wno-unused-parameter
+export EXTRA_CFLAGS += $(EXTRA_WFLAGS)
 
 obj-m		+= ib_srpt.o

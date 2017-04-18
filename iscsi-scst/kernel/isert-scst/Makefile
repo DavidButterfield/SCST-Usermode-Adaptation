@@ -33,6 +33,7 @@ EXTRA_CFLAGS += $(call enable-Wextra,-Wextra \
 EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
 #EXTRA_CFLAGS += -DCONFIG_SCST_TRACING
 EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG -g -fno-inline -fno-inline-functions
+export EXTRA_CFLAGS += $(EXTRA_WFLAGS)
 
 obj-m		+= isert-scst.o
 isert-scst-objs	:= isert.o isert_login.o \
