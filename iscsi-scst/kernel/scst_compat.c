@@ -186,13 +186,6 @@ sigint_handler(uint32_t signum)
     }
 }
 
-extern void sigint_hack(void);
-void
-sigint_hack(void)
-{
-    sigint_handler(SIGINT);
-}
-
 /* Exit the program with some diagnostics but no attempt to clean up state or memory */
 static void
 sigquit_handler(uint32_t signum)
