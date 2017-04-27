@@ -5,6 +5,9 @@
 #
 # This Makefile expects its make(1) to be invoked in the Makefile's directory.
 
+# define USERMODE_CEPH_RBD to build a usermode with BLOCKIO under CEPH/RBD
+USERMODE_CEPH_RBD = defined
+
 # Usermode SCST depends on UMC (Usermode Compat) and MTE (Multithreaded Engine).
 # You can pass in alternative source directories to override these defaults.
 #
@@ -74,6 +77,11 @@ EXTRA_CFLAGS += -DCONFIG_SCST_TEST_IO_IN_SIRQ	# Allow I/O from soft-interrupt ha
 EXTRA_CFLAGS += -DCONN_LOCAL_READ		# Attempt conn read from pp_done handler
 EXTRA_CFLAGS += -DCONN_SIRQ_READ		# Drive read directly off data_ready callback
 EXTRA_CFLAGS += -DSCST_USERMODE_AIO		# Prototype implemention of blockio using AIO
+
+ifdef USERMODE_CEPH_RBD
+EXTRA_CFLAGS += -DSCST_USERMODE_CEPH_RBD	# Prototype implemention of blockio using librbd
+endif
+
 # EXTRA_CFLAGS += -DADAPTIVE_NAGLE		# Experimental Adaptive Nagle optimization
 
 # Force scst_compat.h to be #included at the start of every kernel.c file, for usermode shims
@@ -156,6 +164,10 @@ export src := .
 export KVER = __NONE__
 
 GCCLDFLAGS = -Wl,-z,now -Wl,-O1 -Wl,-L/usr/lib,-E
+
+ifdef USERMODE_CEPH_RBD
+LOCAL_LIBS += -lrbd -lrados
+endif
 
 export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
 

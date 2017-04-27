@@ -6,7 +6,14 @@
  */
 #ifdef SCST_USERMODE
 #ifdef SCST_USERMODE_AIO
+
+#ifdef SCST_USERMODE_CEPH_RBD
+#include "scst_vdisk_ceph_rbd.c"
+#else
+
 #include "mtelib.h"
+
+#define aio_exec(cmd) blockio_exec(cmd)
 
 /* Configuration for the MTE AIO service Implementor */
 struct MTE_aio_service_cfg const aios_cfg = {
@@ -334,5 +341,6 @@ vdisk_fsync_blockio(loff_t loff,
 	return res;
 }
 
+#endif /* !SCST_USERMODE_CEPH_RBD */
 #endif /* SCST_USERMODE_AIO */
 #endif /* SCST_USERMODE */

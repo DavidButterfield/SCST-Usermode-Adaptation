@@ -112,6 +112,7 @@
 #define TRACE_FLOW_CONTROL   0x00004000 /* flow control in action */
 #define TRACE_PRES           0x00008000
 #define TRACE_BLOCKING       0x00010000
+#define TRACE_AIO	     0x00020000
 #define TRACE_ALL            0xffffffff
 /* Flags 0xXXXXXXXXXX000000 are local for users */
 
