@@ -775,9 +775,9 @@ static struct scst_dev_type vdisk_file_devtype = {
 static struct kmem_cache *blockio_work_cachep;
 
 #ifdef SCST_USERMODE_AIO
-/* Defined in scst_vdisk_aio.c #included below */
 static int vdisk_aio_attach_tgt(struct scst_tgt_dev *tgt_dev);
 static void vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev);
+static int aio_exec(struct scst_cmd *cmd);
 #endif
 
 static struct scst_dev_type vdisk_blk_devtype = {
@@ -795,12 +795,13 @@ static struct scst_dev_type vdisk_blk_devtype = {
 #ifndef SCST_USERMODE_AIO
 	.attach_tgt =		vdisk_attach_tgt,
 	.detach_tgt =		vdisk_detach_tgt,
+	.exec =			blockio_exec,
 #else
 	.attach_tgt =		vdisk_aio_attach_tgt,
 	.detach_tgt =		vdisk_aio_detach_tgt,
+	.exec =			aio_exec,
 #endif
 	.parse =		non_fileio_parse,
-	.exec =			blockio_exec,
 	.on_alua_state_change_start = blockio_on_alua_state_change_start,
 	.on_alua_state_change_finish = blockio_on_alua_state_change_finish,
 	.task_mgmt_fn_done =	vdisk_task_mgmt_fn_done,
@@ -3702,6 +3703,7 @@ out:
 	return res;
 }
 
+__attribute__((__unused__)) /* when compiled with SCST_USERMODE_CEPH_RBD */
 static int blockio_exec(struct scst_cmd *cmd)
 {
 	struct scst_vdisk_dev *virt_dev = cmd->dev->dh_priv;
@@ -5712,10 +5714,10 @@ static int __vdisk_fsync_fileio(loff_t loff,
 }
 
 #ifdef SCST_USERMODE_AIO
-/* Defined in scst_vdisk_aio.c #included below */
 static int vdisk_fsync_blockio(loff_t loff,
 	loff_t len, struct scst_device *dev, gfp_t gfp_flags,
 	struct scst_cmd *cmd, bool async);
+
 #else
 static int vdisk_fsync_blockio(loff_t loff,
 	loff_t len, struct scst_device *dev, gfp_t gfp_flags,
@@ -6561,9 +6563,10 @@ static void blockio_bio_destructor(struct bio *bio)
 #endif
 
 #ifdef SCST_USERMODE_AIO
-/* Implement blockio under SCST_USERMODE using aio */
-#include "scst_vdisk_aio.c"
-#else /* !SCST_USERMODE_AIO */
+    /* Implement blockio under SCST_USERMODE using aio */
+    #include "scst_vdisk_aio.c"
+
+#else /* Kernel-resident SCST */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24)
 static int blockio_endio(struct bio *bio, unsigned int bytes_done, int error)
