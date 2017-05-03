@@ -16,11 +16,11 @@
   # USERMODE_CEPH_RBD = defined
 
   # define USERMODE_TCMU to build SCST usermode with BLOCKIO under a TCMU plugin
-  USERMODE_TCMU = defined
+  # USERMODE_TCMU = defined
 
   # define USERMODE_TMCU_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
   #   via scstu_tcmu.c using the RBD plugin for TCMU.  (Use with USERMODE_TCMU)
-  USERMODE_TCMU_RBD = defined
+  # USERMODE_TCMU_RBD = defined
 
 ################################################################################
 
@@ -229,11 +229,11 @@ valgrind:
 	valgrind $(VALGRIND_OPTS) ./scst.out -f
 
 clean:
-	rm -rf scst.out
+	rm -rf *.o scst.out
 	make -C .. $@
 
 extraclean:
-	rm -rf scst.out
+	rm -rf *.o scst.out
 	rm -rf tags cscope.out
 	make -C .. $@
 
