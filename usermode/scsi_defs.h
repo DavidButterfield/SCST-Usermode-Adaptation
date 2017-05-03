@@ -1,4 +1,4 @@
-/******** SNAPSHOT OF ORIGINAL SOURCE FILE ********/
+/******** SNAPSHOT OF ORIGINAL TCMU-RUNNER SOURCE FILE ********/
 /*
  * Additional values not defined by other headers, they
  * seem a little incomplete.
