@@ -358,6 +358,7 @@ vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev)
 
     sys_notice(MY_ID" detach_tgt: %s refcount zero -- closing", tcmu_dev->dev_name);
     tcmu_dev->handler->close(tcmu_dev);
+    vfree(tcmu_dev);
     virt_dev->aio_private = NULL;
     virt_dev->file_size = 0;
     virt_dev->nblocks = 0;
