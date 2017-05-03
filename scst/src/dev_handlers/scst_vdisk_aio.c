@@ -81,9 +81,10 @@ vdisk_aio_attach_tgt(struct scst_tgt_dev *tgt_dev)
 	struct scst_vdisk_dev * virt_dev = tgt_dev->dev->dh_priv;
 	if (virt_dev->blockio && !virt_dev->aio) {
 	    size_t size;
-	    virt_dev->aio = aio_fopen(AIOS, virt_dev->fd->fd, &size, virt_dev->filename);
-	    sys_notice("vdisk_aio_attach_tgt: %s %ld", virt_dev->name, virt_dev->file_size);
-	    expect_eq(size, virt_dev->file_size);
+	    virt_dev->aio_private = aio_fopen(AIOS, virt_dev->fd->fd, &size, virt_dev->filename);
+	    sys_notice("vdisk_aio_attach_tgt: %s size=%ld",
+		       virt_dev->name, virt_dev->file_size);
+	    expect_eq(size, virt_dev->file_size, "file=%s", virt_dev->filename);
 	}
     }
 
