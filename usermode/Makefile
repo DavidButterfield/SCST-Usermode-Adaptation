@@ -5,8 +5,24 @@
 #
 # This Makefile expects its make(1) to be invoked in the Makefile's directory.
 
-# define USERMODE_CEPH_RBD to build a usermode with BLOCKIO under CEPH/RBD
-USERMODE_CEPH_RBD = defined
+#############  Special defines for using TCMU plugins or Ceph/RBD  #############
+
+  ## Note:  For running SCST_Usermode using Ceph/RBD as backing store, the
+  ##	  USERMODE_TCMU/USERMODE_TCMU_RBD combination is probably more
+  ##	  sophisticated than the scst_vdisk_ceph_rbd.c implementation.
+
+  # define USERMODE_CEPH_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
+  #	 using the scst_vdisk_ceph_rbd.c direct interface to RBD.
+  # USERMODE_CEPH_RBD = defined
+
+  # define USERMODE_TCMU to build SCST usermode with BLOCKIO under a TCMU plugin
+  USERMODE_TCMU = defined
+
+  # define USERMODE_TMCU_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
+  #   via scstu_tcmu.c using the RBD plugin for TCMU.  (Use with USERMODE_TCMU)
+  USERMODE_TCMU_RBD = defined
+
+################################################################################
 
 # Usermode SCST depends on UMC (Usermode Compat) and MTE (Multithreaded Engine).
 # You can pass in alternative source directories to override these defaults.
@@ -46,6 +62,8 @@ ifndef SCST_SRC
 export SCST_SRC = $(CURDIR)/..
 endif
 
+################################################################################
+
 # MY_CFLAGS are used when compiling the kernel code or daemon code
 # EXTRA_CFLAGS are used when compiling the kernel code
 
@@ -80,6 +98,9 @@ EXTRA_CFLAGS += -DSCST_USERMODE_AIO		# Prototype implemention of blockio using A
 
 ifdef USERMODE_CEPH_RBD
 EXTRA_CFLAGS += -DSCST_USERMODE_CEPH_RBD	# Prototype implemention of blockio using librbd
+endif
+ifdef USERMODE_TCMU
+EXTRA_CFLAGS += -DSCST_USERMODE_TCMU		# Prototype implemention of blockio using librbd
 endif
 
 # EXTRA_CFLAGS += -DADAPTIVE_NAGLE		# Experimental Adaptive Nagle optimization
@@ -168,6 +189,9 @@ GCCLDFLAGS = -Wl,-z,now -Wl,-O1 -Wl,-L/usr/lib,-E
 ifdef USERMODE_CEPH_RBD
 LOCAL_LIBS += -lrbd -lrados
 endif
+ifdef USERMODE_TCMU_RBD
+LOCAL_LIBS += scstu_tmcu_rbd.o -lrbd -lrados
+endif
 
 export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
 
@@ -181,7 +205,7 @@ usermode all:	cscope check_mte
 COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o \
 	      $(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o
 
-scst.out:   $(COMPONENTS)
+scst.out:   $(COMPONENTS) $(TCMU_RBD_LIBS)
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
 	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte -lpthread -laio -ldl -lfuse \
@@ -192,6 +216,9 @@ USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.
 check_mte:
 	# The libmte.so module should have been installed in /lib or somewhere .so files can be found
 	if [[ ! -f /lib/libmte.so ]] ; then $(MAKE) -C $(MTE_SRC) install; fi
+
+%.o: %.c
+	$(CC) -c -o $(@) -I$(SCST_INC_DIR) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
 
 # XXX Add 2perf/2debug stuff
 

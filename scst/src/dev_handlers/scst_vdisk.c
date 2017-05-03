@@ -777,7 +777,6 @@ static struct kmem_cache *blockio_work_cachep;
 #ifdef SCST_USERMODE_AIO
 static int vdisk_aio_attach_tgt(struct scst_tgt_dev *tgt_dev);
 static void vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev);
-static int aio_exec(struct scst_cmd *cmd);
 #endif
 
 static struct scst_dev_type vdisk_blk_devtype = {
@@ -795,13 +794,12 @@ static struct scst_dev_type vdisk_blk_devtype = {
 #ifndef SCST_USERMODE_AIO
 	.attach_tgt =		vdisk_attach_tgt,
 	.detach_tgt =		vdisk_detach_tgt,
-	.exec =			blockio_exec,
 #else
 	.attach_tgt =		vdisk_aio_attach_tgt,
 	.detach_tgt =		vdisk_aio_detach_tgt,
-	.exec =			aio_exec,
 #endif
 	.parse =		non_fileio_parse,
+	.exec =			blockio_exec,
 	.on_alua_state_change_start = blockio_on_alua_state_change_start,
 	.on_alua_state_change_finish = blockio_on_alua_state_change_finish,
 	.task_mgmt_fn_done =	vdisk_task_mgmt_fn_done,
@@ -3643,6 +3641,7 @@ out:
  * generally, they are checking for different things. Better to keep different
  * things separately.
  */
+__attribute__((__unused__)) /* when compiled with SCST_USERMODE_TCMU */
 static bool vdisk_no_fd_allowed_commands(const struct scst_cmd *cmd)
 {
 	bool res;
@@ -3703,7 +3702,6 @@ out:
 	return res;
 }
 
-__attribute__((__unused__)) /* when compiled with SCST_USERMODE_CEPH_RBD */
 static int blockio_exec(struct scst_cmd *cmd)
 {
 	struct scst_vdisk_dev *virt_dev = cmd->dev->dh_priv;
@@ -3717,6 +3715,7 @@ static int blockio_exec(struct scst_cmd *cmd)
 	if (unlikely(!vdisk_parse_offset(&p, cmd)))
 		goto err;
 
+#if !defined(SCST_USERMODE_CEPH_RBD) && !defined(SCST_USERMODE_TCMU)
 	if (unlikely(virt_dev->fd == NULL)) {
 		if (!vdisk_no_fd_allowed_commands(cmd)) {
 			/*
@@ -3734,6 +3733,7 @@ static int blockio_exec(struct scst_cmd *cmd)
 			goto err;
 		}
 	}
+#endif /* !SCST_USERMODE_CEPH_RBD && !SCST_USERMODE_TCMU */
 
 	cmd->dh_priv = &p;
 	res = vdev_do_job(cmd, ops);
