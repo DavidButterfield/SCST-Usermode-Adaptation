@@ -4775,6 +4775,7 @@ struct scst_acg_put_work {
 	struct scst_acg		*acg;
 };
 
+__attribute__((__unused__))
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 20)
 static void scst_put_acg_work(void *p)
 {
