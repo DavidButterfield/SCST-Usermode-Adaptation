@@ -1,4 +1,4 @@
-/******** SNAPSHOT OF ORIGINAL SOURCE FILE ********/
+/******** SNAPSHOT OF ORIGINAL TCMU-RUNNER SOURCE FILE ********/
 /*
  * Copyright 2016, China Mobile, Inc.
  *
