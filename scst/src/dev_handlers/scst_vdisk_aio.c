@@ -9,7 +9,9 @@
 
 #ifdef SCST_USERMODE_CEPH_RBD
 #include "scst_vdisk_ceph_rbd.c"
-#else
+#elif defined(SCST_USERMODE_TCMU)
+#include "scstu_tcmu.c"
+#else ///////////////////////////
 
 #include "mtelib.h"
 
