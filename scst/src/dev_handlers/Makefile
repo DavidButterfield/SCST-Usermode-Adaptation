@@ -88,15 +88,12 @@ enable-Wextra = $(shell uname_r="$$(uname -r)"; if [ "$${uname_r%.el5}" = "$${un
 
 EXTRA_CFLAGS += -I$(SUBDIRS) -I$(SCST_INC_DIR) $(call enable-Wextra,-Wextra \
 	-Wno-unused-parameter)
-<<<<<<< HEAD
 
 endif	########## SCST_USERMODE ##########
 
 endif	########## SCST_USERMODE ##########
 
 EXTRA_CFLAGS += $(EXTRA_WFLAGS)
-=======
->>>>>>> Makefile changes for usermode builds
 
 endif	########## SCST_USERMODE ##########
 

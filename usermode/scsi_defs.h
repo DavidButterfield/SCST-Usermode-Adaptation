@@ -1,3 +1,4 @@
+/******** SNAPSHOT OF ORIGINAL SOURCE FILE ********/
 /*
  * Additional values not defined by other headers, they
  * seem a little incomplete.
