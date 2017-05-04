@@ -9,89 +9,43 @@
 #ifdef SCST_USERMODE_TCMU
 #include "../../usermode/scstu_tcmu.h"
 
-#define MY_ID "scstu_tcmu"
+#define LOGID "scstu_tcmu"
+#define trace_tcmu(fmtargs...)	sys_notice("TRACE: "fmtargs)
 
 static struct kmem_cache * op_cache;
 
-/******** Interface to tcmu-runner handler ********/
+/******** API for tcmu-runner handler ********/
 
-/* "tcmu" symbols below are intended to be compatible with tcmu-runner handlers */
-
-struct tcmu_device {
-    void		      * hm_private;	    /* keep first for efficiency */
-    // struct scst_tgt_dev	      * tgt_dev;
-    uint64_t			num_lbas;
-    uint32_t			block_size;
-    char			dev_name[16];
-    char			cfgstring[256];
-    struct tcmur_handler      * handler;
-};
-
-char *
-tcmu_get_dev_name(struct tcmu_device * tcmu_dev)
-{
-    return tcmu_dev->dev_name;
-}
-
-char *
-tcmu_get_dev_cfgstring(struct tcmu_device * tcmu_dev)
-{
-    return tcmu_dev->cfgstring;
-}
-
-long long
-tcmu_get_device_size(struct tcmu_device * tcmu_dev)
-{
-    return tcmu_dev->num_lbas * tcmu_dev->block_size;
-}
-
-uint32_t
-tcmu_get_dev_block_size(struct tcmu_device * tcmu_dev)
-{
-    return tcmu_dev->block_size;
-}
-
-void
-tcmu_set_dev_block_size(struct tcmu_device * tcmu_dev, uint32_t block_size)
-{
-    tcmu_dev->block_size = block_size;
-}
-
-uint64_t
-tcmu_get_dev_num_lbas(struct tcmu_device * tcmu_dev)
-{
-    return tcmu_dev->num_lbas;
-}
-
-void
-tcmu_set_dev_num_lbas(struct tcmu_device * tcmu_dev, uint64_t num_lbas)
-{
-    tcmu_dev->num_lbas = num_lbas;
-}
-
-/*
-void *
-tcmu_get_dev_private(struct tcmu_device * tcmu_dev)
-{
-    return tcmu_dev->hm_private;
-}
-*/
-
-void
-tcmu_set_dev_private(struct tcmu_device * tcmu_dev, void *priv)
-{
-    tcmu_dev->hm_private = priv;
-}
-
-//XXXXX figure out the intended difference from tcmu_get_dev_block_size
-errno_t
+//XXXXX figure out the intended difference from tcmu_get_dev_block_size (module_params ?)
+int
 tcmu_get_attribute(struct tcmu_device * tcmu_dev, string_t attr_str)
 {
     if (!strcmp(attr_str, "hw_block_size")) {
-	return tcmu_dev->block_size;
+	if (tcmu_dev->scst_tgt_dev) {
+	    struct scst_vdisk_dev * virt_dev = tcmu_dev->scst_tgt_dev->dev->dh_priv;
+	    assert(virt_dev);
+	    expect(virt_dev->blk_shift >= 9);   /* minimum block size 512 */
+	    if (virt_dev->blk_shift < 9) {
+		sys_warning("XXXXX assuming hw_block_size=512");
+		virt_dev->blk_shift = 9;
+	    }
+	    return 1ul << virt_dev->blk_shift;
+	} else {
+	    //XXXXX Need to get this from somewhere
+	    sys_warning("XXXXX ASSUMING hw_block_size=512");
+	    return 1ul << 9;
+	}
     }
-    sys_warning("Unknown TCMU attribute %s on device %s", attr_str, tcmu_dev->dev_name);
-    return 0;
+
+    sys_warning("Unknown TCMU attribute %s requested for device %s",
+		attr_str, tcmu_get_dev_name(tcmu_dev));
+    return -ENOENT;
+}
+
+ssize_t
+tcmu_get_device_size(struct tcmu_device * tcmu_dev)
+{
+    return 4*1024*1024*1024l;  //XXXXXXXXXXXX
 }
 
 int
@@ -115,44 +69,6 @@ tcmu_set_sense_data(uint8_t * sense_buf, uint8_t key, uint16_t asc_ascq, uint32_
     return SAM_STAT_CHECK_CONDITION;	/* for caller convenience */
 }
 
-size_t
-tcmu_memcpy_into_iovec(struct iovec * iov, size_t niov, void * buf, size_t len)
-{
-    size_t ret = 0;
-    while (len && niov) {
-	size_t seglen = min(len, iov->iov_len);
-	memcpy(iov->iov_base, buf, seglen);
-	ret += seglen;
-	buf += seglen;
-	len -= seglen;
-	++iov;
-	--niov;
-    }
-    return ret;
-}
-
-size_t
-tcmu_memcpy_from_iovec(void * buf, size_t len, struct iovec *iov, size_t niov)
-{
-    size_t ret = 0;
-    while (len && niov) {
-	size_t seglen = min(len, iov->iov_len);
-	memcpy(buf, iov->iov_base, seglen);
-	ret += seglen;
-	buf += seglen;
-	len -= seglen;
-	++iov;
-	--niov;
-    }
-    return ret;
-}
-
-// XXX
-// off_t tcmu_compare_with_iovec(void *mem, struct iovec *iovec, size_t size);
-// size_t tcmu_iovec_length(struct iovec *iovec, size_t iov_cnt);
-// void	tcmu_zero_iovec(struct iovec *iovec, size_t iov_cnt);
-// void	tcmu_seek_in_iovec(struct iovec *iovec, size_t count);
-
 /******** Rishathra ********/
 
 static void
@@ -163,7 +79,7 @@ _thread_assimilate(void)
     /* The thread will deliver into "kernel" code that expects a "current" to be set */
     char name[32];
     int err = pthread_getname_np(pthread_self(), name, sizeof(name));
-    if (err) strncpy(name, "tmcu_handler", sizeof(name));
+    if (err) strncpy(name, "tcmu_handler", sizeof(name));
     /* XXX These structures are not freed anywhere */
     sys_thread = sys_thread_alloc((void *)"scstu_tcmu", "scstu_tcmu", (void *)vstrdup(name));
     current = UMC_current_alloc();
@@ -221,9 +137,6 @@ tcmur_unregister_handler(struct tcmur_handler * handler)
 static errno_t
 init_scst_vdisk_aio(void)
 {
-    /* Validate assumption used for fast access to hm_private */
-    assert_eq(offsetof(struct tcmu_device, hm_private), 0);
-
     assert(!op_cache);
     op_cache = kmem_cache_create(
 			"scstu_tcmu_op_cache",
@@ -235,23 +148,31 @@ init_scst_vdisk_aio(void)
 
     assert(!scstu_tcmu_handler);
     errno_t err = handler_init();
-    if (err) goto free_cache;
+    if (err) {
+	sys_warning("handler_init() returned ERROR %d", err);
+	expect(scstu_tcmu_handler == NULL);
+	scstu_tcmu_handler = NULL;	/* just in case */
+	kmem_cache_destroy(op_cache);
+	op_cache = NULL;
+	return err;
+    }
     assert(scstu_tcmu_handler);
 
     return E_OK;
-
-free_cache:
-    kmem_cache_destroy(op_cache);
-    op_cache = NULL;
-    return err;
 }
 
 static void
 exit_scst_vdisk_aio(void)
 {
+    assert(scstu_tcmu_handler);
     assert(op_cache);
-    if (scstu_tcmu_handler && scstu_tcmu_handler->handler_exit) {
-	scstu_tcmu_handler->handler_exit();
+    if (scstu_tcmu_handler) {
+	expect(scstu_tcmu_handler->registered);
+	if (scstu_tcmu_handler->handler_exit) {
+	    scstu_tcmu_handler->handler_exit();
+	    expect(scstu_tcmu_handler == NULL);
+	}
+	scstu_tcmu_handler = NULL;
     }
     kmem_cache_destroy(op_cache);
     op_cache = NULL;
@@ -263,70 +184,64 @@ vdisk_aio_attach_tgt(struct scst_tgt_dev * tgt_dev)
     errno_t err;
     struct tcmu_device * tcmu_dev;
     struct scst_vdisk_dev * virt_dev = tgt_dev->dev->dh_priv;
+    size_t dev_size;
     assert(virt_dev);
+    expect(virt_dev->blk_shift);
+    expect(virt_dev->nblocks);
     lockdep_assert_held(&scst_mutex);
     TRACE_ENTRY();
 
     tcmu_dev = vzalloc(sizeof(*tcmu_dev));
-    virt_dev->aio_private = tcmu_dev; 
-    // tcmu_dev->tgt_dev = tgt_dev;
-    strlcpy(tcmu_dev->dev_name, "scstu_tcmu", sizeof(tcmu_dev->dev_name));    //XXXXX bogus
-    tcmu_dev->block_size = 1 << virt_dev->blk_shift;
-    tcmu_dev->num_lbas = virt_dev->nblocks;
-    strlcpy(tcmu_dev->cfgstring, "/rbd/foo", sizeof(tcmu_dev->cfgstring));  //XXXXX bogus
-    tcmu_dev->handler = scstu_tcmu_handler;
-
-    if (!virt_dev->blk_shift) {
-	sys_warning("bad virt_dev->blk_shift=0, using block_size=512");
-	tcmu_dev->block_size = 512;
-    }
-    if (!virt_dev->nblocks) {
-	tcmu_dev->num_lbas = 8192*1024;
-	sys_warning("bad virt_dev->nblocks=0, using %"PRIu64, tcmu_dev->block_size);
-    }
+    tcmu_dev->handler = scstu_tcmu_handler;	//XXX Single handler
+    tcmu_dev->scst_tgt_dev = tgt_dev;
+    strlcpy(tcmu_dev->dev_name, "scstu_tcmu", sizeof(tcmu_dev->dev_name));
+    strlcpy(tcmu_dev->cfgstring_orig, "/rbd/foo", sizeof(tcmu_dev->cfgstring_orig));  //XXXXX bogus
+    tcmu_set_dev_block_size(tcmu_dev, 1 << virt_dev->blk_shift);
+    tcmu_set_dev_num_lbas(tcmu_dev, virt_dev->nblocks);
 
     if (tcmu_dev->handler->check_config) {
 	char * reason = NULL;
-	if (!tcmu_dev->handler->check_config(tcmu_dev->cfgstring, &reason)) {
+	char * cfg_str = tcmu_get_dev_cfgstring(tcmu_dev);
+	if (!tcmu_dev->handler->check_config(cfg_str, &reason)) {
 	    if (reason) {
-		sys_warning(MY_ID" handler failed check_config(%s) reason: %s",
-			    tcmu_dev->cfgstring, *reason);
+		sys_warning(LOGID" handler %s failed check_config(%s) reason: %s",
+			    tcmu_dev->handler->name, cfg_str, *reason);
 		vfree(reason);
 	    } else {
-		sys_warning(MY_ID" handler failed check_config(%s)", tcmu_dev->cfgstring);
+		sys_warning(LOGID" handler %s failed check_config(%s)",
+			    tcmu_dev->handler->name, cfg_str);
 	    }
 	}
     }
 
+    /* handler->open() might corrupt the config string using strtok() */
+    memcpy(tcmu_dev->cfgstring, tcmu_dev->cfgstring_orig, sizeof(tcmu_dev->cfgstring));
     err = tcmu_dev->handler->open(tcmu_dev);
     if (err < 0) {
-	expect_noerr(err, "tcmu_dev->handler->open(%s)", tcmu_dev->handler->name);
+	expect_noerr(err, "%s handler->open(%s)",
+			  tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev));
 	goto fail_free;
     }
 
+    virt_dev->aio_private = tcmu_dev; 
     virt_dev->tgt_dev_cnt++;
     virt_dev->dif_fd = NULL;
 
-    /* XXXX Should check actual backing storage size against expected */
+#define tcmu_get_device_size(tcmu_dev)	((tcmu_dev)->block_size * (tcmu_dev)->num_lbas)
+    expect_eq(virt_dev->file_size, tcmu_get_device_size(tcmu_dev));
+    expect_eq(virt_dev->nblocks, tcmu_get_dev_num_lbas(tcmu_dev));
+    dev_size = tcmu_get_device_size(tcmu_dev);
 
-    //XXXX hack because vdisk_get_file_size is not implemented
-    if (virt_dev->file_size == 0) {
-	virt_dev->file_size = tcmu_dev->num_lbas * tcmu_dev->block_size;
-	virt_dev->nblocks = tcmu_dev->num_lbas;
-    }
-    expect_eq(virt_dev->file_size, tcmu_dev->num_lbas * tcmu_dev->block_size);
-    expect_eq(virt_dev->nblocks, tcmu_dev->num_lbas);
-
-    if (tcmu_dev->num_lbas * tcmu_dev->block_size < virt_dev->file_size) {
-	sys_warning(MY_ID" target %s size %"PRIu64" too small < %"PRIu64,
-		    tcmu_dev->handler->name, tcmu_dev->num_lbas * tcmu_dev->block_size,
-		    virt_dev->file_size);
+    if (dev_size < virt_dev->file_size) {
+	sys_warning(LOGID" target %s size %"PRIu64" too small < %"PRIu64,
+		    tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev),
+		    dev_size, virt_dev->file_size);
 	err = -EBADFD;	    /* messed-up state */
 	goto fail_close;
     }
 
-    sys_notice(MY_ID" attach_target %s size %"PRIu64,
-	       tcmu_dev->handler->name, virt_dev->file_size);
+    sys_notice(LOGID" handler %s attach target %s size %"PRIu64,
+	       tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev), virt_dev->file_size);
 out:
     TRACE_EXIT_RES(err);
     return err;
@@ -347,16 +262,18 @@ vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev)
 {
     struct scst_vdisk_dev * virt_dev = tgt_dev->dev->dh_priv;
     struct tcmu_device * tcmu_dev = virt_dev->aio_private;
+    assert(tcmu_dev->scst_tgt_dev == tgt_dev);
     lockdep_assert_held(&scst_mutex);
     assert(virt_dev->blockio);
 
     if (--virt_dev->tgt_dev_cnt > 0) {
-	trace(MY_ID" detach_tgt: %s refcount remaining=%d",
-	      tcmu_dev->dev_name, virt_dev->tgt_dev_cnt);
+	trace_tcmu(LOGID" handler %s detach target: %s refcount remaining=%d",
+	      tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev), virt_dev->tgt_dev_cnt);
 	return;
     }
 
-    sys_notice(MY_ID" detach_tgt: %s refcount zero -- closing", tcmu_dev->dev_name);
+    sys_notice(LOGID" handler %s detach tgt: %s refcount zero -- closing",
+	       tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev));
     tcmu_dev->handler->close(tcmu_dev);
     vfree(tcmu_dev);
     virt_dev->aio_private = NULL;
@@ -412,33 +329,31 @@ static void
 blockio_exec_rw(struct vdisk_cmd_params *p, bool is_write, bool fua)
 {
     struct scst_blockio_work * blockio_work;
-    size_t aio_op_len;
-    uint32_t iovn;
     struct tcmulib_cmd * op = NULL;
     struct scst_cmd * scst_cmd = p->cmd;
     struct scst_vdisk_dev * virt_dev = scst_cmd->dev->dh_priv;
     struct tcmu_device * tcmu_dev = virt_dev->aio_private;
+
     bool dif = virt_dev->blk_integrity &&
 	       (scst_get_dif_action(scst_get_dev_dif_actions(scst_cmd->cmd_dif_actions))
 							    != SCST_DIF_ACTION_NONE);
-    TRACE_ENTRY();
-    WARN_ON(virt_dev->nullio);
-    assert(tcmu_dev);
-    assert(tcmu_dev->handler);
-    assert(tcmu_dev->handler->registered);
-
     if (dif) {
 	WARN_ONCE(dif, "XXX TODO: Add DIF support for scstu_tcmu");
 	WARN_ONCE(fua, "XXX TODO: Add FUA support for scstu_tcmu");
 	dif = false;
     }
 
-    u64 seekpos = scst_cmd_get_lba(scst_cmd) << virt_dev->blk_shift;
+    TRACE_ENTRY();
+    WARN_ON(virt_dev->nullio);
+    assert(tcmu_dev);
+    assert(tcmu_dev->handler);
+    assert(tcmu_dev->handler->registered);
+
+    uint64_t seekpos = scst_cmd_get_lba(scst_cmd) << virt_dev->blk_shift;
 
     blockio_work = kmem_cache_zalloc(blockio_work_cachep, IGNORED);
     assert(blockio_work);
     blockio_work->cmd = scst_cmd;
-    atomic_set(&blockio_work->bios_inflight, 1);
 
     op = kmem_cache_zalloc(op_cache, IGNORED);
     assert(op);
@@ -449,14 +364,14 @@ blockio_exec_rw(struct vdisk_cmd_params *p, bool is_write, bool fua)
     if (niov <= ARRAY_SIZE(op->iov_space)) op->iovec = op->iov_space;
     else op->iovec = vzalloc(niov * sizeof(struct iovec));
 
-    iovn = 0;
-    aio_op_len = 0;
+    uint32_t iovn = 0;
+    size_t aio_op_len = 0;
     uint8_t * segaddr;
     size_t seglen = scst_get_buf_first(scst_cmd, &segaddr); /* first segment of I/O buffer */
 
-    /* Translate the segments of the (scattered) receive buffer into iov
-     * entries, coalescing adjacent buffer segments.  (It is OK that any
-     * coalescing means we don't use all of the iovec array)
+    /* Translate the segments of the (scattered) I/O buffer into iovec entries,
+     * coalescing adjacent buffer segments.  (It is OK that coalescing means we
+     * might not use all of the iovec array)
      */
     while (seglen > 0) {
 	if (iovn > 0 && segaddr == op->iovec[iovn-1].iov_base + op->iovec[iovn-1].iov_len) {
@@ -474,11 +389,13 @@ blockio_exec_rw(struct vdisk_cmd_params *p, bool is_write, bool fua)
 	seglen = scst_get_buf_next(scst_cmd, &segaddr);	/* get next sg segment */
     }
 
-    expect_eq(aio_op_len % 512, 0);
+    expect_eq(aio_op_len % tcmu_get_dev_block_size(tcmu_dev), 0);
 
     op->iov_cnt = iovn;		    /* number of iovec elements we filled in */
-    op->len = aio_op_len;
+    op->len = aio_op_len;	    /* I/O bytes */
     op->tcmu_dev = tcmu_dev;
+
+    atomic_inc(&blockio_work->bios_inflight);
 
     /* Submit the command to the handler */
     sam_stat_t sam_stat;
@@ -502,7 +419,7 @@ out_finish:
     goto out;
 }
 
-/* NB: scst_cmd may be NULL */
+/* NB: op->scst_cmd may be NULL */
 static void
 aio_fsync_done(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam_stat_t sam_stat)
 {
@@ -511,7 +428,7 @@ aio_fsync_done(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam_stat_
     TRACE_ENTRY();
 
     if (unlikely(sam_stat != SAM_STAT_GOOD)) {
-	PRINT_ERROR(MY_ID" flush failed: %d (scst_cmd %p)", sam_stat, scst_cmd);
+	PRINT_ERROR(LOGID" flush failed: %d (scst_cmd %p)", sam_stat, scst_cmd);
 	if (scst_cmd) {
 	    scst_set_cmd_error(scst_cmd, SCST_LOAD_SENSE(scst_sense_write_error));
 	}
@@ -530,17 +447,16 @@ aio_fsync_done(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam_stat_
 
 /* NB: scst_cmd may be NULL */
 static errno_t
-vdisk_fsync_blockio(loff_t loff, loff_t len, struct scst_device *scst_dev,
+vdisk_fsync_blockio(loff_t loff, loff_t len, struct scst_device *dev,
 		    gfp_t gfp_flags, struct scst_cmd *scst_cmd, bool async)
 {
     errno_t err = E_OK;
-    struct scst_vdisk_dev * virt_dev = scst_dev->dh_priv;
+    struct scst_vdisk_dev * virt_dev = dev->dh_priv;
     struct tcmu_device * tcmu_dev = virt_dev->aio_private;
-    struct tcmulib_cmd * op = kmem_cache_zalloc(op_cache, IGNORED);
+    struct tcmulib_cmd * op;
     DECLARE_COMPLETION_ONSTACK(scst_completion);
 
     TRACE_ENTRY();
-    assert(op);
     EXTRACHECKS_BUG_ON(!virt_dev->blockio);
     WARN_ONCE(virt_dev->dif_fd != NULL, "XXX TODO: Add DIF support for RBE");
 
@@ -548,6 +464,7 @@ vdisk_fsync_blockio(loff_t loff, loff_t len, struct scst_device *scst_dev,
     assert(tcmu_dev->handler);
     assert(tcmu_dev->handler->registered);
 
+    op = kmem_cache_zalloc(op_cache, gfp_flags);
     op->scst_cmd = scst_cmd;
     op->tcmu_dev = tcmu_dev;
     op->done = aio_fsync_done;
@@ -556,25 +473,27 @@ vdisk_fsync_blockio(loff_t loff, loff_t len, struct scst_device *scst_dev,
 
     sam_stat_t sam_stat = tcmu_dev->handler->flush(op->tcmu_dev, op);
     if (sam_stat != SAM_STAT_GOOD) {
-	expect_eq(sam_stat, SAM_STAT_TASK_SET_FULL);
-	err = -EBUSY;	    /* XXXX right? */
-	goto out_free_op;
+	if (sam_stat == SAM_STAT_TASK_SET_FULL) err = -EBUSY;	//XXXX right?
+	else err = -EIO;					//XXXX right?
+	goto out_finish;
     }
 
     if (!async) {
-	sys_notice("vdisk_fsync_blockio: synchronous fsync starts");
+	trace_tcmu("vdisk_fsync_blockio: synchronous fsync starts");
 	wait_for_completion(&scst_completion);
-	sys_notice("vdisk_fsync_blockio: synchronous fsync finishes");
+	trace_tcmu("vdisk_fsync_blockio: synchronous fsync finishes");
     }
 
 out:
     TRACE_EXIT_RES(err);
     return err;
 
-out_free_op:
-    scst_set_cmd_error(scst_cmd, SCST_LOAD_SENSE(scst_sense_internal_failure));
-    scst_cmd->completed = 1;
-    scst_cmd->scst_cmd_done(scst_cmd, SCST_CMD_STATE_DEFAULT, SCST_CONTEXT_SAME);
+out_finish:
+    if (scst_cmd) {
+	scst_set_cmd_error(scst_cmd, SCST_LOAD_SENSE(scst_sense_internal_failure));
+	scst_cmd->completed = 1;
+	scst_cmd->scst_cmd_done(scst_cmd, SCST_CMD_STATE_DEFAULT, SCST_CONTEXT_SAME);
+    }
     kmem_cache_free(op_cache, op);
     goto out;
 }
@@ -584,13 +503,38 @@ static errno_t
 vdisk_get_file_size(const char * filename, bool blockio, loff_t *file_sizep)
 {
     errno_t err = E_OK;
+    struct tcmu_device * tcmu_dev;
     assert(file_sizep);
     assert(blockio);
     TRACE_ENTRY();
+    assert(filename);
+    assert(strlen(filename));
 
-    sys_warning(MY_ID" get_file_size(%s) not implemented", filename);
-    *file_sizep = 0;	//XXXX fixed up in the attach function
+    *file_sizep = 0;
 
+    if (!strlen(filename)) return -EINVAL;
+    if (strlen(filename) >= sizeof(tcmu_dev->cfgstring)) return -EINVAL;
+
+    tcmu_dev = vzalloc(sizeof(*tcmu_dev));
+    tcmu_dev->handler = scstu_tcmu_handler;	//XXX Single handler
+    strlcpy(tcmu_dev->dev_name, "scstu_tcmu", sizeof(tcmu_dev->dev_name));
+    strlcpy(tcmu_dev->cfgstring_orig, filename, sizeof(tcmu_dev->cfgstring));
+
+    /* handler->open() might corrupt the config string using strtok() */
+    memcpy(tcmu_dev->cfgstring, tcmu_dev->cfgstring_orig, sizeof(tcmu_dev->cfgstring));
+    err = tcmu_dev->handler->open(tcmu_dev);
+    if (err < 0) {
+	expect_noerr(err, "%s handler->open(%s)",
+			  tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev));
+	goto free;
+    }
+
+    *file_sizep = tcmu_get_device_size(tcmu_dev);
+    tcmu_dev->handler->close(tcmu_dev);
+
+free:
+    trace_tcmu("TCMU device size=%"PRIu64, *file_sizep);
+    vfree(tcmu_dev);
     TRACE_EXIT_RES(err);
     return err;
 }
