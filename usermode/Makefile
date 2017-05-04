@@ -190,7 +190,7 @@ ifdef USERMODE_CEPH_RBD
 LOCAL_LIBS += -lrbd -lrados
 endif
 ifdef USERMODE_TCMU_RBD
-LOCAL_LIBS += scstu_tmcu_rbd.o -lrbd -lrados
+LOCAL_LIBS += rbd.o -lrbd -lrados
 endif
 
 export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build

@@ -1,4 +1,3 @@
-/******** SNAPSHOT OF ORIGINAL TCMU-RUNNER SOURCE FILE ********/
 /*
  * Additional values not defined by other headers, they
  * seem a little incomplete.
@@ -9,6 +8,7 @@
  */
 #ifndef __TCMU_SCSI_DEFS
 #define __TCMU_SCSI_DEFS
+#undef WRITE_VERIFY_16
 
 /*
  * SCSI Opcodes
@@ -22,7 +22,7 @@
 #define READ_16                         0x88
 #define COMPARE_AND_WRITE               0x89
 #define WRITE_16                        0x8a
-#define WRITE_VERIFY_16                 0x8E
+#define WRITE_VERIFY_16                 0x8e
 #define SYNCHRONIZE_CACHE_16            0x91
 #define WRITE_SAME_16                   0x93
 #define SERVICE_ACTION_IN_16            0x9e
