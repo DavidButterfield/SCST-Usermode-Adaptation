@@ -11,16 +11,20 @@
   ##	  USERMODE_TCMU/USERMODE_TCMU_RBD combination is probably more
   ##	  sophisticated than the scst_vdisk_ceph_rbd.c implementation.
 
-  # define USERMODE_CEPH_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
-  #	 using the scst_vdisk_ceph_rbd.c direct interface to RBD.
+  # Define USERMODE_CEPH_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
+  #	 using the scst_vdisk_ceph_rbd.c direct interface to RBD.  For the same
+  #      support with newer software, use USERMODE_TCMU and USERMODE_TCMU_RBD.
   # USERMODE_CEPH_RBD = defined
 
-  # define USERMODE_TCMU to build SCST usermode with BLOCKIO under a TCMU plugin
+  # Define USERMODE_TCMU to build SCST usermode with BLOCKIO under a TCMU plugin
   # USERMODE_TCMU = defined
 
-  # define USERMODE_TMCU_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
+  # Define USERMODE_TMCU_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
   #   via scstu_tcmu.c using the RBD plugin for TCMU.  (Use with USERMODE_TCMU)
   # USERMODE_TCMU_RBD = defined
+
+  # Set this to 1 if you have an older librbd without the iovec calls.
+MY_CFLAGS += -DTMCU_NO_IOV=0
 
 ################################################################################
 
@@ -68,9 +72,9 @@ endif
 # EXTRA_CFLAGS are used when compiling the kernel code
 
 MY_CFLAGS += -Og
-# MY_CFLAGS += -O3
-# MY_CFLAGS += -O2
 # MY_CFLAGS += -O1
+# MY_CFLAGS += -O2
+# MY_CFLAGS += -O3
 
 # Enable assert/expect and some other checking and/or tracing
 MY_CFLAGS += -DDEBUG

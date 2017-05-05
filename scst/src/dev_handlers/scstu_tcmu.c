@@ -16,7 +16,7 @@ static struct kmem_cache * op_cache;
 
 /******** API for tcmu-runner handler ********/
 
-//XXXXX figure out the intended difference from tcmu_get_dev_block_size (module_params ?)
+/* This is used by the handler to query scst about the expected block size */
 int
 tcmu_get_attribute(struct tcmu_device * tcmu_dev, string_t attr_str)
 {
@@ -42,6 +42,7 @@ tcmu_get_attribute(struct tcmu_device * tcmu_dev, string_t attr_str)
     return -ENOENT;
 }
 
+/* This is used by the handler to query scst about the expected device size */
 ssize_t
 tcmu_get_device_size(struct tcmu_device * tcmu_dev)
 {
@@ -53,7 +54,7 @@ tcmu_set_sense_data(uint8_t * sense_buf, uint8_t key, uint16_t asc_ascq, uint32_
 {
     memset(sense_buf, 0, 18);
     sense_buf[0] = 0x70;		/* current, fixed fmt sense data */
-    assert((key&0xf0) == 0);
+    assert_eq(key&0xf0, 0);
     sense_buf[2] = key;			/* ILLEGAL_REQUEST, MEDIUM_ERROR, etc */
     sense_buf[7] = 10;			/* additional sense length */
     put_unaligned_be16(asc_ascq, &sense_buf[12]);    /* ASC / ASCQ */
@@ -178,26 +179,49 @@ exit_scst_vdisk_aio(void)
     op_cache = NULL;
 }
 
+static inline struct tcmu_device *
+scstu_tcmu_openprep(struct scst_tgt_dev * tgt_dev, struct tcmur_handler * handler,
+		    string_t name, string_t cfg)
+{
+    struct tcmu_device * tcmu_dev;
+
+    if (!cfg) return NULL;
+    if (!strlen(cfg)) return NULL;
+    if (strlen(cfg) >= sizeof(tcmu_dev->cfgstring)) return NULL;
+
+    tcmu_dev = vzalloc(sizeof(*tcmu_dev));
+    tcmu_dev->handler = handler;
+    tcmu_dev->scst_tgt_dev = tgt_dev;	/* possibly NULL */
+    strlcpy(tcmu_dev->dev_name, name, sizeof(tcmu_dev->dev_name));
+    strlcpy(tcmu_dev->cfgstring_orig, cfg, sizeof(tcmu_dev->cfgstring_orig));
+    memcpy(tcmu_dev->cfgstring, tcmu_dev->cfgstring_orig, sizeof(tcmu_dev->cfgstring));
+    /* num_lbas and block_size filled by handler->open() */
+
+    return tcmu_dev;
+}
+
 static errno_t
 vdisk_aio_attach_tgt(struct scst_tgt_dev * tgt_dev)
 {
     errno_t err;
+    size_t dev_size;
     struct tcmu_device * tcmu_dev;
     struct scst_vdisk_dev * virt_dev = tgt_dev->dev->dh_priv;
-    size_t dev_size;
     assert(virt_dev);
-    expect(virt_dev->blk_shift);
-    expect(virt_dev->nblocks);
-    lockdep_assert_held(&scst_mutex);
-    TRACE_ENTRY();
+    assert(virt_dev->blockio);
+    assert_ge(virt_dev->blk_shift, 9);	    /* sector size */
+    assert(virt_dev->nblocks);
+    assert_eq(virt_dev->file_size, virt_dev->nblocks << virt_dev->blk_shift);
 
-    tcmu_dev = vzalloc(sizeof(*tcmu_dev));
-    tcmu_dev->handler = scstu_tcmu_handler;	//XXX Single handler
-    tcmu_dev->scst_tgt_dev = tgt_dev;
-    strlcpy(tcmu_dev->dev_name, "scstu_tcmu", sizeof(tcmu_dev->dev_name));
-    strlcpy(tcmu_dev->cfgstring_orig, "/rbd/foo", sizeof(tcmu_dev->cfgstring_orig));  //XXXXX bogus
-    tcmu_set_dev_block_size(tcmu_dev, 1 << virt_dev->blk_shift);
-    tcmu_set_dev_num_lbas(tcmu_dev, virt_dev->nblocks);
+    TRACE_ENTRY();
+    lockdep_assert_held(&scst_mutex);
+
+    /* XXX To support multiple handlers, add code here to lookup the handler */
+    tcmu_dev = scstu_tcmu_openprep(tgt_dev, scstu_tcmu_handler, "scstu_tcmu", virt_dev->filename);
+    if (!tcmu_dev) {
+	err = EINVAL;
+	goto out;
+    }
 
     if (tcmu_dev->handler->check_config) {
 	char * reason = NULL;
@@ -214,9 +238,11 @@ vdisk_aio_attach_tgt(struct scst_tgt_dev * tgt_dev)
 	}
     }
 
+    err = tcmu_dev->handler->open(tcmu_dev);	    /* Call into handler */
+
     /* handler->open() might corrupt the config string using strtok() */
     memcpy(tcmu_dev->cfgstring, tcmu_dev->cfgstring_orig, sizeof(tcmu_dev->cfgstring));
-    err = tcmu_dev->handler->open(tcmu_dev);
+
     if (err < 0) {
 	expect_noerr(err, "%s handler->open(%s)",
 			  tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev));
@@ -225,13 +251,12 @@ vdisk_aio_attach_tgt(struct scst_tgt_dev * tgt_dev)
 
     virt_dev->aio_private = tcmu_dev; 
     virt_dev->tgt_dev_cnt++;
-    virt_dev->dif_fd = NULL;
 
-#define tcmu_get_device_size(tcmu_dev)	((tcmu_dev)->block_size * (tcmu_dev)->num_lbas)
-    expect_eq(virt_dev->file_size, tcmu_get_device_size(tcmu_dev));
-    expect_eq(virt_dev->nblocks, tcmu_get_dev_num_lbas(tcmu_dev));
+    expect_eq(tcmu_get_dev_num_lbas(tcmu_dev), virt_dev->nblocks);
+    expect_eq(tcmu_get_dev_block_size(tcmu_dev), 1ul << virt_dev->blk_shift);
+    expect_eq(tcmu_get_device_size(tcmu_dev), virt_dev->file_size);
+
     dev_size = tcmu_get_device_size(tcmu_dev);
-
     if (dev_size < virt_dev->file_size) {
 	sys_warning(LOGID" target %s size %"PRIu64" too small < %"PRIu64,
 		    tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev),
@@ -249,22 +274,21 @@ fail_close:
     tcmu_dev->handler->close(tcmu_dev);
     virt_dev->tgt_dev_cnt--;
     virt_dev->aio_private = NULL;
-    virt_dev->file_size = 0;
-    virt_dev->nblocks = 0;
 fail_free:
     vfree(tcmu_dev);
     goto out;
 }
 
-/* Does what vdisk_detach_tgt() does, and also frees the handler instance */
+/* Does what vdisk_detach_tgt() does, and also closes/frees the handler instance */
 static void
 vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev)
 {
     struct scst_vdisk_dev * virt_dev = tgt_dev->dev->dh_priv;
     struct tcmu_device * tcmu_dev = virt_dev->aio_private;
-    assert(tcmu_dev->scst_tgt_dev == tgt_dev);
+    assert_eq(tcmu_dev->scst_tgt_dev, tgt_dev);
+
+    TRACE_ENTRY();
     lockdep_assert_held(&scst_mutex);
-    assert(virt_dev->blockio);
 
     if (--virt_dev->tgt_dev_cnt > 0) {
 	trace_tcmu(LOGID" handler %s detach target: %s refcount remaining=%d",
@@ -274,11 +298,10 @@ vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev)
 
     sys_notice(LOGID" handler %s detach tgt: %s refcount zero -- closing",
 	       tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev));
+
     tcmu_dev->handler->close(tcmu_dev);
-    vfree(tcmu_dev);
     virt_dev->aio_private = NULL;
-    virt_dev->file_size = 0;
-    virt_dev->nblocks = 0;
+    vfree(tcmu_dev);
 }
 
 static inline void
@@ -498,43 +521,49 @@ out_finish:
     goto out;
 }
 
-/* Supposed to return 0 on success with file size in *file_size; otherwise -errno */
+/* Return 0 on success with file size in *file_size; otherwise -errno */
 static errno_t
 vdisk_get_file_size(const char * filename, bool blockio, loff_t *file_sizep)
 {
     errno_t err = E_OK;
     struct tcmu_device * tcmu_dev;
+
+    TRACE_ENTRY();
+    lockdep_assert_held(&scst_mutex);
     assert(file_sizep);
     assert(blockio);
-    TRACE_ENTRY();
     assert(filename);
     assert(strlen(filename));
 
     *file_sizep = 0;
 
-    if (!strlen(filename)) return -EINVAL;
-    if (strlen(filename) >= sizeof(tcmu_dev->cfgstring)) return -EINVAL;
+    /* XXX To support multiple handlers, add code here to lookup the handler */
+    tcmu_dev = scstu_tcmu_openprep(NULL, scstu_tcmu_handler, "scstu_tcmu", filename);
+    if (!tcmu_dev) {
+	err = EINVAL;
+	goto out;
+    }
 
-    tcmu_dev = vzalloc(sizeof(*tcmu_dev));
-    tcmu_dev->handler = scstu_tcmu_handler;	//XXX Single handler
-    strlcpy(tcmu_dev->dev_name, "scstu_tcmu", sizeof(tcmu_dev->dev_name));
-    strlcpy(tcmu_dev->cfgstring_orig, filename, sizeof(tcmu_dev->cfgstring));
+    /* Open the handler so it fills in num_lbas and block_size */
+    err = tcmu_dev->handler->open(tcmu_dev);
 
     /* handler->open() might corrupt the config string using strtok() */
     memcpy(tcmu_dev->cfgstring, tcmu_dev->cfgstring_orig, sizeof(tcmu_dev->cfgstring));
-    err = tcmu_dev->handler->open(tcmu_dev);
+
     if (err < 0) {
 	expect_noerr(err, "%s handler->open(%s)",
 			  tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev));
-	goto free;
+	goto out_free;
     }
 
-    *file_sizep = tcmu_get_device_size(tcmu_dev);
+    *file_sizep = tcmu_dev->num_lbas * tcmu_dev->block_size;
+
     tcmu_dev->handler->close(tcmu_dev);
 
-free:
-    trace_tcmu("TCMU device size=%"PRIu64, *file_sizep);
+out_free:
     vfree(tcmu_dev);
+out:
+    trace_tcmu("TCMU device size=%"PRIu64, *file_sizep);
     TRACE_EXIT_RES(err);
     return err;
 }

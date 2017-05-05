@@ -43,7 +43,7 @@ typedef void (*cmd_done_t)(struct tcmu_device *, struct tcmulib_cmd *, sam_stat_
 struct tcmulib_cmd {
     struct tcmu_device	      * tcmu_dev;
     size_t			iov_cnt;
-    struct iovec	      *	iovec;
+    struct iovec	      *	iovec;		/* I/O data buffers */
     size_t			len;		/* read/write bytes */
     cmd_done_t			done;		/* completion handler */
     struct scst_cmd	      * scst_cmd;
