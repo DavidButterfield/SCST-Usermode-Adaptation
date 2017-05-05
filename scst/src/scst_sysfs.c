@@ -3706,8 +3706,8 @@ static ssize_t scst_dev_block_store(struct kobject *kobj,
 
 	TRACE_MGMT_DBG("Sysfs blocking dev %s (sync %d, data_start %p, "
 		"data_len %d)", dev->virt_name, sync, data_start, data_len);
-#ifdef SCST_USERMODE
-	sync = true;	//XXXXX sysfs
+#ifdef SCST_USERMODE	// synchronous sysfs
+	sync = true;	//XXXX need events for async sysfs
 #endif
 
 	if (sync)

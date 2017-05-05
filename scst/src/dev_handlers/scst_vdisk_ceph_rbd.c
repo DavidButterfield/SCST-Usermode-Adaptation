@@ -3,6 +3,9 @@
  * SCST_USERMODE support for SCST BLOCKIO using the Ceph RBD provider
  *
  * Compiled with SCST_USERMODE_CEPH_RBD to take over implementation of blockio.
+ * This supports the same configuration as using scstu_tcmu and the rbd.c
+ * plugin for tcmu-runner -- but is older and buggier.  I suggest doing it the
+ * other way.
  *
  * Just to be clear, this code runs only in usermode, but it is called from SCST
  * kernel code that is not aware it is running outside the kernel in usermode.
