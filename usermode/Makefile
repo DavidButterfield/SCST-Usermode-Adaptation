@@ -46,14 +46,17 @@ endif
 # MY_CFLAGS are used when compiling the kernel code or daemon code
 # EXTRA_CFLAGS are used when compiling the kernel code
 
-MY_CFLAGS += -O3
+MY_CFLAGS += -Og
+# MY_CFLAGS += -O3
 # MY_CFLAGS += -O2
 # MY_CFLAGS += -O1
 
 # Enable assert/expect and some other checking and/or tracing
-# MY_CFLAGS += -DDEBUG
+MY_CFLAGS += -DDEBUG
+MY_CFLAGS += -fsanitize=undefined
 # MY_CFLAGS += -DTRACE_TRACE
 # MY_CFLAGS += -DTRACE_VERBOSE
+# MY_CFLAGS += -fprofile-arcs
 
 # Disable most of the memory checks remaining when !DEBUG
 # MY_CFLAGS += -DOPTIMIZED
@@ -145,6 +148,7 @@ export EXTRA_CFLAGS += $(MY_CFLAGS)
 
 # LOCAL_CFLAGS appears to be used instead of EXTRA_CFLAGS in real usermode makefiles
 export LOCAL_CFLAGS += $(MY_CFLAGS)
+export LOCAL_LIBS += -L/usr/lib/x86_64-linux-gnu -lubsan
 
 export INFINIBAND_ENABLED := false
 export SCST_INC_DIR := $(CURDIR)/../scst/include
@@ -168,7 +172,8 @@ COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst
 scst.out:   $(COMPONENTS)
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
-	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte -lpthread -laio -ldl -lfuse -lc
+	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte -lpthread -laio -ldl -lfuse \
+		    -lubsan -lc
 
 USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.o
 
