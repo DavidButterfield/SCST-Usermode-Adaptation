@@ -37,6 +37,17 @@
 
 #include <rbd/librbd.h>
 
+/* Use  gcc -DTMCU_NO_IOV=0  to enable use of RBD iovec calls */
+/* Use  gcc -DTMCU_NO_IOV=1  to disable use of RBD iovec calls */
+#ifndef TMCU_NO_IOV
+#define TMCU_NO_IOV true    /* default for now is to assume older library */
+#endif
+
+#if TMCU_NO_IOV
+#define rbd_aio_readv(image, iov, iov_cnt, offset, completion)	-EIO
+#define rbd_aio_writev(image, iov, iov_cnt, offset, completion)	-EIO
+#endif
+
 enum {
 	TCMU_RBD_OPENING,
 	TCMU_RBD_OPENED,
@@ -516,15 +527,18 @@ static void rbd_finish_aio_read(rbd_completion_t completion,
 	} else if (ret < 0) {
 		tcmu_r = tcmu_set_sense_data(tcmulib_cmd->sense_buf,
 					     MEDIUM_ERROR, ASC_READ_ERROR, NULL);
-	} else {
+	} else if (TMCU_NO_IOV) {
 		tcmu_r = SAM_STAT_GOOD;
 		tcmu_memcpy_into_iovec(iovec, iov_cnt,
 				       aio_cb->bounce_buffer, aio_cb->length);
-	}
+	} else
+		tcmu_r = SAM_STAT_GOOD;
 
 	tcmulib_cmd->done(dev, tcmulib_cmd, tcmu_r);
 
-	free(aio_cb->bounce_buffer);
+	if (TMCU_NO_IOV)
+		free(aio_cb->bounce_buffer);
+
 	free(aio_cb);
 }
 
@@ -547,10 +561,12 @@ static int tcmu_rbd_read(struct tcmu_device *dev, struct tcmulib_cmd *cmd,
 	aio_cb->length = length;
 	aio_cb->tcmulib_cmd = cmd;
 
-	aio_cb->bounce_buffer = malloc(length);
-	if (!aio_cb->bounce_buffer) {
-		tcmu_dev_err(dev, "Could not allocate bounce buffer.\n");
-		goto out_free_aio_cb;
+	if (TMCU_NO_IOV) {
+		aio_cb->bounce_buffer = malloc(length);
+		if (!aio_cb->bounce_buffer) {
+			tcmu_dev_err(dev, "Could not allocate bounce buffer.\n");
+			goto out_free_aio_cb;
+		}
 	}
 
 	ret = rbd_aio_create_completion
@@ -559,8 +575,12 @@ static int tcmu_rbd_read(struct tcmu_device *dev, struct tcmulib_cmd *cmd,
 		goto out_free_bounce_buffer;
 	}
 
-	ret = rbd_aio_read(state->image, offset, length, aio_cb->bounce_buffer,
-			   completion);
+	if (TMCU_NO_IOV)
+		ret = rbd_aio_read(state->image, offset, length,
+				   aio_cb->bounce_buffer, completion);
+	else
+		ret = rbd_aio_readv(state->image, iov, iov_cnt, offset, completion);
+
 	if (ret < 0) {
 		goto out_remove_tracked_aio;
 	}
@@ -570,7 +590,8 @@ static int tcmu_rbd_read(struct tcmu_device *dev, struct tcmulib_cmd *cmd,
 out_remove_tracked_aio:
 	rbd_aio_release(completion);
 out_free_bounce_buffer:
-	free(aio_cb->bounce_buffer);
+	if (TMCU_NO_IOV)
+		free(aio_cb->bounce_buffer);
 out_free_aio_cb:
 	free(aio_cb);
 out:
@@ -628,13 +649,14 @@ static int tcmu_rbd_write(struct tcmu_device *dev, struct tcmulib_cmd *cmd,
 	aio_cb->length = length;
 	aio_cb->tcmulib_cmd = cmd;
 
-	aio_cb->bounce_buffer = malloc(length);
-	if (!aio_cb->bounce_buffer) {
-		tcmu_dev_err(dev, "Failed to allocate bounce buffer.\n");
-		goto out_free_aio_cb;
+	if (TMCU_NO_IOV) {
+		aio_cb->bounce_buffer = malloc(length);
+		if (!aio_cb->bounce_buffer) {
+			tcmu_dev_err(dev, "Failed to allocate bounce buffer.\n");
+			goto out_free_aio_cb;
+		}
+		tcmu_memcpy_from_iovec(aio_cb->bounce_buffer, length, iov, iov_cnt);
 	}
-
-	tcmu_memcpy_from_iovec(aio_cb->bounce_buffer, length, iov, iov_cnt);
 
 	ret = rbd_aio_create_completion
 		(aio_cb, (rbd_callback_t) rbd_finish_aio_generic, &completion);
@@ -642,8 +664,12 @@ static int tcmu_rbd_write(struct tcmu_device *dev, struct tcmulib_cmd *cmd,
 		goto out_free_bounce_buffer;
 	}
 
-	ret = rbd_aio_write(state->image, offset,
-			    length, aio_cb->bounce_buffer, completion);
+	if (TMCU_NO_IOV)
+		ret = rbd_aio_write(state->image, offset,
+				    length, aio_cb->bounce_buffer, completion);
+	else
+		ret = rbd_aio_writev(state->image, iov, iov_cnt, offset, completion);
+
 	if (ret < 0) {
 		goto out_remove_tracked_aio;
 	}
@@ -653,7 +679,8 @@ static int tcmu_rbd_write(struct tcmu_device *dev, struct tcmulib_cmd *cmd,
 out_remove_tracked_aio:
 	rbd_aio_release(completion);
 out_free_bounce_buffer:
-	free(aio_cb->bounce_buffer);
+	if (TMCU_NO_IOV)
+		free(aio_cb->bounce_buffer);
 out_free_aio_cb:
 	free(aio_cb);
 out:
@@ -733,5 +760,8 @@ struct tcmur_handler tcmu_rbd_handler = {
 
 int handler_init(void)
 {
+	if (!TMCU_NO_IOV)
+		tcmu_info("tcmu/rbd using iovec calls");
+
 	return tcmur_register_handler(&tcmu_rbd_handler);
 }
