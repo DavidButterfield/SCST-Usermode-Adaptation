@@ -32,9 +32,12 @@
   # define USERMODE_TCMU to build SCST usermode with BLOCKIO under a TCMU plugin
   USERMODE_TCMU = defined
 
-  # define USERMODE_TMCU_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
+  # Define USERMODE_TMCU_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
   #   via scstu_tcmu.c using the RBD plugin for TCMU.  (Use with USERMODE_TCMU)
   USERMODE_TCMU_RBD = defined
+
+  # Set this to 1 if you have an older librbd without the iovec calls.
+MY_CFLAGS += -DTMCU_NO_IOV=0
 
 ################################################################################
 
