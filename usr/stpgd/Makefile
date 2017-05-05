@@ -35,10 +35,10 @@ CFLAGS += $(EXTRA_WFLAGS)
 all: $(PROGS)
 
 stpgd: .depend_f $(OBJS_F)
-	$(CC) $(OBJS_F) $(LIBS) $(LOCAL_LD_FLAGS) -o $@
+	$(CC) $(OBJS_F) $(LIBS) $(LOCAL_LD_FLAGS) $(LOCAL_LIBS) -o $@
 
 #cdrom_tgt: .depend_c  $(OBJS_C)
-#	$(CC) $(OBJS_C) $(LIBS) $(LOCAL_LD_FLAGS) -o $@
+#	$(CC) $(OBJS_C) $(LIBS) $(LOCAL_LD_FLAGS) $(LOCAL_LIBS) -o $@
 
 ifeq (.depend_f,$(wildcard .depend_f))
 -include .depend_f
