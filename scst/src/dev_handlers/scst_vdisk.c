@@ -1148,9 +1148,16 @@ check:
 }
 
 /* Returns 0 on success and file size in *file_size, error code otherwise */
-static int vdisk_get_file_size(const char *filename, bool blockio,
+static int vdisk_get_file_size(struct scst_vdisk_dev *virt_dev,
+	loff_t *file_size);
+
+#if !defined(SCST_USERMODE_CEPH_RBD) && !defined(SCST_USERMODE_TCMU)
+
+static int vdisk_get_file_size(struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size)
 {
+	const char *filename = virt_dev->filename;
+	bool blockio = virt_dev->blockio;
 	struct inode *inode;
 	int res = 0;
 	struct file *fd;
@@ -1597,8 +1604,7 @@ static int vdisk_reexamine(struct scst_vdisk_dev *virt_dev)
 	if (!virt_dev->nullio && !virt_dev->cdrom_empty) {
 		loff_t file_size;
 
-		res = vdisk_get_file_size(virt_dev->filename, virt_dev->blockio,
-					  &file_size);
+		res = vdisk_get_file_size(virt_dev, &file_size);
 		if (res < 0) {
 			if ((res == -EMEDIUMTYPE) && virt_dev->blockio) {
 				TRACE_DBG("Reexam pending (dev %s)", virt_dev->name);
@@ -7737,8 +7743,7 @@ static int vdisk_resync_size(struct scst_vdisk_dev *virt_dev)
 		goto out;
 	}
 
-	res = vdisk_get_file_size(virt_dev->filename,
-			virt_dev->blockio, &file_size);
+	res = vdisk_get_file_size(virt_dev, &file_size);
 	if (res != 0)
 		goto out;
 
@@ -8694,8 +8699,7 @@ static int vcdrom_change(struct scst_vdisk_dev *virt_dev,
 
 		virt_dev->filename = fn;
 
-		res = vdisk_get_file_size(virt_dev->filename,
-				virt_dev->blockio, &err);
+		res = vdisk_get_file_size(virt_dev, &err);
 		if (res != 0)
 			goto out_free_fn;
 		if (virt_dev->fd == NULL) {
