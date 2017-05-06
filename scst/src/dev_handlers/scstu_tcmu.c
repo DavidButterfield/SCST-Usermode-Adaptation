@@ -7,6 +7,11 @@
  */
 #ifdef SCST_USERMODE
 #ifdef SCST_USERMODE_TCMU
+#include <sys/time.h>
+#include <sys/resource.h>
+
+#define SCSTU_TIMING 1	/* XXX move to Makefile */
+
 #include "../../usermode/scstu_tcmu.h"
 
 #define LOGID "scstu_tcmu"
@@ -21,20 +26,9 @@ int
 tcmu_get_attribute(struct tcmu_device * tcmu_dev, string_t attr_str)
 {
     if (!strcmp(attr_str, "hw_block_size")) {
-	if (tcmu_dev->scst_tgt_dev) {
-	    struct scst_vdisk_dev * virt_dev = tcmu_dev->scst_tgt_dev->dev->dh_priv;
-	    assert(virt_dev);
-	    expect(virt_dev->blk_shift >= 9);   /* minimum block size 512 */
-	    if (virt_dev->blk_shift < 9) {
-		sys_warning("XXXXX assuming hw_block_size=512");
-		virt_dev->blk_shift = 9;
-	    }
-	    return 1ul << virt_dev->blk_shift;
-	} else {
-	    //XXXXX Need to get this from somewhere
-	    sys_warning("XXXXX ASSUMING hw_block_size=512");
-	    return 1ul << 9;
-	}
+	assert_ge(tcmu_dev->scst_block_size, 512);
+	assert_eq(tcmu_dev->scst_block_size % 512, 0);
+	return tcmu_dev->scst_block_size;
     }
 
     sys_warning("Unknown TCMU attribute %s requested for device %s",
@@ -46,13 +40,17 @@ tcmu_get_attribute(struct tcmu_device * tcmu_dev, string_t attr_str)
 ssize_t
 tcmu_get_device_size(struct tcmu_device * tcmu_dev)
 {
-    return 4*1024*1024*1024l;  //XXXXXXXXXXXX
+    assert_ge(tcmu_dev->scst_block_size, 512);
+    assert_eq(tcmu_dev->scst_block_size % 512, 0);
+    return tcmu_dev->scst_nlba * tcmu_dev->scst_block_size;
 }
+
+#define SENSE_BUF_USED 18u	//XXX
 
 int
 tcmu_set_sense_data(uint8_t * sense_buf, uint8_t key, uint16_t asc_ascq, uint32_t * info)
 {
-    memset(sense_buf, 0, 18);
+    memset(sense_buf, 0, SENSE_BUF_USED);
     sense_buf[0] = 0x70;		/* current, fixed fmt sense data */
     assert_eq(key&0xf0, 0);
     sense_buf[2] = key;			/* ILLEGAL_REQUEST, MEDIUM_ERROR, etc */
@@ -76,17 +74,24 @@ static void
 _thread_assimilate(void)
 {
     assert(!current);
-    /* This thread was created by the handler on its own -- set its "kernel thread" environment */
-    /* The thread will deliver into "kernel" code that expects a "current" to be set */
+    /* This thread was created by the handler on its own -- set its "kernel thread" environment.
+     * The thread will deliver into "kernel" code that expects a "current" to be set.
+     * Add a '*' to the front of assimilated threads in the command name shown in top(1)
+     */
     char name[32];
-    int err = pthread_getname_np(pthread_self(), name, sizeof(name));
-    if (err) strncpy(name, "tcmu_handler", sizeof(name));
-    /* XXX These structures are not freed anywhere */
+    int err = pthread_getname_np(pthread_self(), name+1, sizeof(name)-1);
+    if (err) strncpy(name, "*tcmu_handler", sizeof(name));
+    name[0] = '*';
+    name[15] = '\0';
+    err = pthread_setname_np(pthread_self(), name);
+
+    /* XXX These structures and their strings are not freed anywhere */
     sys_thread = sys_thread_alloc((void *)"scstu_tcmu", "scstu_tcmu", (void *)vstrdup(name));
     current = UMC_current_alloc();
     UMC_current_init(current, sys_thread, (void *)"scstu_tcmu", "scstu_tcmu", vstrdup(name));
 }
 
+/* Keep this function inline and fast */
 static inline void
 thread_assimilate(void)
 {
@@ -131,6 +136,132 @@ tcmur_unregister_handler(struct tcmur_handler * handler)
     handler->registered = false;
     scstu_tcmu_handler = NULL;
     return true;
+}
+
+/* Track time spent in OP requests and completion callbacks -- keep these inline and fast */
+
+static inline void
+scstu_call_begin(struct tcmu_device * td, struct timeval * u, struct timeval * s)
+{
+#ifdef SCSTU_TIMING
+    struct rusage ru;
+    int rc = getrusage(RUSAGE_THREAD, &ru);
+    if (likely(rc == 0)) {
+	*u = ru.ru_utime;
+	*s = ru.ru_stime;
+    } else {
+	timerclear(u);
+	timerclear(s);
+    }
+#endif
+}
+
+static inline void
+scstu_reqcall_end(struct tcmu_device * td, struct timeval * u, struct timeval * s)
+{
+#ifdef SCSTU_TIMING
+    struct rusage ru;
+    int rc = getrusage(RUSAGE_THREAD, &ru);
+    if (unlikely(!td)) return;
+    if (likely(rc == 0)) {
+	td->last_req_utime = ru.ru_utime;
+	td->last_req_stime = ru.ru_stime;
+	if (timerisset(u)) {
+	    struct timeval delta;
+	    assert(timercmp(&ru.ru_utime, u, >=));
+	    timersub(&ru.ru_utime, u, &delta);
+	    timeradd(&delta, &td->req_utime, &td->req_utime);
+
+	    assert(timercmp(&ru.ru_stime, s, >=));
+	    timersub(&ru.ru_stime, s, &delta);
+	    timeradd(&delta, &td->req_stime, &td->req_stime);
+	    td->nreq++;
+	}
+    }
+#endif
+}
+
+static inline void
+scstu_rspcall_end(struct tcmu_device * td, struct timeval * u, struct timeval * s)
+{
+#ifdef SCSTU_TIMING
+    struct rusage ru;
+    int rc = getrusage(RUSAGE_THREAD, &ru);
+    if (unlikely(!td)) return;
+    if (likely(rc == 0)) {
+	td->last_rsp_utime = ru.ru_utime;
+	td->last_rsp_stime = ru.ru_stime;
+	if (timerisset(u)) {
+	    struct timeval delta;
+	    assert(timercmp(&ru.ru_utime, u, >=));
+	    timersub(&ru.ru_utime, u, &delta);
+	    timeradd(&delta, &td->rsp_utime, &td->rsp_utime);
+
+	    assert(timercmp(&ru.ru_stime, s, >=));
+	    timersub(&ru.ru_stime, s, &delta);
+	    timeradd(&delta, &td->rsp_stime, &td->rsp_stime);
+	    td->nrsp++;
+	}
+    }
+#endif
+}
+
+static inline uint32_t
+PCT(uint64_t const n, uint64_t const d)
+{
+    return d ? (100*n + d/2) / d : 0;
+}
+
+/* CPU time tracked is time spent in the handler during Requests, and time
+ * spent in SCST during Responses.  This can be used to estimate the division
+ * of time on Request and Response threads between SCST and our client
+ * interface to the backstorage.
+ */
+static void
+scstu_tcmu_device_stat_dump(struct tcmu_device * td)
+{
+#ifdef SCSTU_TIMING
+    uint64_t tot_u_req = 1000000u * td->last_req_utime.tv_sec + td->last_req_utime.tv_usec;
+    uint64_t tot_s_req = 1000000u * td->last_req_stime.tv_sec + td->last_req_stime.tv_usec;
+    uint64_t tot_u_rsp = 1000000u * td->last_rsp_utime.tv_sec + td->last_rsp_utime.tv_usec;
+    uint64_t tot_s_rsp = 1000000u * td->last_rsp_stime.tv_sec + td->last_rsp_stime.tv_usec;
+
+    uint64_t req_utime = 1000000u * td->req_utime.tv_sec + td->req_utime.tv_usec;
+    uint64_t req_stime = 1000000u * td->req_stime.tv_sec + td->req_stime.tv_usec;
+    uint64_t rsp_utime = 1000000u * td->rsp_utime.tv_sec + td->rsp_utime.tv_usec;
+    uint64_t rsp_stime = 1000000u * td->rsp_stime.tv_sec + td->rsp_stime.tv_usec;
+
+    /* Share of Request thread's usr/sys time spent in the handler */
+    uint32_t req_u_pct = PCT(req_utime, tot_u_req);
+    uint32_t req_s_pct = PCT(req_stime, tot_s_req);
+    /* Share of Response thread's usr/sys time spent in the SCST callback */
+    uint32_t rsp_u_pct = PCT(rsp_utime, tot_u_rsp);
+    uint32_t rsp_s_pct = PCT(rsp_stime, tot_s_rsp);
+
+    /* Time per op spent in handler during Request (in units of 10ns) */
+    uint32_t req_u_per = PCT(req_utime, td->nreq);
+    uint32_t req_s_per = PCT(req_stime, td->nreq);
+    /* Time per op spent in SCST during Response */
+    uint32_t rsp_u_per = PCT(rsp_utime, td->nrsp);
+    uint32_t rsp_s_per = PCT(rsp_stime, td->nrsp);
+
+    /* Total time per op on Request thread (in units of 10ns) */
+    uint32_t treq_u_per = PCT(tot_u_req, td->nreq);
+    uint32_t treq_s_per = PCT(tot_s_req, td->nreq);
+    /* Total time per op on Response thread */
+    uint32_t trsp_u_per = PCT(tot_u_rsp, td->nrsp);
+    uint32_t trsp_s_per = PCT(tot_s_rsp, td->nrsp);
+
+    sys_notice(LOGID
+	    " device %s (%s) handler %s nreq=%"PRIu64" (microseconds per OP, %% of thread):"
+	    " REQ_USR=%u.%02u/%u.%02u (%u%%)  REQ_SYS=%u.%02u/%u.%02u (%u%%)"
+	    " RSP_USR=%u.%02u/%u.%02u (%u%%)  RSP_SYS=%u.%02u/%u.%02u (%u%%)",
+	    td->dev_name, td->cfgstring_orig, td->handler->name, td->nreq,
+	    req_u_per/100, req_u_per%100, treq_u_per/100, treq_u_per%100, req_u_pct,
+	    req_s_per/100, req_s_per%100, treq_s_per/100, treq_s_per%100, req_s_pct,
+	    rsp_u_per/100, rsp_u_per%100, trsp_u_per/100, trsp_u_per%100, rsp_u_pct,
+	    rsp_s_per/100, rsp_s_per%100, trsp_s_per/100, trsp_s_per%100, rsp_s_pct);
+#endif
 }
 
 /******** SCST VDISK BLOCKIO Implementor ********/
@@ -180,7 +311,7 @@ exit_scst_vdisk_aio(void)
 }
 
 static inline struct tcmu_device *
-scstu_tcmu_openprep(struct scst_tgt_dev * tgt_dev, struct tcmur_handler * handler,
+scstu_tcmu_openprep(struct scst_vdisk_dev * virt_dev, struct tcmur_handler * handler,
 		    string_t name, string_t cfg)
 {
     struct tcmu_device * tcmu_dev;
@@ -191,10 +322,13 @@ scstu_tcmu_openprep(struct scst_tgt_dev * tgt_dev, struct tcmur_handler * handle
 
     tcmu_dev = vzalloc(sizeof(*tcmu_dev));
     tcmu_dev->handler = handler;
-    tcmu_dev->scst_tgt_dev = tgt_dev;	/* possibly NULL */
+    tcmu_dev->virt_dev = virt_dev;
     strlcpy(tcmu_dev->dev_name, name, sizeof(tcmu_dev->dev_name));
     strlcpy(tcmu_dev->cfgstring_orig, cfg, sizeof(tcmu_dev->cfgstring_orig));
     memcpy(tcmu_dev->cfgstring, tcmu_dev->cfgstring_orig, sizeof(tcmu_dev->cfgstring));
+
+    tcmu_dev->scst_block_size = 1ul << virt_dev->blk_shift;
+    tcmu_dev->scst_nlba = virt_dev->nblocks;
     /* num_lbas and block_size filled by handler->open() */
 
     return tcmu_dev;
@@ -217,7 +351,7 @@ vdisk_aio_attach_tgt(struct scst_tgt_dev * tgt_dev)
     lockdep_assert_held(&scst_mutex);
 
     /* XXX To support multiple handlers, add code here to lookup the handler */
-    tcmu_dev = scstu_tcmu_openprep(tgt_dev, scstu_tcmu_handler, "scstu_tcmu", virt_dev->filename);
+    tcmu_dev = scstu_tcmu_openprep(virt_dev, scstu_tcmu_handler, "scstu_tcmu", virt_dev->filename);
     if (!tcmu_dev) {
 	err = EINVAL;
 	goto out;
@@ -281,11 +415,11 @@ fail_free:
 
 /* Does what vdisk_detach_tgt() does, and also closes/frees the handler instance */
 static void
-vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev)
+vdisk_aio_detach_tgt(struct scst_tgt_dev * tgt_dev)
 {
     struct scst_vdisk_dev * virt_dev = tgt_dev->dev->dh_priv;
     struct tcmu_device * tcmu_dev = virt_dev->aio_private;
-    assert_eq(tcmu_dev->scst_tgt_dev, tgt_dev);
+    assert_eq(tcmu_dev->virt_dev, virt_dev);
 
     TRACE_ENTRY();
     lockdep_assert_held(&scst_mutex);
@@ -298,6 +432,8 @@ vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev)
 
     sys_notice(LOGID" handler %s detach tgt: %s refcount zero -- closing",
 	       tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev));
+
+    scstu_tcmu_device_stat_dump(tcmu_dev);
 
     tcmu_dev->handler->close(tcmu_dev);
     virt_dev->aio_private = NULL;
@@ -315,7 +451,6 @@ aio_finish(struct tcmulib_cmd * op)
 static inline void
 aio_endio(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam_stat_t sam_stat, bool is_write)
 {
-    struct scst_blockio_work * blockio_work = op->blockio_work;
     thread_assimilate();
 
     /* See comment in blockio_endio() */
@@ -323,12 +458,12 @@ aio_endio(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam_stat_t sam
 	unsigned long flags;
 	spin_lock_irqsave(&vdev_err_lock, flags);
 
-	if (is_write)
-	    scst_set_cmd_error(blockio_work->cmd,
-		    SCST_LOAD_SENSE(scst_sense_write_error));
-	else
-	    scst_set_cmd_error(blockio_work->cmd,
-		    SCST_LOAD_SENSE(scst_sense_read_error));
+	errno_t err = scst_alloc_sense(op->scst_cmd, IGNORED);
+	assert(!err);
+
+	size_t copylen = min_t(int, op->scst_cmd->sense_buflen, SENSE_BUF_USED);
+	memcpy(op->scst_cmd->sense, op->sense_buf, copylen);
+	op->scst_cmd->sense_valid_len = copylen;
 
 	spin_unlock_irqrestore(&vdev_err_lock, flags);
     }
@@ -339,13 +474,19 @@ aio_endio(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam_stat_t sam
 static void
 aio_readv_done(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam_stat_t sam_stat)
 {
+    struct timeval u, s;
+    scstu_call_begin(tcmu_dev, &u, &s);
     aio_endio(tcmu_dev, op, sam_stat, false);
+    scstu_rspcall_end(tcmu_dev, &u, &s);
 }
 
 static void
 aio_writev_done(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam_stat_t sam_stat)
 {
+    struct timeval u, s;
+    scstu_call_begin(tcmu_dev, &u, &s);
     aio_endio(tcmu_dev, op, sam_stat, true);
+    scstu_rspcall_end(tcmu_dev, &u, &s);
 }
 
 static void
@@ -422,13 +563,18 @@ blockio_exec_rw(struct vdisk_cmd_params *p, bool is_write, bool fua)
 
     /* Submit the command to the handler */
     sam_stat_t sam_stat;
+    struct timeval u, s;
     if (is_write) {
 	op->done = aio_writev_done;
+	scstu_call_begin(tcmu_dev, &u, &s);
 	sam_stat = tcmu_dev->handler->write(op->tcmu_dev, op, op->iovec, op->iov_cnt, op->len, seekpos);
+	scstu_reqcall_end(tcmu_dev, &u, &s);
 	if (sam_stat != SAM_STAT_GOOD) goto out_finish;
     } else {
 	op->done = aio_readv_done;
+	scstu_call_begin(tcmu_dev, &u, &s);
 	sam_stat = tcmu_dev->handler->read(op->tcmu_dev, op, op->iovec, op->iov_cnt, op->len, seekpos);
+	scstu_reqcall_end(tcmu_dev, &u, &s);
 	if (sam_stat != SAM_STAT_GOOD) goto out_finish;
     }
 
@@ -437,8 +583,7 @@ out:
     return;
 
 out_finish:
-    scst_set_cmd_error(scst_cmd, SCST_LOAD_SENSE(scst_sense_internal_failure));  //XXXXXXX use handler's sense data
-    aio_finish(op);
+    aio_endio(tcmu_dev, op, sam_stat, is_write);
     goto out;
 }
 
@@ -453,7 +598,11 @@ aio_fsync_done(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam_stat_
     if (unlikely(sam_stat != SAM_STAT_GOOD)) {
 	PRINT_ERROR(LOGID" flush failed: %d (scst_cmd %p)", sam_stat, scst_cmd);
 	if (scst_cmd) {
-	    scst_set_cmd_error(scst_cmd, SCST_LOAD_SENSE(scst_sense_write_error));
+	    errno_t err = scst_alloc_sense(op->scst_cmd, IGNORED);
+	    assert(!err);
+	    size_t copylen = min_t(int, op->scst_cmd->sense_buflen, SENSE_BUF_USED);
+	    memcpy(op->scst_cmd->sense, op->sense_buf, copylen);
+	    op->scst_cmd->sense_valid_len = copylen;
 	}
     }
 
@@ -523,8 +672,10 @@ out_finish:
 
 /* Return 0 on success with file size in *file_size; otherwise -errno */
 static errno_t
-vdisk_get_file_size(const char * filename, bool blockio, loff_t *file_sizep)
+vdisk_get_file_size(struct scst_vdisk_dev *virt_dev, loff_t *file_sizep)
 {
+    const char *filename = virt_dev->filename;
+    bool blockio = virt_dev->blockio;
     errno_t err = E_OK;
     struct tcmu_device * tcmu_dev;
 
@@ -538,7 +689,7 @@ vdisk_get_file_size(const char * filename, bool blockio, loff_t *file_sizep)
     *file_sizep = 0;
 
     /* XXX To support multiple handlers, add code here to lookup the handler */
-    tcmu_dev = scstu_tcmu_openprep(NULL, scstu_tcmu_handler, "scstu_tcmu", filename);
+    tcmu_dev = scstu_tcmu_openprep(virt_dev, scstu_tcmu_handler, "scstu_tcmu", filename);
     if (!tcmu_dev) {
 	err = EINVAL;
 	goto out;
