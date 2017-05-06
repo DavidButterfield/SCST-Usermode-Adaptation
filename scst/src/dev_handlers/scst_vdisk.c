@@ -1163,8 +1163,15 @@ check:
 
 /* Returns 0 on success and file size in *file_size, error code otherwise */
 static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
+	loff_t *file_size);
+
+#if !defined(SCST_USERMODE_CEPH_RBD) && !defined(SCST_USERMODE_TCMU)
+
+static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size)
 {
+	const char *filename = virt_dev->filename;
+	bool blockio = virt_dev->blockio;
 	struct inode *inode;
 	int res = 0;
 	struct file *fd;
