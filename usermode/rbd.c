@@ -429,12 +429,11 @@ static int tcmu_rbd_open(struct tcmu_device *dev)
 	}
 	tcmu_set_dev_block_size(dev, block_size);
 
-	size = tcmu_get_device_size(dev);
+	size = tcmu_get_device_size(dev);  /* zero if dynamically determined */
 	if (size < 0) {
 		tcmu_dev_err(dev, "Could not get device size\n");
 		goto free_state;
 	}
-	tcmu_set_dev_num_lbas(dev, size / block_size);
 
 	pool = strtok(config, "/");
 	if (!pool) {
@@ -474,12 +473,16 @@ static int tcmu_rbd_open(struct tcmu_device *dev)
 		goto stop_image;
 	}
 
-	if (size != rbd_size) {
+	if (size == 0) {
+		size = rbd_size;    /* Determine the size dynamically */
+	} else if (size != rbd_size) {
 		tcmu_dev_err(dev, "device size and backing size disagree: device %lld backing %lld\n",
 			     size, rbd_size);
 		ret = -EIO;
 		goto stop_image;
 	}
+
+	tcmu_set_dev_num_lbas(dev, size / block_size);
 
 	tcmu_dev_dbg(dev, "config %s, size %lld\n", tcmu_get_dev_cfgstring(dev),
 		     rbd_size);
