@@ -79,14 +79,28 @@ extern bool	    tcmur_unregister_handler(struct tcmur_handler *handler);
 
 /* scstu_tcmu private structure -- handlers should use accessors */
 struct tcmu_device {
-    void		      * hm_private;
+    void		      * hm_private;		/* owned by handler */
     struct tcmur_handler      * handler;
-    struct scst_tgt_dev	      * scst_tgt_dev;
-    uint64_t			num_lbas;
-    uint32_t			block_size;
+    struct scst_vdisk_dev     * virt_dev;
+    uint64_t			num_lbas;		/* owned by handler */
+    uint32_t			block_size;		/* owned by handler */
+    uint32_t			scst_block_size;	/* owned by scstu_tcmu */
+    uint64_t			scst_nlba;		/* owned by scstu_tcmu */
     char			dev_name[16];
     char			cfgstring_orig[256];
     char			cfgstring[256];
+
+    struct timeval		req_utime;		/* request CPU time */
+    struct timeval		req_stime;		/* accumulated from ops */
+    struct timeval		rsp_utime;		/* response CPU time */
+    struct timeval		rsp_stime;		/* accumulated from ops */
+    uint64_t			nreq;			/* requests to handler */
+    uint64_t			nrsp;			/* completions to scst */
+
+    struct timeval		last_req_utime;		/* XXX dodgy */
+    struct timeval		last_req_stime;
+    struct timeval		last_rsp_utime;
+    struct timeval		last_rsp_stime;
 };
 
 #define tcmu_set_dev_private(tcmu_dev, priv)		((tcmu_dev)->hm_private = (priv))
