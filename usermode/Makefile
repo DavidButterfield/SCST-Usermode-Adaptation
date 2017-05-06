@@ -155,7 +155,7 @@ export SCST_INC_DIR := $(CURDIR)/../scst/include
 export src := .
 export KVER = __NONE__
 
-GCCLDFLAGS = -Wl,-z,now -Wl,-O1
+GCCLDFLAGS = -Wl,-z,now -Wl,-O1 -Wl,-L/usr/lib,-E
 
 export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
 
