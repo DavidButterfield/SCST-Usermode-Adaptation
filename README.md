@@ -12,8 +12,8 @@ and performance study is
        "A paper describing the work in detail").
 
 Branches:
- + master     - the original work described by the paper
- + usermode   - updated work using local files or block devices as backing store
+ + master     - the original work described by the paper, using local files or block devices
+ + usermode   - updated work still using local files or block devices as backing store
  + scstu_tcmu - further updated with ability to drive tcmu-runner handler plugins (only RBD tested)
 
 The adaptation uses about 80,000 lines of the SCST source code, a subset
