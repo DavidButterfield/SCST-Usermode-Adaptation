@@ -11,6 +11,11 @@ and performance study is
 [here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_Usermode.html
        "A paper describing the work in detail").
 
+Branches:
+ + master     - the original work described by the paper
+ + usermode   - updated work using local files or block devices as backing store
+ + scstu_tcmu - further updated with ability to drive tcmu-runner handler plugins (only RBD tested)
+
 The adaptation uses about 80,000 lines of the SCST source code, a subset
 supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 (vdisk_fileio) backed by either a file or a block device.
