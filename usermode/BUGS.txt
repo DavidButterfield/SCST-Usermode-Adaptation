@@ -21,6 +21,10 @@ If switching between making a kernel-based SCST build and making a Usermode
 build in the same set of directories, issue "make extraclean" in between.
 
 ================================================================================
+If compiling on Ubuntu says "fs/proc/internal.h: No such file or directory"
+try "apt-get source linux-image-$(uname -r)"
+
+================================================================================
 BUG:  "make install" needs to work right for usermode.  There needs to be a way
 to get the manpages, conf files, and other accessories installed along with the
 usermode build without attempting anything on the kernel.
