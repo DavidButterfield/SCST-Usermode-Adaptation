@@ -10475,13 +10475,13 @@ static int vdisk_write_proc(char *buffer, char **start, off_t offset,
 				if (res != 0)
 					goto out_free_vdev;
 #endif
+#endif
 				/* Bad hack for anyway going out procfs */
 				virt_dev->vdev_devt = &vdisk_blk_devtype;
 				sprintf(virt_dev->t10_vend_id, "%.*s",
 					(int)sizeof(virt_dev->t10_vend_id) - 1,
 					SCST_BIO_VENDOR);
 				TRACE_DBG("%s", "BLOCKIO");
-#endif
 			} else if (!strncmp("REMOVABLE", p, 9)) {
 				p += 9;
 				virt_dev->removable = 1;
