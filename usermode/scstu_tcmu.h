@@ -72,6 +72,9 @@ struct tcmur_handler {
     void		      * handle_cmd;
     void		      * transition_state;
     void		      * report_state;
+    void		      * lock;
+    void		      * unlock;
+    void		      * has_lock;
 };
 
 extern int	    tcmur_register_handler(struct tcmur_handler *handler);
