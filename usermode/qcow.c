@@ -44,7 +44,7 @@
  * THE SOFTWARE.
  */
 
-#define _GNU_SOURCE
+#define _GNU_SOURCE 1
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -89,7 +89,7 @@ struct bdev {
 	/* from TCMU configfs configuration */
 	int64_t size;
 	uint64_t num_lbas;
-	uint32_t block_size;
+	int32_t block_size;
 
 	int fd;		/* image file descriptor */
 };
@@ -1167,7 +1167,7 @@ out:
 }
 
 /* returns number of iovs initialized in seg */
-size_t iovec_segment(struct iovec *iov, struct iovec *seg, size_t off, size_t len)
+static size_t iovec_segment(struct iovec *iov, struct iovec *seg, size_t off, size_t len)
 {
 	struct iovec *seg_start = seg;
 
@@ -1195,7 +1195,7 @@ size_t iovec_segment(struct iovec *iov, struct iovec *seg, size_t off, size_t le
 	return seg - seg_start;
 }
 
-void iovec_memset(struct iovec *iov, int iovcnt, int c, size_t len)
+static void iovec_memset(struct iovec *iov, int iovcnt, int c, size_t len)
 {
 	while (len && iovcnt) {
 		size_t n = min(iov->iov_len, len);
