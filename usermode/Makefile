@@ -22,9 +22,12 @@
   # Define USERMODE_TMCU_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
   #   via scstu_tcmu.c using the RBD plugin for TCMU.  (Use with USERMODE_TCMU)
   # USERMODE_TCMU_RBD = defined
+  # USERMODE_TCMU_RAM = defined
+  # USERMODE_TCMU_QEMU = defined
+  # USERMODE_TCMU_GLFS = defined
 
   # Set this to 1 if you have an older librbd without the iovec calls.
-MY_CFLAGS += -DTMCU_NO_IOV=0
+MY_CFLAGS += -DCONFIG_TCMU_RBD_NO_IOV=0
 
 ################################################################################
 
@@ -78,7 +81,9 @@ MY_CFLAGS += -Og
 
 # Enable assert/expect and some other checking and/or tracing
 MY_CFLAGS += -DDEBUG
+# MY_CFLAGS += -DNDEBUG
 MY_CFLAGS += -fsanitize=undefined
+
 # MY_CFLAGS += -DTRACE_TRACE
 # MY_CFLAGS += -DTRACE_VERBOSE
 # MY_CFLAGS += -fprofile-arcs
@@ -191,10 +196,26 @@ export KVER = __NONE__
 GCCLDFLAGS = -Wl,-z,now -Wl,-O1 -Wl,-L/usr/lib,-E
 
 ifdef USERMODE_CEPH_RBD
-LOCAL_LIBS += -lrbd -lrados
+BACKEND_LIBS = -lrbd -lrados
 endif
+
+ifdef USERMODE_TCMU_RAM
+TCMU_LIBS = ram.o
+endif
+
 ifdef USERMODE_TCMU_RBD
-LOCAL_LIBS += rbd.o -lrbd -lrados
+TCMU_LIBS = rbd.o
+BACKEND_LIBS = -lrbd -lrados
+endif
+
+ifdef USERMODE_TCMU_GLFS
+TCMU_LIBS = glfs.o
+BACKEND_LIBS = -lgfapi
+endif
+
+ifdef USERMODE_TCMU_QEMU
+TCMU_LIBS = qcow.o
+BACKEND_LIBS = -lz
 endif
 
 export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
@@ -209,11 +230,11 @@ usermode all:	cscope check_mte
 COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o \
 	      $(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o
 
-scst.out:   $(COMPONENTS) $(TCMU_RBD_LIBS)
+scst.out:   $(COMPONENTS) $(TCMU_LIBS)
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
 	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte -lpthread -laio -ldl -lfuse \
-		    $(LOCAL_LIBS) -lc
+		    $(TCMU_LIBS) $(BACKEND_LIBS) $(LOCAL_LIBS) -lc
 
 USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.o
 
