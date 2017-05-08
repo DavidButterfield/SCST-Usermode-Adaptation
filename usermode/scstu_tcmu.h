@@ -151,10 +151,35 @@ tcmu_memcpy_from_iovec(void * buf, size_t len, struct iovec *iov, size_t niov)
     return ret;
 }
 
-// XXX These could be added if ever needed
+/* Return the number of bytes referred to by the iovec array */
+static inline size_t
+tcmu_iovec_length(struct iovec * iov, size_t niov)
+{
+    size_t ret = 0;
+    while (niov) {
+	ret += iov->iov_len;
+	iov++;
+	niov--;
+    }
+    return ret;
+}
+
+/* Skip over the first nbytes referred to by the iovec array */
+static inline void
+tcmu_seek_in_iovec(struct iovec * iov, size_t nbytes)
+{
+    while (nbytes >= iov->iov_len) {
+	assert(iov->iov_base);
+	nbytes -= iov->iov_len;
+	iov->iov_len = 0;
+	iov++;
+    }
+    iov->iov_len -= nbytes;
+    iov->iov_base += nbytes;
+}
+
+// XXX These may be needed in future
 // off_t tcmu_compare_with_iovec(void *mem, struct iovec *iovec, size_t size);
-// size_t tcmu_iovec_length(struct iovec *iovec, size_t iov_cnt);
-// void	tcmu_zero_iovec(struct iovec *iovec, size_t iov_cnt);
-// void	tcmu_seek_in_iovec(struct iovec *iovec, size_t count);
+// void	tcmu_zero_iovec(struct iovec *iovec, size_t niov);
 
 #endif	/* SCSTU_TCMU_H */
