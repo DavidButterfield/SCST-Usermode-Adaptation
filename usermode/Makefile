@@ -273,3 +273,17 @@ l:
 	@ls -lsrtad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
 
 .PHONY:	all components check_mte valgrind clean extraclean cscope ls l
+
+.SUFFIXES:  .ps .eps .pdf .png .dia .gnumeric
+
+doc:	scstu_tcmu.1.pdf scstu_tcmu.2.pdf
+
+.dia.eps:
+	@echo $@ needs to be re-exported from dia
+	@false
+
+.eps.pdf:
+	cat $< | epstopdf -f > $@
+
+.pdf.png:
+	pdftocairo -png -r 300 -singlefile $<
