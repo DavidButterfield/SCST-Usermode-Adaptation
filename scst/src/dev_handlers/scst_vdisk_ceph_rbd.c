@@ -223,35 +223,6 @@ vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev)
     }
 }
 
-static int
-aio_exec(struct scst_cmd *cmd)
-{
-	struct scst_vdisk_dev *virt_dev = cmd->dev->dh_priv;
-	const vdisk_op_fn *ops = virt_dev->vdev_devt->devt_priv;
-	struct vdisk_cmd_params p;
-	int res;
-
-	EXTRACHECKS_BUG_ON(!ops);
-
-	memset(&p, 0, sizeof(p));
-	if (unlikely(!vdisk_parse_offset(&p, cmd)))
-		goto err;
-
-	cmd->dh_priv = &p;
-	res = vdev_do_job(cmd, ops);
-	cmd->dh_priv = NULL;
-
-out:
-	vdisk_on_free_cmd_params(&p);
-	return res;
-
-err:
-	res = SCST_EXEC_COMPLETED;
-	cmd->completed = 1;
-	cmd->scst_cmd_done(cmd, SCST_CMD_STATE_DEFAULT, SCST_CONTEXT_SAME);
-	goto out;
-}
-
 static inline void
 aio_endio(rbd_completion_t completion, struct vdisk_aio_op * op, bool is_write)
 {
@@ -518,8 +489,10 @@ out_free_op:
 
 /* Returns 0 on success with file size in *file_size; otherwise -errno */
 static errno_t
-vdisk_get_file_size(const char * filename, bool blockio, loff_t *file_sizep)
+vdisk_get_file_size(struct scst_vdisk_dev *virt_dev, loff_t *file_sizep)
 {
+    const char *filename = virt_dev->filename;
+    bool blockio = virt_dev->blockio;
     errno_t err = E_OK;
     assert(file_sizep);
     assert(blockio);
