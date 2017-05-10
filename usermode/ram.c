@@ -1,10 +1,15 @@
 /* ram.c -- ramdisk driver for tcmu-runner or scstu_tcmu
- * Author: David Butterfield
+ * Initial Author: David Butterfield
  *
- * mmaps a backing file or anonymous memory (config="/" is anon).
- * Backing files get msync(2) at detach and persist across sessions.
- * Data in anonymous mmaps is discarded at detach time.
- * Data can page to swapspace by default; mlock(2) configurable.
+ * mmaps a backing file or anonymous memory and just copies to/from the mmap
+ * for Write/Read.  Flush does msync(2).  Config string should be the pathname
+ * of the backing file, or "/@" to use an anonymous mmap.
+ *
+ * Backing files get msync(2) at close time and persist across sessions.
+ * Data in anonymous mmaps is discarded at close time.
+ * Data can page to swapspace by default; mlock(2) enabled by config flag.
+ *
+ * XXX Notes areas in need of attention.
  */
 #define _GNU_SOURCE 1
 #include <sys/types.h>
@@ -22,7 +27,7 @@
 #include <scsi/scsi.h>
 
 #include <sys/mman.h>
-#ifndef MLOCK_ONFAULT
+#ifndef MLOCK_ONFAULT	    //XXX header file issues
 #define MLOCK_ONFAULT 0x01
 #define mlock2(addr, len, flags) syscall(__NR_mlock2, (addr), (len), (flags))
 #endif
@@ -34,8 +39,19 @@ typedef struct tcmu_ram {
 	void	      *	ram;
 	size_t		size;
 	unsigned int	block_size;
-	int		fd;
+	int		fd;	    /* when backing file (not anonymous) */
 } * state_t;
+
+/* Return true if the mmap memory should be locked */
+static inline bool do_mlock(struct tcmu_device *td)
+{
+	return false;	    //XXX Needs a config switch
+}
+
+/* XXX Would it go faster by scheduling op->done() onto a different thread?
+ *     Maybe schedule both the iovec copy and op->done() onto a thread?
+ *     Maybe only do it on Read?
+ */
 
 static int tcmu_ram_read(struct tcmu_device *td, struct tcmulib_cmd *op,
 	      struct iovec *iov, size_t niov, size_t size, off_t seekpos)
@@ -94,6 +110,14 @@ static int tcmu_ram_flush(struct tcmu_device *td, struct tcmulib_cmd *op)
 static void tcmu_ram_close(struct tcmu_device *td)
 {
 	state_t s = tcmu_get_dev_private(td);
+
+	if (msync(s->ram, s->size, MS_SYNC) < 0) {
+		int err = errno;
+		tcmu_dev_warn(td, "%s (%s): close cannot msync (%d -- %s)\n",
+			      tcmu_get_dev_cfgstring(td),
+			      err, strerror(-err));
+	}
+
 	munmap(s->ram, s->size);
 	close(s->fd);
 	tcmu_set_dev_private(td, NULL);
@@ -111,6 +135,7 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	state_t s;
 
 	config = tcmu_get_dev_cfgstring(td);
+	//XXX kinda hacky, but I don't know how it's supposed to be done
 	if (!config || config[0] != '/' || (config[1] == '@'
 						&& config[2] == '\0')) {
 		anon = true;
@@ -131,7 +156,8 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	tcmu_set_dev_block_size(td, block_size);
 
 	mmap_flags = MAP_SHARED;
-	// mmap_flags |= MAP_HUGETLB;	    //XXX
+	// mmap_flags |= MAP_HUGETLB;	//XXX probably a big perf win
+					//    but needs special setup?
 	if (anon) {
 		mmap_flags |= MAP_ANONYMOUS;
 		mmap_fd = -1;
@@ -150,8 +176,11 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	size = tcmu_get_device_size(td);    /* framework's idea */
 	if (size == 0)
 		size = file_size;	    /* take size from file */
-	if (size == 0)		/* XXX this case needs to not happen */
-		size = 4*1024*1024*1024l;   //XXXXXX
+
+	/* XXX needs to be fixed so this never happens */
+	/* (I think that already should be true under a real tcmu-runner) */
+	if (size == 0)
+		size = 4*1024*1024*1024l;   //XXX Ugh -- default 4 GB RAMdisk
 
 	if (size > file_size) {
 		tcmu_dev_info(td, "extending backing file size %lld to %lld",
@@ -188,11 +217,12 @@ static int tcmu_ram_open(struct tcmu_device * td)
 		goto out_close;
 	}
 
-	//XXX Needs configurability, ineffective without permissions
-	if (mlock2(ram, size, MLOCK_ONFAULT) < 0) {
-		err = -errno;
-		tcmu_dev_warn(td, "%s: mlock (%d -- %s)\n",
-				  config, err, strerror(-err));
+	if (do_mlock(td)) {
+		if (mlock2(ram, size, MLOCK_ONFAULT) < 0) {
+			err = -errno;
+			tcmu_dev_warn(td, "%s: mlock (%d -- %s)\n",
+					  config, err, strerror(-err));
+		}
 	}
 
 	s = calloc(1, sizeof(*s));
@@ -222,7 +252,7 @@ out_fail:
 
 static const char tcmu_ram_cfg_desc[] =
 	"RAM handler config string is the name of the backing file, "
-	"or \"/\" for anonymous memory (non-persistent after detach)\n";
+	"or \"/@\" for anonymous memory (non-persistent after close)\n";
 
 struct tcmur_handler tcmu_ram_handler = {
 	.name	       = "RAM handler",
