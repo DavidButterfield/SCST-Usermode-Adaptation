@@ -66,6 +66,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
 
       $ cd SCST/trunk
       $ sudo make scstadm_install           # patched to know where /fuse/scst/proc is
+      $ make enable_proc                    # configure so it can compile for usermode
 
       $ cd usermode
       $ make                                # build the SCST iSCSI server binary
