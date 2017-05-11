@@ -17,9 +17,9 @@ Branches:
  + scstu_tcmu - further updated with ability to drive tcmu-runner handler plugins (only RBD tested)
 
 * * *
-![SCST datapath](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/tree/scstu_tcmu/usermode/scstu_tcmur.png
+![SCST Usermode Adaptation and tcmu-runner backend driver]
+ (https://github.com/DavidButterfield/SCST-Usermode-Adaptation/blob/scstu_tcmu/usermode/scstu_tcmur.png
  "SCST Usermode Adaptation and tcmu-runner backend driver")
-* * *
 
 The adaptation uses about 80,000 lines of the SCST source code, a subset
 supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
