@@ -14,7 +14,7 @@ and performance study is
 Branches:
  + master     - the original work described by the paper
  + usermode   - updated work using local files or block devices as backing store
- + scstu_tcmu - further updated with ability to drive tcmu-runner handler plugins (only RBD and RAM tested)
+ + scstu_tcmu - further updated with ability to drive tcmu-runner handler plugins (rbd/ram tested; glfs/qemu built)
 
 ![SCST Usermode Adaptation and tcmu-runner backend driver](https://github.com/DavidButterfield/SCST-Usermode-Adaptation/blob/scstu_tcmu/usermode/scstu_tcmur.png
  "SCST Usermode Adaptation and tcmu-runner backend driver")
