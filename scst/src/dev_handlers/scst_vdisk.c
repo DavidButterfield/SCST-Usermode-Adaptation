@@ -1232,6 +1232,8 @@ out:
 	return res;
 }
 
+#endif
+
 /* scst_vdisk_mutex supposed to be held */
 static struct scst_vdisk_dev *vdev_find(const char *name)
 {
