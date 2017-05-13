@@ -26,9 +26,6 @@
   # USERMODE_TCMU_QEMU = defined
   # USERMODE_TCMU_GLFS = defined
 
-  # Set this to 1 if you have an older librbd without the iovec calls.
-MY_CFLAGS += -DCONFIG_TCMU_RBD_NO_IOV=0
-
 ################################################################################
 
 # Usermode SCST depends on UMC (Usermode Compat) and MTE (Multithreaded Engine).
@@ -273,17 +270,3 @@ l:
 	@ls -lsrtad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
 
 .PHONY:	all components check_mte valgrind clean extraclean cscope ls l
-
-.SUFFIXES:  .ps .eps .pdf .png .dia .gnumeric
-
-doc:	scstu_tcmu.1.pdf scstu_tcmu.2.pdf
-
-.dia.eps:
-	@echo $@ needs to be re-exported from dia
-	@false
-
-.eps.pdf:
-	cat $< | epstopdf -f > $@
-
-.pdf.png:
-	pdftocairo -png -r 300 -singlefile $<
