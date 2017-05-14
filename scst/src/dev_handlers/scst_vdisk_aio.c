@@ -90,7 +90,8 @@ vdisk_aio_attach_tgt(struct scst_tgt_dev *tgt_dev)
 	struct scst_vdisk_dev * virt_dev = tgt_dev->dev->dh_priv;
 	if (virt_dev->blockio && !virt_dev->aio_private) {
 	    size_t size;
-	    virt_dev->aio_private = aio_fopen(AIOS, virt_dev->fd->fd, &size, virt_dev->filename);
+	    virt_dev->aio_private = aio_fopen(AIOS, virt_dev->fd->fd,
+					      &size, virt_dev->filename);
 	    sys_notice("vdisk_aio_attach_tgt: %s size=%ld",
 		       virt_dev->name, virt_dev->file_size);
 	    expect_eq(size, virt_dev->file_size, "file=%s", virt_dev->filename);
@@ -115,7 +116,8 @@ vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev)
 	sys_notice("vdisk_aio_detach_tgt: %s\n\t%s", virt_dev->name, str);
 	vfree(str);
 
-	aio_close((struct aio_handle*)virt_dev->aio_private);   /* closes the aio but not the file descriptor */
+	/* closes the aio but not the file descriptor */
+	aio_close((aio_handle_t)virt_dev->aio_private);
 	virt_dev->aio_private = NULL;
 	vdisk_close_fd(virt_dev);
     }
@@ -331,7 +333,8 @@ vdisk_fsync_blockio(loff_t loff,
 	op->cmd = cmd;
 	if (!async) op->op_done = &completion;
 
-	res = aio_sync((struct aio_handle*)virt_dev->aio_private, &op->aio_private, aio_fsync_done, op);
+	res = aio_sync((aio_handle_t)virt_dev->aio_private,
+		       &op->aio_private, aio_fsync_done, op);
 					    /*** op may be gone now ***/
 
 	//XXX Is this the intended semantic for async vs. non-async ?
@@ -343,6 +346,6 @@ vdisk_fsync_blockio(loff_t loff,
 	return res;
 }
 
-#endif /* !SCST_USERMODE_CEPH_RBD */
+#endif /* !SCST_USERMODE_CEPH_RBD && !SCST_USERMODE_TCMU */
 #endif /* SCST_USERMODE_AIO */
 #endif /* SCST_USERMODE */
