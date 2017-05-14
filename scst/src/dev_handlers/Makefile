@@ -106,7 +106,7 @@ ifdef	SCST_USERMODE #####################
 	$(CC) -c -o $(@) -I$(SCST_INC_DIR) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
 
 # XXXX At the moment the usermode AIO .c files get included from scst_vdisk.c
-scst_vdisk.o:    scst_vdisk.c scst_vdisk_aio.c scstu_tcmu.c scst_vdisk_ceph_rbd.c
+scst_vdisk.o:    scst_vdisk.c scst_vdisk_aio.c scstu_tcmu.c
 
 endif	########## SCST_USERMODE ##########
 

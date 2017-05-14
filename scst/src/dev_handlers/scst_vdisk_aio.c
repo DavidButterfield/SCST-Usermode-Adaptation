@@ -6,12 +6,9 @@
  */
 #ifdef SCST_USERMODE
 #ifdef SCST_USERMODE_AIO
-
-#ifdef SCST_USERMODE_CEPH_RBD
-#include "scst_vdisk_ceph_rbd.c"
-#elif defined(SCST_USERMODE_TCMU)
+#ifdef SCST_USERMODE_TCMU
 #include "scstu_tcmu.c"
-#else ///////////////////////////
+#else /////////////////////  Remainder of this file  /////////////////////
 
 #include "mtelib.h"
 
@@ -112,7 +109,7 @@ vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev)
     assert(virt_dev->blockio);
 
     if (--virt_dev->tgt_dev_cnt == 0) {
-	string_t str = aio_fmt((struct aio_handle*)virt_dev->aio_private);
+	string_t str = aio_fmt((aio_handle_t)virt_dev->aio_private);
 	sys_notice("vdisk_aio_detach_tgt: %s\n\t%s", virt_dev->name, str);
 	vfree(str);
 
@@ -257,12 +254,12 @@ blockio_exec_rw(struct vdisk_cmd_params *p, bool is_write, bool fua)
 
 		/* Pass the request to the aio service implementor */
 		if (is_write) {
-		    aio_writev((struct aio_handle*)virt_dev->aio_private,
+		    aio_writev((aio_handle_t)virt_dev->aio_private,
 				&op->aio_private,
 				aio_writev_done, blockio_work,
 				seekpos, aio_op_len, niov, op->iov);
 		} else {
-		    aio_readv((struct aio_handle*)virt_dev->aio_private,
+		    aio_readv((aio_handle_t)virt_dev->aio_private,
 				&op->aio_private,
 				aio_readv_done, blockio_work,
 				seekpos, aio_op_len, niov, op->iov);
@@ -346,6 +343,6 @@ vdisk_fsync_blockio(loff_t loff,
 	return res;
 }
 
-#endif /* !SCST_USERMODE_CEPH_RBD && !SCST_USERMODE_TCMU */
+#endif /* SCST_USERMODE_TCMU */
 #endif /* SCST_USERMODE_AIO */
 #endif /* SCST_USERMODE */

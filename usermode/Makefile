@@ -5,39 +5,18 @@
 #
 # This Makefile expects its make(1) to be invoked in the Makefile's directory.
 
-#############  Special defines for using TCMU plugins or Ceph/RBD  #############
+#############  Defines for using TCMU plugins  #############
 
-  ## Note:  For running SCST_Usermode using Ceph/RBD as backing store, the
-  ##	  USERMODE_TCMU/USERMODE_TCMU_RBD combination is probably more
-  ##	  sophisticated than the scst_vdisk_ceph_rbd.c implementation.
-
-  # Define USERMODE_CEPH_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
-  #	 using the scst_vdisk_ceph_rbd.c direct interface to RBD.  For the same
-  #      support with newer software, use USERMODE_TCMU and USERMODE_TCMU_RBD.
-  # USERMODE_CEPH_RBD = defined
+# Note: default if none of these is selected is to use aio(7) to file or bdev
 
   # Define USERMODE_TCMU to build SCST usermode with BLOCKIO under a TCMU plugin
   # USERMODE_TCMU = defined
 
-  # Define USERMODE_TMCU_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
-  #   via scstu_tcmu.c using the RBD plugin for TCMU.  (Use with USERMODE_TCMU)
-  # USERMODE_TCMU_RBD = defined
-  # USERMODE_TCMU_RAM = defined
-  # USERMODE_TCMU_QEMU = defined
-  # USERMODE_TCMU_GLFS = defined
-  # define USERMODE_CEPH_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
-  #	 using the scst_vdisk_ceph_rbd.c direct interface to RBD.
-  # USERMODE_CEPH_RBD = defined
-
-  # define USERMODE_TCMU to build SCST usermode with BLOCKIO under a TCMU plugin
-  USERMODE_TCMU = defined
-
-  # Define USERMODE_TMCU_RBD to build SCST usermode with BLOCKIO under CEPH/RBD
-  #   via scstu_tcmu.c using the RBD plugin for TCMU.  (Use with USERMODE_TCMU)
-  USERMODE_TCMU_RBD = defined
-
-  # Set this to 1 if you have an older librbd without the iovec calls.
-MY_CFLAGS += -DTMCU_NO_IOV=0
+  # Define one of these to select a TCMU plugin (use with USERMODE_TCMU)
+  # USERMODE_TCMU_RBD = defined	    # Ceph RBD
+  # USERMODE_TCMU_RAM = defined	    # RAM disk
+  # USERMODE_TCMU_QEMU = defined    # QEMU QCOW
+  # USERMODE_TCMU_GLFS = defined    # Gluster GLFS
 
 ################################################################################
 
@@ -204,25 +183,14 @@ export src := .
 export KVER = __NONE__
 
 GCCLDFLAGS = -Wl,-z,now -Wl,-O1 -Wl,-L/usr/lib,-E
-ifdef USERMODE_CEPH_RBD
-CEPH_RBD_LIBS = -lrbd -lrados
-endif
-ifdef USERMODE_TCMU_RBD
-TCMU_RBD_LIBS = scstu_tmcu_rbd.o
-CEPH_RBD_LIBS = -lrbd -lrados
-endif
 
-ifdef USERMODE_CEPH_RBD
+ifdef USERMODE_TCMU_RBD
+TCMU_LIBS = rbd.o
 BACKEND_LIBS = -lrbd -lrados
 endif
 
 ifdef USERMODE_TCMU_RAM
 TCMU_LIBS = ram.o
-endif
-
-ifdef USERMODE_TCMU_RBD
-TCMU_LIBS = rbd.o
-BACKEND_LIBS = -lrbd -lrados
 endif
 
 ifdef USERMODE_TCMU_GLFS

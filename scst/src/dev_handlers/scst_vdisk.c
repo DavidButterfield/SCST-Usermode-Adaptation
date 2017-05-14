@@ -1150,7 +1150,7 @@ check:
 static int vdisk_get_file_size(struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size);
 
-#if !defined(SCST_USERMODE_CEPH_RBD) && !defined(SCST_USERMODE_TCMU)
+#ifndef SCST_USERMODE_TCMU
 
 static int vdisk_get_file_size(struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size)
@@ -1211,7 +1211,7 @@ out:
 	return res;
 }
 
-#endif
+#endif /* !SCST_USERMODE_TCMU */
 
 /* scst_vdisk_mutex supposed to be held */
 static struct scst_vdisk_dev *vdev_find(const char *name)
@@ -3715,7 +3715,7 @@ static int blockio_exec(struct scst_cmd *cmd)
 	if (unlikely(!vdisk_parse_offset(&p, cmd)))
 		goto err;
 
-#if !defined(SCST_USERMODE_CEPH_RBD) && !defined(SCST_USERMODE_TCMU)
+#ifndef SCST_USERMODE_TCMU
 	if (unlikely(virt_dev->fd == NULL)) {
 		if (!vdisk_no_fd_allowed_commands(cmd)) {
 			/*
@@ -3733,7 +3733,7 @@ static int blockio_exec(struct scst_cmd *cmd)
 			goto err;
 		}
 	}
-#endif /* !SCST_USERMODE_CEPH_RBD && !SCST_USERMODE_TCMU */
+#endif
 
 	cmd->dh_priv = &p;
 	res = vdev_do_job(cmd, ops);
