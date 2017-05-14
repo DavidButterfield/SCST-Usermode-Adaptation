@@ -89,7 +89,7 @@ struct scsi_device {
 };
 
 #define queue_max_hw_sectors(rq)	0xffff //XXX OK?
-#define to_scsi_device(device)		FATAL(to_scsi_device)
+#define to_scsi_device(device)		(void *)FATAL(to_scsi_device)
 #define generic_unplug_device(rq)	DO_NOTHING()
 #define QUEUE_FLAG_BIDI			IGNORED
 
