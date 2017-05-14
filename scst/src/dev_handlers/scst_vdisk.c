@@ -204,7 +204,7 @@ struct scst_vdisk_dev {
 	struct file *dif_fd;
 	struct block_device *bdev;
 #ifdef SCST_USERMODE_AIO
-	struct aio_handle * aio;
+	void * aio_private;
 #endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 	struct bio_set *vdisk_bioset;

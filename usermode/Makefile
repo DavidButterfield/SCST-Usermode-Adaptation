@@ -173,7 +173,7 @@ scst.out:   $(COMPONENTS)
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
 	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte -lpthread -laio -ldl -lfuse \
-		    -lubsan -lc
+		    $(LOCAL_LIBS) -lc
 
 USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.o
 
@@ -200,7 +200,7 @@ extraclean:
 
 cscope:
 	@cscope -b -c -R -s$(USERMODE_LIB_SRC) -s$(SCST_SRC)
-	@ctags        -R   $(USERMODE_LIB_SRC)   $(SCST_SRC)   $(SYS_SERVICE_INCL)
+	@ctags        -R . $(USERMODE_LIB_SRC)   $(SCST_SRC)
 
 ls:
 	@ls     -ad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`

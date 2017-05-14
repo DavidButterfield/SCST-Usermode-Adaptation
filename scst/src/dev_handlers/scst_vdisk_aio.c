@@ -79,7 +79,7 @@ vdisk_aio_attach_tgt(struct scst_tgt_dev *tgt_dev)
 
     if (ret == E_OK) {
 	struct scst_vdisk_dev * virt_dev = tgt_dev->dev->dh_priv;
-	if (virt_dev->blockio && !virt_dev->aio) {
+	if (virt_dev->blockio && !virt_dev->aio_private) {
 	    size_t size;
 	    virt_dev->aio_private = aio_fopen(AIOS, virt_dev->fd->fd, &size, virt_dev->filename);
 	    sys_notice("vdisk_aio_attach_tgt: %s size=%ld",
@@ -102,12 +102,12 @@ vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev)
     assert(virt_dev->blockio);
 
     if (--virt_dev->tgt_dev_cnt == 0) {
-	string_t str = aio_fmt(virt_dev->aio);
+	string_t str = aio_fmt((struct aio_handle*)virt_dev->aio_private);
 	sys_notice("vdisk_aio_detach_tgt: %s\n\t%s", virt_dev->name, str);
 	vfree(str);
 
-	aio_close(virt_dev->aio);   /* closes the aio but not the file descriptor */
-	virt_dev->aio = NULL;
+	aio_close((struct aio_handle*)virt_dev->aio_private);   /* closes the aio but not the file descriptor */
+	virt_dev->aio_private = NULL;
 	vdisk_close_fd(virt_dev);
     }
 
@@ -205,8 +205,8 @@ blockio_exec_rw(struct vdisk_cmd_params *p, bool is_write, bool fua)
 
 	u64 seekpos = scst_cmd_get_lba(cmd) << dev->block_shift;
 	struct vdisk_aio_op * op = NULL;
-	size_t aio_op_len;
-	uint32_t niov;
+	size_t aio_op_len = 0;
+	uint32_t niov = 0;
 
 	/* Translate the segments of the receive buffer into iov entries,
 	 * coalescing adjacent buffer segments -- when we have accumulated the
@@ -246,12 +246,12 @@ blockio_exec_rw(struct vdisk_cmd_params *p, bool is_write, bool fua)
 
 		/* Pass the request to the aio service implementor */
 		if (is_write) {
-		    aio_writev(virt_dev->aio,
+		    aio_writev((struct aio_handle*)virt_dev->aio_private,
 				&op->aio_private,
 				aio_writev_done, blockio_work,
 				seekpos, aio_op_len, niov, op->iov);
 		} else {
-		    aio_readv(virt_dev->aio,
+		    aio_readv((struct aio_handle*)virt_dev->aio_private,
 				&op->aio_private,
 				aio_readv_done, blockio_work,
 				seekpos, aio_op_len, niov, op->iov);
@@ -322,7 +322,7 @@ vdisk_fsync_blockio(loff_t loff,
 	op->cmd = cmd;
 	if (!async) op->op_done = &completion;
 
-	res = aio_sync(virt_dev->aio, &op->aio_private, aio_fsync_done, op);
+	res = aio_sync((struct aio_handle*)virt_dev->aio_private, &op->aio_private, aio_fsync_done, op);
 					    /*** op may be gone now ***/
 
 	//XXX Is this the intended semantic for async vs. non-async ?
