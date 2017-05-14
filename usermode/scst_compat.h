@@ -60,8 +60,6 @@ struct hash_desc {
 struct Scsi_Host;
 struct scsi_driver;
 
-struct device { struct device * parent; struct kobject *kobj; };
-
 struct hostt {
     char * name;
 };
