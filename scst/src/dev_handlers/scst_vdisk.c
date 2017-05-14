@@ -6583,10 +6583,9 @@ static void blockio_bio_destructor(struct bio *bio)
 #endif
 
 #ifdef SCST_USERMODE_AIO
-    /* Implement blockio under SCST_USERMODE using aio */
-    #include "scst_vdisk_aio.c"
-
-#else /* Kernel-resident SCST */
+/* Implement blockio under SCST_USERMODE using aio */
+#include "scst_vdisk_aio.c"
+#else /* !SCST_USERMODE_AIO */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24)
 static int blockio_endio(struct bio *bio, unsigned int bytes_done, int error)
