@@ -14,7 +14,7 @@ evolved into two descendant products, NeTraverse Merge and Win4Lin]
 He joined Sun Microsystems to establish and lead the first Solaris x86
 device driver development team, later accepting an international
 assignment to Dublin, Ireland to start a driver engineering team there.
-After returning to the U.S. he was responsible for the software
+After five years he returned to the U.S., responsible for the software
 architecture for Sun's Network Storage Division for several years.
 
 At LeftHand Networks he contributed many performance improvements to the
