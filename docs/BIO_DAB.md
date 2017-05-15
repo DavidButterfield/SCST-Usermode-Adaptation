@@ -26,15 +26,16 @@ to a 2.5x increase in throughput (IOPS) capability.
 His most recent (independent) project relocates the iSCSI-SCST storage
 server software from the Linux kernel to run entirely in usermode, with no
 changes to the existing logic.  This reuses 80,000 lines of an existing,
-very mature implementation of the iSCSI and SCSI (SPC and SBC) protocols,
-in a way that preserves the maturity and stability of the code.  This was
-done by writing 10,000 lines of supporting code (in C, of course) to
-emulate the necessary kernel functions utilized by the server software.
+very stable implementation of the iSCSI and SCSI (SPC and SBC) protocols,
+in a way that preserves the maturity of the code.  This was done by
+writing 10,000 lines of supporting code (in C, of course) to emulate the
+necessary kernel functions utilized by the server software.
 
 The server accesses local storage through the usual preadv/pwritev(2)
 system calls or using the aio(7) facility.  Alternatively it can be used
 to access sophisticated storage backend services such as Ceph, QEMU, or
-Gluster through their usermode block-storage client interfaces.
+Gluster through their usermode block-storage client interfaces and
+tcmu-runner backstore handlers.
 
 The code, diagrams, and a paper describing the work and performance study are
 [here](https://github.com/DavidButterfield/SCST-Usermode-Adaptation "Code").
