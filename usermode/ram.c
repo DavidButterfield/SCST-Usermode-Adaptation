@@ -1,9 +1,31 @@
 /* ram.c -- ramdisk driver for tcmu-runner or scstu_tcmu
- * Initial Author: David Butterfield
+ * Copyright 2017 David A. Butterfield
+ -------------------------------------------------------------------------------
+ * MIT License  [SPDX:MIT https://opensource.org/licenses/MIT]
  *
- * mmaps a backing file or anonymous memory and just copies to/from the mmap
- * for Write/Read.  Flush does msync(2).  Config string should be the pathname
- * of the backing file, or "/@" to use an anonymous mmap.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ -------------------------------------------------------------------------------
+ *
+ * This backstore handler does mmap(2) of a backing file or anonymous memory
+ * and simply copies to/from the mmap for Write/Read.  Flush does msync(2).
+ * Config string should be the pathname of the backing file, or "/@" to use an
+ * anonymous mmap.
  *
  * Backing files get msync(2) at close time and persist across sessions.
  * Data in anonymous mmaps is discarded at close time.
