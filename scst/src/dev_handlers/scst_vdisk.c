@@ -1169,8 +1169,6 @@ static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
 static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size)
 {
-	const char *filename = virt_dev->filename;
-	bool blockio = virt_dev->blockio;
 	struct inode *inode;
 	int res = 0;
 	struct file *fd;
