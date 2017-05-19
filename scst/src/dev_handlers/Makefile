@@ -91,8 +91,6 @@ EXTRA_CFLAGS += -I$(SUBDIRS) -I$(SCST_INC_DIR) $(call enable-Wextra,-Wextra \
 
 endif	########## SCST_USERMODE ##########
 
-endif	########## SCST_USERMODE ##########
-
 EXTRA_CFLAGS += $(EXTRA_WFLAGS)
 
 EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
