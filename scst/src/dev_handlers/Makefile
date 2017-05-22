@@ -82,10 +82,14 @@ uninstall:
 ########## END OUT-OF-TREE RULES ##########
 endif
 
+ifndef	SCST_USERMODE #####################
+
 enable-Wextra = $(shell uname_r="$$(uname -r)"; if [ "$${uname_r%.el5}" = "$${uname_r}" ]; then echo "$(1)"; fi)
 
 EXTRA_CFLAGS += -I$(SUBDIRS) -I$(SCST_INC_DIR) $(call enable-Wextra,-Wextra \
-	-Wno-unused-parameter -Wno-missing-field-initializers)
+	-Wno-unused-parameter)
+
+endif	########## SCST_USERMODE ##########
 
 EXTRA_CFLAGS += $(EXTRA_WFLAGS)
 
@@ -95,6 +99,16 @@ EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
 EXTRA_CFLAGS += -DCONFIG_SCST_DEBUG -g -fno-inline -fno-inline-functions
 
 #EXTRA_CFLAGS += -DCONFIG_DEBUG_EXT_COPY_REMAP
+
+ifdef	SCST_USERMODE #####################
+
+%.o: %.c
+	$(CC) -c -o $(@) -I$(SCST_INC_DIR) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+
+# XXXX At the moment the usermode AIO .c files get included from scst_vdisk.c
+scst_vdisk.o:    scst_vdisk.c scst_vdisk_aio.c
+
+endif	########## SCST_USERMODE ##########
 
 clean:
 	rm -f *.o *.ko .*.cmd *.mod.c .*.d .depend Modules.symvers \

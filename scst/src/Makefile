@@ -36,7 +36,10 @@ SHELL=/bin/bash
 DEV_HANDLERS_DIR = dev_handlers
 
 ifneq ($(PATCHLEVEL),)
+
+ifndef	SCST_INC_DIR
 SCST_INC_DIR := $(SUBDIRS)/../include
+endif
 
 obj-m := scst.o
 
@@ -44,15 +47,18 @@ scst-y        += scst_main.o
 scst-y        += scst_targ.o
 scst-y        += scst_lib.o
 #scst-y        += scst_proc.o
-scst-y        += scst_sysfs.o
 scst-y        += scst_mem.o
 scst-y        += scst_debug.o
 scst-y        += scst_pres.o
 scst-y        += scst_no_dlm.o
-scst-y        += scst_dlm.o
 scst-y        += scst_tg.o
-scst-y        += scst_event.o
 scst-y        += scst_copy_mgr.o
+scst-y        += scst_sysfs.o
+ifndef SCST_USERMODE
+scst-y        += scst_dlm.o
+scst-y        += scst_event.o
+endif
+
 obj-$(CONFIG_SCST)   += scst.o dev_handlers/
 
 obj-$(BUILD_DEV) += $(DEV_HANDLERS_DIR)/
@@ -92,6 +98,8 @@ $(SCST_INTF_VER_FILE): $(SCST_INC_DIR)/scst.h $(SCST_INC_DIR)/scst_const.h $(SCS
 	echo "\"`sha1sum $(SCST_INC_DIR)/scst_const.h|awk '{printf $$1}'`\"" >>$(SCST_INTF_VER_FILE)
 	echo -n "#define DEV_USER_INTF_VER " >>$(SCST_INTF_VER_FILE)
 	echo "\"`sha1sum $(SCST_INC_DIR)/scst_user.h|awk '{printf $$1}'`\"" >>$(SCST_INTF_VER_FILE)
+
+ifndef	SCST_USERMODE ####################
 
 all: $(SCST_INTF_VER_FILE)
 	$(MAKE) -C $(KDIR) SUBDIRS=$(shell pwd) BUILD_DEV=m
@@ -146,8 +154,33 @@ uninstall:
 	-/sbin/depmod -b $(INSTALL_MOD_PATH)/ -a $(KVER)
 	rm -rf $(INSTALL_DIR_H)
 
+else	########## SCST_USERMODE ##########
+
+PATCHLEVEL=UMC
+include Makefile
+
+all scst mods:	$(SCST_INTF_VER_FILE)
+	$(MAKE) modules
+
+modules:    $(obj-m)
+
+$(obj-m):   $(scst-y)
+	$(LD) -r -o $@ $(scst-y)
+
+%.o: %.c
+	$(CC) -c -o $(@) -I$(SCST_INC_DIR) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+
+install: all
+
+uninstall:
+
+endif	########## SCST_USERMODE ##########
+
 ########## END OUT-OF-TREE RULES ##########
 endif
+
+ifndef BEEN_HERE
+BEEN_HERE = 1
 
 INSTALL_DIR := $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/extra
 INSTALL_DIR_H := $(DESTDIR)$(PREFIX)/include/scst
@@ -155,7 +188,7 @@ INSTALL_DIR_H := $(DESTDIR)$(PREFIX)/include/scst
 enable-Wextra = $(shell uname_r="$$(uname -r)"; if [ "$${uname_r%.el5}" = "$${uname_r}" ]; then echo "$(1)"; fi)
 
 EXTRA_CFLAGS += -I$(SCST_INC_DIR) $(call enable-Wextra,-Wextra \
-	-Wno-unused-parameter -Wno-missing-field-initializers) \
+	-Wno-unused-parameter) \
 	$(shell [ -n "${CONFIG_SCST_NO_DLM}" ] && echo -DCONFIG_SCST_NO_DLM)
 
 EXTRA_CFLAGS += $(EXTRA_WFLAGS)
@@ -244,5 +277,7 @@ enable_proc:
 	sed -i.aa s/"^s\?cst\-y        += scst_sysfs.o"/"#scst\-y        += scst_sysfs.o"/ Makefile
 	grep "^#scst\-y        += scst_sysfs.o" Makefile >/dev/null
 	rm Makefile.aa
+
+endif	# BEEN_HERE
 
 .PHONY: all install uninstall clean extraclean 2release 2debug 2perf disable_proc enable_proc

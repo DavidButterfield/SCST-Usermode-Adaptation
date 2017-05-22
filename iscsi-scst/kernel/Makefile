@@ -25,9 +25,7 @@ cc-option = $(shell if $(CC) $(CFLAGS) $(1) -S -o /dev/null -xc /dev/null \
 enable-Wextra = $(shell uname_r="$$(uname -r)"; if [ "$${uname_r%.el5}" = "$${uname_r}" ]; then echo "$(1)"; fi)
 
 EXTRA_CFLAGS += -I$(src)/../include -I$(SCST_INC_DIR)
-EXTRA_CFLAGS += $(call enable-Wextra,-Wextra \
-	$(call cc-option,-Wno-old-style-declaration) \
-	-Wno-unused-parameter -Wno-missing-field-initializers)
+EXTRA_CFLAGS += $(call enable-Wextra,-Wextra -Wno-unused-parameter)
 
 EXTRA_CFLAGS += -DCONFIG_SCST_EXTRACHECKS
 #EXTRA_CFLAGS += -DCONFIG_SCST_TRACING
@@ -39,6 +37,14 @@ EXTRA_CFLAGS += $(EXTRA_WFLAGS)
 
 obj-m		+= iscsi-scst.o
 iscsi-scst-objs	:= iscsi.o nthread.o config.o digest.o \
-	conn.o session.o target.o event.o param.o \
+	conn.o session.o target.o param.o \
 	iscsit_transport.o
 
+ifndef SCST_USERMODE
+iscsi-scst-objs	:= $(iscsi-scst-objs) event.o
+else
+iscsi-scst-objs	:= $(iscsi-scst-objs) scst_compat.o
+endif
+
+clean extraclean:
+	rm -rf .tmp_versions *.o *.ko .*.o.cmd .*.ko.cmd *.mod.c

@@ -39,3 +39,5 @@ obj-m		+= isert-scst.o
 isert-scst-objs	:= isert.o isert_login.o \
 		iser_datamover.o iser_rdma.o iser_buf.o iser_pdu.o iser_global.o
 
+clean extraclean:
+	rm -rf .tmp_versions *.o *.ko .*.o.cmd .*.ko.cmd *.mod.c

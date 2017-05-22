@@ -3474,6 +3474,10 @@ static int scst_do_real_exec(struct scst_cmd *cmd)
 		  scsi_dev->host->host_no, scsi_dev->channel, scsi_dev->id,
 		  (u64)scsi_dev->lun);
 
+#ifdef SCST_USERMODE
+        BUG_ON("SCST_USERMODE should never reach this point");
+#endif
+
 	scst_set_exec_start(cmd);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 30)
@@ -5597,7 +5601,8 @@ void scst_process_active_cmd(struct scst_cmd *cmd, bool atomic)
 			sBUG();
 		}
 #endif
-		TRACE_DBG("Adding cmd %p to head of active cmd list", cmd);
+		TRACE_DBG("Adding cmd %p state %u to head of active cmd list",
+			  cmd, cmd->state);
 
 		spin_lock_irq(&cmd->cmd_threads->cmd_list_lock);
 		list_add(&cmd->cmd_list_entry,
@@ -5651,7 +5656,8 @@ int scst_cmd_thread(void *arg)
 
 	TRACE_ENTRY();
 
-	TRACE(TRACE_MINOR, "Processing thread %s started", current->comm);
+	TRACE(TRACE_MINOR, "Processing thread %s @ %p started on tid=%d",
+			    current->comm, current, current->pid);
 
 #if 0
 	set_user_nice(current, 10);
@@ -5668,6 +5674,16 @@ int scst_cmd_thread(void *arg)
 	spin_lock(&thr->thr_cmd_list_lock);
 	while (!kthread_should_stop()) {
 		if (!test_cmd_threads(thr)) {
+
+#ifdef SCST_USERMODE
+			/* wait_event_locked2(WAITQ, COND, LOCK, INNERLOCK) --
+			 * Wait Event with exclusive wakeup, NO timeout, and TWO spinlocks;
+			 * Lock acquisition order is LOCK, INNERLOCK;
+			 * SCST_USERMODE does not care about the "_irq" blocking, NOP here.
+			 */
+			wait_event_locked2(p_cmd_threads->cmd_list_waitQ, test_cmd_threads(thr),
+				    p_cmd_threads->cmd_list_lock, thr->thr_cmd_list_lock);
+#else
 			DEFINE_WAIT(wait);
 
 			do {
@@ -5683,6 +5699,7 @@ int scst_cmd_thread(void *arg)
 				spin_lock(&thr->thr_cmd_list_lock);
 			} while (!test_cmd_threads(thr));
 			finish_wait(&p_cmd_threads->cmd_list_waitQ, &wait);
+#endif
 		}
 
 		/* Drop both locks now that we are through the test_cmd_threads() checks */
@@ -5800,7 +5817,8 @@ go:
 
 	scst_ioctx_put(p_cmd_threads);
 
-	TRACE(TRACE_MINOR, "Processing thread %s finished", current->comm);
+	TRACE(TRACE_MINOR, "Processing thread %s @ %p finished on tid=%d",
+			   current->comm, current, current->pid);
 
 	TRACE_EXIT();
 	return 0;
@@ -6803,6 +6821,10 @@ static int scst_target_reset(struct scst_mgmt_cmd *mcmd)
 		if (dev->scsi_dev == NULL)
 			continue;
 
+#ifdef SCST_USERMODE
+		BUG_ON("SCST_USERMODE should never reach this point");
+#endif
+
 		list_for_each_entry(d, &host_devs, tm_dev_list_entry) {
 			if (dev->scsi_dev->host->host_no ==
 				    d->scsi_dev->host->host_no) {
@@ -6822,6 +6844,10 @@ static int scst_target_reset(struct scst_mgmt_cmd *mcmd)
 	 */
 
 	list_for_each_entry(dev, &host_devs, tm_dev_list_entry) {
+#ifdef SCST_USERMODE
+		BUG_ON("SCST_USERMODE should never reach this point");
+#endif
+
 		/* dev->scsi_dev must be non-NULL here */
 		TRACE(TRACE_MGMT, "Resetting host %d bus ",
 			dev->scsi_dev->host->host_no);
@@ -6894,6 +6920,10 @@ static int scst_lun_reset(struct scst_mgmt_cmd *mcmd)
 	scst_call_dev_task_mgmt_fn_received(mcmd, tgt_dev);
 
 	if (dev->scsi_dev != NULL) {
+#ifdef SCST_USERMODE
+		BUG_ON("SCST_USERMODE should never reach this point");
+#endif
+
 		TRACE(TRACE_MGMT, "Resetting host %d bus ",
 		      dev->scsi_dev->host->host_no);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)

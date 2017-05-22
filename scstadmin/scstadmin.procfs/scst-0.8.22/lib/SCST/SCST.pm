@@ -10,7 +10,9 @@ use IO::File;
 use strict;
 use Carp qw(cluck);
 
+# If SCST not found at $_SCST_DIR_, will also try '/fuse/scst'.$_SCST_DIR_
 my $_SCST_DIR_           = '/proc/scsi_tgt';
+
 my $_SCST_IO_            = $_SCST_DIR_.'/scsi_tgt';
 my $_SCST_VDISK_IO_      = $_SCST_DIR_.'/vdisk/vdisk';
 my $_SCST_VCDROM_IO_     = $_SCST_DIR_.'/vcdrom/vcdrom';
@@ -127,6 +129,22 @@ sub new {
 	$self->{'debug'} = $debug;
 
 	my $scstVersion = $self->scstVersion();
+
+	if ($scstVersion == -1) {
+	    # not optimal...
+	    print "(".$_SCST_DIR_." not found, also trying /fuse/scst".$_SCST_DIR_.")\n";
+	    $_SCST_DIR_           = '/fuse/scst'.$_SCST_DIR_;
+	    $_SCST_VERSION_IO_    = $_SCST_DIR_.'/version';
+	    $_SCST_IO_            = $_SCST_DIR_.'/scsi_tgt';
+	    $_SCST_VDISK_IO_      = $_SCST_DIR_.'/vdisk/vdisk';
+	    $_SCST_VCDROM_IO_     = $_SCST_DIR_.'/vcdrom/vcdrom';
+	    $_SCST_GROUPS_DIR_    = $_SCST_DIR_.'/groups';
+	    $_SCST_SGV_STATS_     = $_SCST_DIR_.'/sgv';
+	    $_SCST_SESSIONS_      = $_SCST_DIR_.'/sessions';
+	    %_IO_MAP_ = ($VDISK_TYPE => $_SCST_VDISK_IO_,
+			$VCDROM_TYPE => $_SCST_VCDROM_IO_);
+	    $scstVersion = $self->scstVersion();
+	}
 
 	die("Failed to obtain SCST version information. Is the scst module loaded?\n")
 	  if ($scstVersion == -1);
