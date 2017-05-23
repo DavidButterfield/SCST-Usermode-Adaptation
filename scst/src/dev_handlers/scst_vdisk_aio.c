@@ -2,10 +2,20 @@
  * Copyright 2016 David A. Butterfield
  * SCST_USERMODE support for async disk I/O using the MTE aio_service provider
  *
- * When compiled with SCST_USERMODE_AIO, takes over implementation of blockio
+ * When compiled with SCST_USERMODE but not SCST_USERMODE_AIO, LUNs configured
+ * with the BLOCKIO option ignore the BLOCKIO option and use FILEIO instead.
+ *
+ * When compiled with both SCST_USERMODE and SCST_USERMODE_AIO, we take over
+ * implementation of BLOCKIO either here (using AIO-based MTE service) or in
+ * scstu_tcmu.c (using a tcmu-runner backstore handler).
  */
 #ifdef SCST_USERMODE
 #ifdef SCST_USERMODE_AIO
+#ifdef SCST_USERMODE_TCMU
+#include "scstu_tcmu.c"	/* build for use with tcmu-runner backstore handler */
+
+#else /********************  Remainder of this file  ********************/
+      /*********  implements blockio using MTE aio(7) facility  *********/
 #include "mtelib.h"
 
 /* Configuration for the MTE AIO service Implementor */
@@ -337,5 +347,6 @@ vdisk_fsync_blockio(loff_t loff,
 	return res;
 }
 
+#endif /* SCST_USERMODE_TCMU */
 #endif /* SCST_USERMODE_AIO */
 #endif /* SCST_USERMODE */

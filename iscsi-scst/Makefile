@@ -210,7 +210,7 @@ endif
 
 all: include/iscsi_scst_itf_ver.h
 	$(MAKE) -C usr SCST_INC_DIR=$(SCST_INC_DIR)
-	$(MAKE) -C kernel MAKE_PASS2=MAKE_PASS2 - SCST_INC_DIR=$(SCST_INC_DIR) f ../Makefile modules
+	$(MAKE) -C kernel MAKE_PASS2=MAKE_PASS2 SCST_INC_DIR=$(SCST_INC_DIR) -f ../Makefile modules
 
 modules:    $(obj-m)
 

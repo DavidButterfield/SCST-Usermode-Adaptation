@@ -782,7 +782,6 @@ static struct scst_dev_type vdisk_file_devtype = {
 static struct kmem_cache *blockio_work_cachep;
 
 #ifdef SCST_USERMODE_AIO
-/* Defined in scst_vdisk_aio.c #included below */
 static int vdisk_aio_attach_tgt(struct scst_tgt_dev *tgt_dev);
 static void vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev);
 #endif
@@ -1164,6 +1163,13 @@ check:
 
 /* Returns 0 on success and file size in *file_size, error code otherwise */
 static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
+	loff_t *file_size);
+
+/* SCST_USERMODE_TCMU: BLOCKIO configured with tcmu-runner backstore handler */
+#ifndef SCST_USERMODE_TCMU  /* TCMU shim provides its own _get_file_size() */
+
+/* Used in kernel-resident builds and preadv/pwritev/AIO usermode builds */
+static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size)
 {
 	struct inode *inode;
@@ -1225,6 +1231,8 @@ out:
 	TRACE_EXIT_RES(res);
 	return res;
 }
+
+#endif /* !SCST_USERMODE_TCMU */
 
 /* scst_vdisk_mutex supposed to be held */
 static struct scst_vdisk_dev *vdev_find(const char *name)
@@ -3654,6 +3662,7 @@ out:
  * generally, they are checking for different things. Better to keep different
  * things separately.
  */
+__attribute__((__unused__)) /* when compiled with SCST_USERMODE_TCMU */
 static bool vdisk_no_fd_allowed_commands(const struct scst_cmd *cmd)
 {
 	bool res;
@@ -3727,6 +3736,7 @@ static int blockio_exec(struct scst_cmd *cmd)
 	if (unlikely(!vdisk_parse_offset(&p, cmd)))
 		goto err;
 
+#ifndef SCST_USERMODE_TCMU
 	if (unlikely(virt_dev->fd == NULL)) {
 		if (!vdisk_no_fd_allowed_commands(cmd)) {
 			/*
@@ -3744,6 +3754,7 @@ static int blockio_exec(struct scst_cmd *cmd)
 			goto err;
 		}
 	}
+#endif
 
 	cmd->dh_priv = &p;
 	res = vdev_do_job(cmd, ops);
@@ -5724,10 +5735,10 @@ static int __vdisk_fsync_fileio(loff_t loff,
 }
 
 #ifdef SCST_USERMODE_AIO
-/* Defined in scst_vdisk_aio.c #included below */
 static int vdisk_fsync_blockio(loff_t loff,
 	loff_t len, struct scst_device *dev, gfp_t gfp_flags,
 	struct scst_cmd *cmd, bool async);
+
 #else
 static int vdisk_fsync_blockio(loff_t loff,
 	loff_t len, struct scst_device *dev, gfp_t gfp_flags,
@@ -6573,9 +6584,10 @@ static void blockio_bio_destructor(struct bio *bio)
 #endif
 
 #ifdef SCST_USERMODE_AIO
-/* Implement blockio under SCST_USERMODE using aio */
-#include "scst_vdisk_aio.c"
-#else /* !SCST_USERMODE_AIO */
+    /* Implement blockio under SCST_USERMODE using aio */
+    #include "scst_vdisk_aio.c"
+
+#else /* Kernel-resident BLOCKIO */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24)
 static int blockio_endio(struct bio *bio, unsigned int bytes_done, int error)

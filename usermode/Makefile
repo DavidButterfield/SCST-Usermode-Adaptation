@@ -5,6 +5,21 @@
 #
 # This Makefile expects its make(1) to be invoked in the Makefile's directory.
 
+#############  Defines for using TCMU plugins  #############
+
+# Note: default if none of these is selected is to use aio(7) to file or bdev
+
+  # Define USERMODE_TCMU to build SCST usermode with BLOCKIO under a TCMU plugin
+  # USERMODE_TCMU = defined
+
+  # Define one of these to select a TCMU plugin (use with USERMODE_TCMU)
+  # USERMODE_TCMU_RBD = defined	    # Ceph RBD
+  # USERMODE_TCMU_RAM = defined	    # RAM disk
+  # USERMODE_TCMU_QEMU = defined    # QEMU QCOW
+  # USERMODE_TCMU_GLFS = defined    # Gluster GLFS
+
+################################################################################
+
 # Usermode SCST depends on UMC (Usermode Compat) and MTE (Multithreaded Engine).
 # You can pass in alternative source directories to override these defaults.
 #
@@ -78,7 +93,13 @@ EXTRA_CFLAGS += -DCONFIG_SCST_TEST_IO_IN_SIRQ	# Allow I/O from soft-interrupt ha
 EXTRA_CFLAGS += -DCONN_LOCAL_READ		# Attempt conn read from pp_done handler
 EXTRA_CFLAGS += -DCONN_SIRQ_READ		# Drive read directly off data_ready callback
 EXTRA_CFLAGS += -DSCST_USERMODE_AIO		# Prototype implemention of blockio using AIO
+
+ifdef USERMODE_TCMU
+EXTRA_CFLAGS += -DSCST_USERMODE_TCMU		# blockio using tcmu-runner backstore handlers
+endif
+
 # EXTRA_CFLAGS += -DADAPTIVE_NAGLE		# Experimental Adaptive Nagle optimization
+						# (increase IOPS for CPU-bound workloads)
 
 # Force scst_compat.h to be #included at the start of every kernel.c file, for usermode shims
 EXTRA_CFLAGS += -include $(SCST_SRC)/usermode/scst_compat.h
@@ -161,6 +182,25 @@ export KVER = __NONE__
 
 GCCLDFLAGS = -Wl,-z,now -Wl,-O1 -Wl,-L/usr/lib
 
+ifdef USERMODE_TCMU_RBD
+TCMU_LIBS = rbd.o
+BACKEND_LIBS = -lrbd -lrados
+endif
+
+ifdef USERMODE_TCMU_RAM
+TCMU_LIBS = ram.o
+endif
+
+ifdef USERMODE_TCMU_GLFS
+TCMU_LIBS = glfs.o
+BACKEND_LIBS = -lgfapi
+endif
+
+ifdef USERMODE_TCMU_QEMU
+TCMU_LIBS = qcow.o
+BACKEND_LIBS = -lz
+endif
+
 export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
 
 usermode all:	cscope check_mte
@@ -173,11 +213,11 @@ usermode all:	cscope check_mte
 COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o \
 	      $(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o
 
-scst.out:   $(COMPONENTS)
+scst.out:   $(COMPONENTS) $(TCMU_LIBS)
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
 	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte -lpthread -laio -ldl -lfuse \
-		    $(LOCAL_LIBS) -lc
+		    $(TCMU_LIBS) $(BACKEND_LIBS) $(LOCAL_LIBS) -lc
 
 USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/pde_fuse.o
 
