@@ -11,7 +11,7 @@ and performance study is
 [here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_Usermode.html
        "A paper describing the work in detail").
 
-The ceph_rbd and scstu_tcmu branches are obsolete.  The functionality is now
+***The ceph_rbd and scstu_tcmu branches are obsolete.***  The functionality is now
 provided in the usermode branch.
 
 Branches:
