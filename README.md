@@ -12,7 +12,7 @@ and performance study is
        "A paper describing the work in detail").
 
 ***The ceph_rbd and scstu_tcmu branches are obsolete.***  The functionality is now
-provided in the usermode branch.
+integrated into the usermode branch.
 
 Branches:
  + master     - the original work described by the paper
