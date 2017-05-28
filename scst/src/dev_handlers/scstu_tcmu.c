@@ -19,30 +19,38 @@
 
 static struct kmem_cache * op_cache;
 
-/******** API for tcmu-runner handler ********/
+/******** Implementation for tcmu-runner handler API ********/
 
-/* This is used by the handler to query scst about the expected block size */
+#if 0 //XXX Obsolete, I hope.
+/* This can be called by a handler to query scst about the block size */
 int
 tcmu_get_attribute(struct tcmu_device * tcmu_dev, string_t attr_str)
 {
+    struct scst_vdisk_dev * virt_dev = tcmu_dev->virt_dev;
     if (!strcmp(attr_str, "hw_block_size")) {
-	assert_ge(tcmu_dev->scst_block_size, 512);
-	assert_eq(tcmu_dev->scst_block_size % 512, 0);
-	return tcmu_dev->scst_block_size;
+	unsigned int block_size = 1u << virt_dev->blk_shift;
+	assert_ge(block_size, 512);
+	assert_eq(block_size % 512, 0);
+	return block_size;
     }
 
     sys_warning("Unknown TCMU attribute %s requested for device %s",
 		attr_str, tcmu_get_dev_name(tcmu_dev));
     return -ENOENT;
 }
+#endif
 
-/* This is used by the handler to query scst about the expected device size */
+/* This can be called by a handler to query scst about the device size */
 ssize_t
 tcmu_get_device_size(struct tcmu_device * tcmu_dev)
 {
-    assert_ge(tcmu_dev->scst_block_size, 512);
-    assert_eq(tcmu_dev->scst_block_size % 512, 0);
-    return tcmu_dev->scst_nlba * tcmu_dev->scst_block_size;
+    struct scst_vdisk_dev * virt_dev = tcmu_dev->virt_dev;
+    unsigned int block_size = 1u << virt_dev->blk_shift;
+    ssize_t size = (long)block_size * virt_dev->nblocks;
+    assert_ge(block_size, 512);
+    assert_eq(block_size % 512, 0);
+    tcmu_dev_dbg(tcmu_dev, "block_size=%u, size=%ld\n", block_size, size);
+    return size;
 }
 
 #define SENSE_BUF_USED 18u	//XXX
@@ -311,15 +319,32 @@ exit_scst_vdisk_aio(void)
 }
 
 static inline struct tcmu_device *
-scstu_tcmu_openprep(const struct scst_vdisk_dev * virt_devc, struct tcmur_handler * handler,
+scstu_tcmu_openprep(struct scst_vdisk_dev * virt_dev, struct tcmur_handler * handler,
 		    string_t name, string_t cfg)
 {
     struct tcmu_device * tcmu_dev;
-    struct scst_vdisk_dev * virt_dev = _unconstify(virt_devc); //XXX
+    int32_t block_size = 1ul << virt_dev->blk_shift;
+    int64_t nblocks = virt_dev->nblocks;
 
-    if (!cfg) return NULL;
-    if (!strlen(cfg)) return NULL;
-    if (strlen(cfg) >= sizeof(tcmu_dev->cfgstring)) return NULL;
+    if (!cfg || !strlen(cfg)) {
+	tcmu_err("%s: empty cfg string\n", name);
+	return NULL;
+    }
+
+    if (strlen(cfg) >= sizeof(tcmu_dev->cfgstring)) {
+	tcmu_err("%s: cfg string too long: '%s'\n", name, cfg);
+	return NULL;
+    }
+
+    if (block_size < 512) {
+	tcmu_err("%s: bad block size=%d shift=%d\n", name, block_size, virt_dev->blk_shift);
+	return NULL;
+    }
+
+    if (nblocks < 0) {
+	tcmu_err("%s: bad device nblocks=%d\n", name, nblocks);
+	return NULL;
+    }
 
     tcmu_dev = vzalloc(sizeof(*tcmu_dev));
     tcmu_dev->handler = handler;
@@ -327,10 +352,11 @@ scstu_tcmu_openprep(const struct scst_vdisk_dev * virt_devc, struct tcmur_handle
     strlcpy(tcmu_dev->dev_name, name, sizeof(tcmu_dev->dev_name));
     strlcpy(tcmu_dev->cfgstring_orig, cfg, sizeof(tcmu_dev->cfgstring_orig));
     memcpy(tcmu_dev->cfgstring, tcmu_dev->cfgstring_orig, sizeof(tcmu_dev->cfgstring));
+    tcmu_set_dev_block_size(tcmu_dev, block_size);
+    tcmu_set_dev_num_lbas(tcmu_dev, nblocks);
 
-    tcmu_dev->scst_block_size = 1ul << virt_dev->blk_shift;
-    tcmu_dev->scst_nlba = virt_dev->nblocks;
-    /* num_lbas and block_size filled by handler->open() */
+    tcmu_dev_dbg(tcmu_dev, "block_size %ld, size in bytes %lld\n",
+	         block_size, block_size * nblocks);
 
     return tcmu_dev;
 }
@@ -351,12 +377,20 @@ vdisk_aio_attach_tgt(struct scst_tgt_dev * tgt_dev)
     TRACE_ENTRY();
     lockdep_assert_held(&scst_mutex);
 
+    int32_t max_sectors = min((long)tgt_dev->max_sg_cnt << PAGE_SHIFT, 8*1024*1024l) / 512;
+    if (max_sectors <= 0) {
+	tcmu_err("%s: bad max_sectors=%d\n", virt_dev->filename, max_sectors);
+	return -EINVAL;
+    }
+
     /* XXX To support multiple handlers, add code here to lookup the handler */
     tcmu_dev = scstu_tcmu_openprep(virt_dev, scstu_tcmu_handler, "scstu_tcmu", virt_dev->filename);
     if (!tcmu_dev) {
 	err = EINVAL;
 	goto out;
     }
+
+    tcmu_set_dev_max_xfer_len(tcmu_dev, max_sectors);
 
     if (tcmu_dev->handler->check_config) {
 	char * reason = NULL;
@@ -396,7 +430,7 @@ vdisk_aio_attach_tgt(struct scst_tgt_dev * tgt_dev)
 	sys_warning(LOGID" target %s size %"PRIu64" too small < %"PRIu64,
 		    tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev),
 		    dev_size, virt_dev->file_size);
-	err = -EBADFD;	    /* messed-up state */
+	err = EBADFD;	    /* messed-up state */
 	goto fail_close;
     }
 
@@ -404,7 +438,7 @@ vdisk_aio_attach_tgt(struct scst_tgt_dev * tgt_dev)
 	       tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev), virt_dev->file_size);
 out:
     TRACE_EXIT_RES(err);
-    return err;
+    return -err;
 fail_close:
     tcmu_dev->handler->close(tcmu_dev);
     virt_dev->tgt_dev_cnt--;
@@ -509,7 +543,6 @@ blockio_exec_rw(struct vdisk_cmd_params *p, bool is_write, bool fua)
     }
 
     TRACE_ENTRY();
-    WARN_ON(virt_dev->nullio);
     assert(tcmu_dev);
     assert(tcmu_dev->handler);
     assert(tcmu_dev->handler->registered);
@@ -673,17 +706,17 @@ out_finish:
 
 /* Return 0 on success with file size in *file_size; otherwise -errno */
 static errno_t
-vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev, loff_t *file_sizep)
+vdisk_get_file_size(const struct scst_vdisk_dev *virt_devc, loff_t *file_sizep)
 {
+    struct scst_vdisk_dev *virt_dev = _unconstify(virt_devc);
     const char *filename = virt_dev->filename;
-    bool blockio = virt_dev->blockio;
     errno_t err = E_OK;
     struct tcmu_device * tcmu_dev;
 
     TRACE_ENTRY();
     lockdep_assert_held(&scst_mutex);
     assert(file_sizep);
-    assert(blockio);
+    assert(virt_dev->blockio);
     assert(filename);
     assert(strlen(filename));
 

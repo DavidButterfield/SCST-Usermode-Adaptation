@@ -87,8 +87,7 @@ struct tcmu_device {
     struct scst_vdisk_dev     * virt_dev;
     uint64_t			num_lbas;		/* owned by handler */
     uint32_t			block_size;		/* owned by handler */
-    uint32_t			scst_block_size;	/* owned by scstu_tcmu */
-    uint64_t			scst_nlba;		/* owned by scstu_tcmu */
+    uint32_t			max_xfer_len;		/* owned by handler */
     char			dev_name[16];
     char			cfgstring_orig[256];
     char			cfgstring[256];
@@ -112,6 +111,8 @@ struct tcmu_device {
 #define tcmu_get_dev_num_lbas(tcmu_dev)			((tcmu_dev)->num_lbas)
 #define tcmu_set_dev_block_size(tcmu_dev, bsize)	((tcmu_dev)->block_size = (bsize))
 #define tcmu_get_dev_block_size(tcmu_dev)		((tcmu_dev)->block_size)
+#define tcmu_set_dev_max_xfer_len(tcmu_dev, len)	((tcmu_dev)->max_xfer_len = (len))
+#define tcmu_get_dev_max_xfer_len(tcmu_dev)		((tcmu_dev)->max_xfer_len)
 #define tcmu_get_dev_name(tcmu_dev)			((tcmu_dev)->dev_name)
 #define tcmu_get_dev_cfgstring(tcmu_dev)		((tcmu_dev)->cfgstring)
 

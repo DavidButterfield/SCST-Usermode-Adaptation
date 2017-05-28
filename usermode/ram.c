@@ -60,13 +60,14 @@
 typedef struct tcmu_ram {
 	void	      *	ram;
 	size_t		size;
-	unsigned int	block_size;
 	int		fd;	    /* when backing file (not anonymous) */
 } * state_t;
 
 /* Return true if the mmap memory should be locked */
 static inline bool do_mlock(struct tcmu_device *td)
 {
+	/* XXX Before changing this to return true, need to add
+	   sanity checks for td->size to avoid out-of-memory failures */
 	return false;	    //XXX Needs a config switch
 }
 
@@ -80,8 +81,6 @@ static int tcmu_ram_read(struct tcmu_device *td, struct tcmulib_cmd *op,
 {
 	state_t s = tcmu_get_dev_private(td);
 	int sam_stat = SAM_STAT_GOOD;
-	assert(seekpos % s->block_size == 0);
-	assert(size % s->block_size == 0);
 
 	if (seekpos < 0 || seekpos + size > s->size)
 		sam_stat = tcmu_set_sense_data(op->sense_buf,
@@ -98,8 +97,6 @@ static int tcmu_ram_write(struct tcmu_device *td, struct tcmulib_cmd *op,
 {
 	state_t s = tcmu_get_dev_private(td);
 	int sam_stat = SAM_STAT_GOOD;
-	assert(seekpos % s->block_size == 0);
-	assert(size % s->block_size == 0);
 
 	if (seekpos < 0 || seekpos + size > s->size)
 		sam_stat = tcmu_set_sense_data(op->sense_buf,
@@ -150,14 +147,14 @@ static int tcmu_ram_open(struct tcmu_device * td)
 {
 	char *config;
 	bool anon;
-	int err, block_size, mmap_flags, mmap_fd;
+	int err, mmap_flags, mmap_fd;
 	size_t file_size;
 	ssize_t size;
 	void *ram;
 	state_t s;
 
 	config = tcmu_get_dev_cfgstring(td);
-	//XXX kinda hacky, but I don't know how it's supposed to be done
+	//XXX kinda hacky until I figure out how it's supposed to be done
 	if (!config || config[0] != '/' || (config[1] == '@'
 						&& config[2] == '\0')) {
 		anon = true;
@@ -168,14 +165,6 @@ static int tcmu_ram_open(struct tcmu_device * td)
 		tcmu_dev_dbg(td, "%s: tcmu_ram_open config %s\n",
 				 config);
 	}
-
-	block_size = tcmu_get_attribute(td, "hw_block_size");
-	if (block_size <= 0) {
-		tcmu_dev_err(td, "unspecified hw_block_size -- "
-				 "using 512 Bytes\n");
-		block_size = 512;
-	}
-	tcmu_set_dev_block_size(td, block_size);
 
 	mmap_flags = MAP_SHARED;
 	// mmap_flags |= MAP_HUGETLB;	//XXX probably a big perf win
@@ -201,8 +190,10 @@ static int tcmu_ram_open(struct tcmu_device * td)
 
 	/* XXX needs to be fixed so this never happens */
 	/* (I think that already should be true under a real tcmu-runner) */
-	if (size == 0)
+	if (size == 0) {
 		size = 4*1024*1024*1024l;   //XXX Ugh -- default 4 GB RAMdisk
+		tcmu_dev_info(td, "XXX size unspecified, default size=%lld", size);
+	}
 
 	if (size > file_size) {
 		tcmu_dev_info(td, "extending backing file size %lld to %lld",
@@ -228,8 +219,6 @@ static int tcmu_ram_open(struct tcmu_device * td)
 					  config, err, strerror(-err));
 		}
 	}
-
-	tcmu_set_dev_num_lbas(td, size / block_size);
 
 	ram = mmap(NULL, size, PROT_READ|PROT_WRITE, mmap_flags, mmap_fd, 0);
 	if (ram == MAP_FAILED) {
@@ -257,7 +246,6 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	s->ram = ram;
 	s->size = size;
 	s->fd = mmap_fd;
-	s->block_size = block_size;
 	tcmu_set_dev_private(td, s);
 	
 	tcmu_dev_dbg(td, "config %s, size %lld\n",
