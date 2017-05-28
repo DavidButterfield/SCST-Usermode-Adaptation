@@ -33,6 +33,11 @@
 #define ALLOWED_BSOFLAGS (O_SYNC | O_DIRECT | O_RDWR | O_LARGEFILE)
 
 #define GLUSTER_PORT "24007"
+#define TCMU_GLFS_LOG_FILENAME "tcmu-runner-glfs.log"  /* MAX 32 CHAR */
+#define TCMU_GLFS_DEBUG_LEVEL  4
+
+/* tcmu log dir path */
+extern char *tcmu_log_dir;
 
 typedef enum gluster_transport {
 	GLUSTER_TRANSPORT_TCP,
@@ -76,6 +81,17 @@ struct glfs_state {
 	 */
 };
 
+typedef struct glfs_cbk_cookie {
+	struct tcmu_device *dev;
+	struct tcmulib_cmd *cmd;
+	size_t length;
+	enum {
+		TCMU_GLFS_READ  = 1,
+		TCMU_GLFS_WRITE = 2,
+		TCMU_GLFS_FLUSH = 3
+	} op;
+} glfs_cbk_cookie;
+
 struct gluster_cacheconn {
     char *volname;
 	gluster_hostdef *server;
@@ -83,7 +99,7 @@ struct gluster_cacheconn {
 	darray(char *) cfgstring;
 } gluster_cacheconn;
 
-static darray(struct gluster_cacheconn) cache = darray_new();
+static darray(struct gluster_cacheconn *) cache = darray_new();
 
 
 const char *const gluster_transport_lookup[] = {
@@ -140,7 +156,7 @@ gluster_compare_hosts(gluster_hostdef *src_server, gluster_hostdef *dst_server)
 
 static int gluster_cache_add(gluster_server *dst, glfs_t *fs, char* cfgstring)
 {
-	struct gluster_cacheconn *entry = NULL;
+	struct gluster_cacheconn *entry;
 	char* cfg_copy = NULL;
 
 	entry = calloc(1, sizeof(gluster_cacheconn));
@@ -150,7 +166,7 @@ static int gluster_cache_add(gluster_server *dst, glfs_t *fs, char* cfgstring)
 	entry->volname = strdup(dst->volname);
 
 	entry->server = calloc(1, sizeof(gluster_hostdef));
-	if (!entry)
+	if (!entry->server)
 		goto error;
 
 	entry->server->type = dst->server->type;
@@ -168,7 +184,7 @@ static int gluster_cache_add(gluster_server *dst, glfs_t *fs, char* cfgstring)
 	darray_init(entry->cfgstring);
 	darray_append(entry->cfgstring, cfg_copy);
 
-	darray_append(cache, *entry);
+	darray_append(cache, entry);
 
 	return 0;
 
@@ -178,17 +194,17 @@ static int gluster_cache_add(gluster_server *dst, glfs_t *fs, char* cfgstring)
 
 static glfs_t* gluster_cache_query(gluster_server *dst, char *cfgstring)
 {
-	struct gluster_cacheconn *entry = NULL;
+	struct gluster_cacheconn **entry;
 	char** config;
 	char* cfg_copy = NULL;
 	bool cfgmatch = false;
 
 	darray_foreach(entry, cache) {
-		if (strcmp(entry->volname, dst->volname))
+		if (strcmp((*entry)->volname, dst->volname))
 			continue;
-		if (gluster_compare_hosts(entry->server, dst->server)) {
+		if (gluster_compare_hosts((*entry)->server, dst->server)) {
 
-			darray_foreach(config, entry->cfgstring) {
+			darray_foreach(config, (*entry)->cfgstring) {
 				if (!strcmp(*config, cfgstring)) {
 					cfgmatch = true;
 					break;
@@ -196,9 +212,9 @@ static glfs_t* gluster_cache_query(gluster_server *dst, char *cfgstring)
 			}
 			if (!cfgmatch) {
 				cfg_copy = strdup(cfgstring);
-				darray_append(entry->cfgstring, cfg_copy);
+				darray_append((*entry)->cfgstring, cfg_copy);
 			}
-			return entry->fs;
+			return (*entry)->fs;
 		}
 	}
 
@@ -207,7 +223,7 @@ static glfs_t* gluster_cache_query(gluster_server *dst, char *cfgstring)
 
 static void gluster_cache_refresh(glfs_t *fs, const char *cfgstring)
 {
-	struct gluster_cacheconn *entry = NULL;
+	struct gluster_cacheconn **entry;
 	char** config;
 	size_t i = 0;
 	size_t j = 0;
@@ -216,28 +232,28 @@ static void gluster_cache_refresh(glfs_t *fs, const char *cfgstring)
 		return;
 
 	darray_foreach(entry, cache) {
-		if (entry->fs == fs) {
+		if ((*entry)->fs == fs) {
 			if (cfgstring) {
-				darray_foreach(config, entry->cfgstring) {
+				darray_foreach(config, (*entry)->cfgstring) {
 					if (!strcmp(*config, cfgstring)) {
 						free(*config);
-						darray_remove(entry->cfgstring, j);
+						darray_remove((*entry)->cfgstring, j);
 						break;
 					}
 					j++;
 				}
 			}
 
-			if (darray_size(entry->cfgstring))
+			if (darray_size((*entry)->cfgstring))
 				return;
 
-			free(entry->volname);
-			glfs_fini(entry->fs);
-			entry->fs = NULL;
-			gluster_free_host(entry->server);
-			free(entry->server);
-			entry->server = NULL;
-			free(entry);
+			free((*entry)->volname);
+			glfs_fini((*entry)->fs);
+			(*entry)->fs = NULL;
+			gluster_free_host((*entry)->server);
+			free((*entry)->server);
+			(*entry)->server = NULL;
+			free((*entry));
 
 			darray_remove(cache, i);
 			return;
@@ -247,18 +263,18 @@ static void gluster_cache_refresh(glfs_t *fs, const char *cfgstring)
 	}
 }
 
-static void gluster_free_server(gluster_server *hosts)
+static void gluster_free_server(gluster_server **hosts)
 {
-	if (!hosts)
+	if (!*hosts)
 		return;
-	free(hosts->volname);
-	free(hosts->path);
+	free((*hosts)->volname);
+	free((*hosts)->path);
 
-	gluster_free_host(hosts->server);
-	free(hosts->server);
-	hosts->server = NULL;
-	free(hosts);
-	hosts = NULL;
+	gluster_free_host((*hosts)->server);
+	free((*hosts)->server);
+	(*hosts)->server = NULL;
+	free(*hosts);
+	*hosts = NULL;
 }
 
 /*
@@ -328,7 +344,7 @@ static int parse_imagepath(char *cfgstring, gluster_server **hosts)
 	return 0;
 
 fail:
-	gluster_free_server(entry);
+	gluster_free_server(&entry);
 	free(origp);
 
 	return -1;
@@ -337,6 +353,7 @@ fail:
 static glfs_t* tcmu_create_glfs_object(char *config, gluster_server **hosts)
 {
 	gluster_server *entry = NULL;
+	char logfilepath[PATH_MAX];
     glfs_t *fs =  NULL;
     int ret = -1;
 
@@ -371,6 +388,17 @@ static glfs_t* tcmu_create_glfs_object(char *config, gluster_server **hosts)
 		goto unref;
 	}
 
+	ret = tcmu_make_absolute_logfile(logfilepath, TCMU_GLFS_LOG_FILENAME);
+	if (ret < 0) {
+		tcmu_err("tcmu_make_absolute_logfile failed: %m\n");
+		goto unref;
+	}
+
+	ret = glfs_set_logging(fs, logfilepath, TCMU_GLFS_DEBUG_LEVEL);
+	if (ret < 0) {
+		tcmu_err("glfs_set_logging failed: %m\n");
+		goto unref;
+	}
 
 	ret = glfs_init(fs);
 	if (ret) {
@@ -378,15 +406,14 @@ static glfs_t* tcmu_create_glfs_object(char *config, gluster_server **hosts)
 		goto unref;
 	}
 
-    return fs;
+	return fs;
 
  unref:
 	gluster_cache_refresh(fs, config);
 
  fail:
-	gluster_free_server(entry);
-
-    return NULL;
+	gluster_free_server(&entry);
+	return NULL;
 }
 
 static char* tcmu_get_path( struct tcmu_device *dev)
@@ -450,7 +477,7 @@ unref:
 done:
 	if (gfd)
 		glfs_close(gfd);
-	gluster_free_server(hosts);
+	gluster_free_server(&hosts);
 
 	return result;
 }
@@ -461,28 +488,12 @@ static int tcmu_glfs_open(struct tcmu_device *dev)
 	int ret = 0;
 	char *config;
 	struct stat st;
-	int block_size;
-	int64_t size;
 
 	gfsp = calloc(1, sizeof(*gfsp));
 	if (!gfsp)
 		return -ENOMEM;
 
 	tcmu_set_dev_private(dev, gfsp);
-
-	block_size = tcmu_get_attribute(dev, "hw_block_size");
-	if (block_size <= 0) {
-		tcmu_err("Could not get hw_block_size setting\n");
-		goto fail;
-	}
-	tcmu_set_dev_block_size(dev, block_size);
-
-	size = tcmu_get_device_size(dev);
-	if (size < 0) {
-		tcmu_err("Could not get device size\n");
-		goto fail;
-	}
-	tcmu_set_dev_num_lbas(dev, size / block_size);
 
 	config = tcmu_get_path(dev);
 	if (!config) {
@@ -523,7 +534,7 @@ unref:
 fail:
 	if (gfsp->gfd)
 		glfs_close(gfsp->gfd);
-	gluster_free_server(gfsp->hosts);
+	gluster_free_server(&gfsp->hosts);
 	free(gfsp);
 
 	return -EIO;
@@ -535,58 +546,126 @@ static void tcmu_glfs_close(struct tcmu_device *dev)
 
 	glfs_close(gfsp->gfd);
 	gluster_cache_refresh(gfsp->fs, tcmu_get_path(dev));
-	gluster_free_server(gfsp->hosts);
+	gluster_free_server(&gfsp->hosts);
 	free(gfsp);
 }
 
-static int tcmu_glfs_read(struct tcmu_device *dev, struct tcmulib_cmd *cmd,
-			  struct iovec *iov, size_t iov_cnt, size_t length,
-			  off_t offset)
+static void glfs_async_cbk(glfs_fd_t *fd, ssize_t ret, void *data)
 {
-        struct glfs_state *state = tcmu_get_dev_private(dev);
-	ssize_t ret;
+	glfs_cbk_cookie *cookie = data;
+	struct tcmu_device *dev = cookie->dev;
+	struct tcmulib_cmd *cmd = cookie->cmd;
+	size_t length = cookie->length;
 
-        ret = glfs_preadv(state->gfd, iov, iov_cnt, offset, SEEK_SET);
-	if (ret != length) {
-		ret =  tcmu_set_sense_data(cmd->sense_buf, MEDIUM_ERROR,
-					   ASC_READ_ERROR, NULL);
+	if (ret < 0 || ret != length) {
+		/* Read/write/flush failed */
+		switch (cookie->op) {
+		case TCMU_GLFS_READ:
+			ret =  tcmu_set_sense_data(cmd->sense_buf, MEDIUM_ERROR,
+			                           ASC_READ_ERROR, NULL);
+			break;
+		case TCMU_GLFS_WRITE:
+		case TCMU_GLFS_FLUSH:
+			ret =  tcmu_set_sense_data(cmd->sense_buf, MEDIUM_ERROR,
+			                           ASC_WRITE_ERROR, NULL);
+			break;
+		}
 	} else {
 		ret = SAM_STAT_GOOD;
 	}
 
 	cmd->done(dev, cmd, ret);
-	return 0;
+	free(cookie);
 }
 
-static int tcmu_glfs_write(struct tcmu_device *dev, struct tcmulib_cmd *cmd,
-			   struct iovec *iov, size_t iov_cnt, size_t length,
-			   off_t offset)
+static int tcmu_glfs_read(struct tcmu_device *dev,
+                          struct tcmulib_cmd *cmd,
+                          struct iovec *iov, size_t iov_cnt,
+                          size_t length, off_t offset)
 {
 	struct glfs_state *state = tcmu_get_dev_private(dev);
-	ssize_t ret;
+	glfs_cbk_cookie *cookie;
 
-	ret = glfs_pwritev(state->gfd, iov, iov_cnt, offset, ALLOWED_BSOFLAGS);
-	if (ret != length) {
-		ret =  tcmu_set_sense_data(cmd->sense_buf, MEDIUM_ERROR,
-					   ASC_WRITE_ERROR, NULL);
-	} else {
-		ret = SAM_STAT_GOOD;
+	cookie = calloc(1, sizeof(*cookie));
+	if (!cookie) {
+		tcmu_err("Could not allocate cookie: %m\n");
+		goto out;
+	}
+	cookie->dev = dev;
+	cookie->cmd = cmd;
+	cookie->length = length;
+	cookie->op = TCMU_GLFS_READ;
+
+	if (glfs_preadv_async(state->gfd, iov, iov_cnt, offset, SEEK_SET,
+	                      glfs_async_cbk, cookie) < 0) {
+		tcmu_err("glfs_preadv_async failed: %m\n");
+		goto out;
 	}
 
-	cmd->done(dev, cmd, ret);
 	return 0;
+
+out:
+	free(cookie);
+	return SAM_STAT_TASK_SET_FULL;
 }
 
-static int tcmu_glfs_flush(struct tcmu_device *dev, struct tcmulib_cmd *cmd)
+static int tcmu_glfs_write(struct tcmu_device *dev,
+                           struct tcmulib_cmd *cmd,
+                           struct iovec *iov, size_t iov_cnt,
+                           size_t length, off_t offset)
 {
 	struct glfs_state *state = tcmu_get_dev_private(dev);
-	int ret = SAM_STAT_GOOD;
+	glfs_cbk_cookie *cookie;
 
-	if (glfs_fdatasync(state->gfd))
-		ret =  tcmu_set_sense_data(cmd->sense_buf, MEDIUM_ERROR,
-					   ASC_WRITE_ERROR, NULL);
-	cmd->done(dev, cmd, ret);
+	cookie = calloc(1, sizeof(*cookie));
+	if (!cookie) {
+		tcmu_err("Could not allocate cookie: %m\n");
+		goto out;
+	}
+	cookie->dev = dev;
+	cookie->cmd = cmd;
+	cookie->length = length;
+	cookie->op = TCMU_GLFS_WRITE;
+
+	if (glfs_pwritev_async(state->gfd, iov, iov_cnt, offset,
+	                       ALLOWED_BSOFLAGS, glfs_async_cbk, cookie) < 0) {
+		tcmu_err("glfs_pwritev_async failed: %m\n");
+		goto out;
+	}
+
 	return 0;
+
+out:
+	free(cookie);
+	return SAM_STAT_TASK_SET_FULL;
+}
+
+static int tcmu_glfs_flush(struct tcmu_device *dev,
+                           struct tcmulib_cmd *cmd)
+{
+	struct glfs_state *state = tcmu_get_dev_private(dev);
+	glfs_cbk_cookie *cookie;
+
+	cookie = calloc(1, sizeof(*cookie));
+	if (!cookie) {
+		tcmu_err("Could not allocate cookie: %m\n");
+		goto out;
+	}
+	cookie->dev = dev;
+	cookie->cmd = cmd;
+	cookie->length = 0;
+	cookie->op = TCMU_GLFS_FLUSH;
+
+	if (glfs_fdatasync_async(state->gfd, glfs_async_cbk, cookie) < 0) {
+		tcmu_err("glfs_fdatasync_async failed: %m\n");
+		goto out;
+	}
+
+	return 0;
+
+out:
+	free(cookie);
+	return SAM_STAT_TASK_SET_FULL;
 }
 
 static const char glfs_cfg_desc[] =
@@ -609,7 +688,6 @@ struct tcmur_handler glfs_handler = {
 	.read 		= tcmu_glfs_read,
 	.write		= tcmu_glfs_write,
 	.flush		= tcmu_glfs_flush,
-	.nr_threads	= 1,
 };
 
 /* Entry point must be named "handler_init". */
