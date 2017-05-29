@@ -551,8 +551,8 @@ static void tcmu_rbd_finish_aio(rbd_completion_t completion,
 }
 
 static int tcmu_rbd_read(struct tcmu_device *dev, struct tcmulib_cmd *cmd,
-			     struct iovec *iov, size_t iov_cnt, size_t length,
-			     off_t offset)
+			 struct iovec *iov, size_t iov_cnt, size_t length,
+			 off_t offset)
 {
 	struct rbd_aio_cb *aio_cb;
 	rbd_completion_t completion;
