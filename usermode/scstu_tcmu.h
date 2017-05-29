@@ -27,6 +27,8 @@ extern int handler_init(void);		    /* Plugin provides this symbol */
 #define  tcmu_dev_dbg(dev, fmt...)	   _tcmu_dev_dbg((dev), ""fmt)
 #define _tcmu_dev_dbg(dev, fmt, args...)    tcmu_dbg("%s:"fmt, tcmu_get_dev_name(dev), ##args)
 
+#define tcmu_make_absolute_logfile(buf, nm) snprintf((buf), PATH_MAX, "/var/log/%s", (nm));
+
 #define SENSE_BUFFERSIZE		    96
 #define TCMU_NOT_HANDLED		    (-1)
 #define TCMU_ASYNC_HANDLED		    (-2)
