@@ -27,6 +27,7 @@ WFLAGS_WARN += -Wbad-function-cast
 WFLAGS_WARN += -Winit-self
 WFLAGS_WARN += -Wnested-externs
 WFLAGS_WARN += -Wswitch-enum
+WFLAGS_WARN += -fstrict-aliasing -Wstrict-aliasing
 
 else		    #### Kernel-resident build ####
 
@@ -49,6 +50,9 @@ else		    #### Kernel-resident build ####
 
 ### SCST has 77 of these (fewer switch statements with multiple cases each)
 # WFLAGS_WARN += -Wswitch-enum
+
+### SCST has one of these, and the kernel header files have eight
+# WFLAGS_WARN += -fstrict-aliasing -Wstrict-aliasing
 
 endif		    #### Kernel-resident build ####
 

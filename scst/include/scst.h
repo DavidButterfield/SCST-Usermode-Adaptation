@@ -2774,8 +2774,14 @@ struct scst_ext_blocker {
 
 	ext_blocker_done_fn_t ext_blocker_done_fn;
 	int ext_blocker_data_len;
-	uint8_t ext_blocker_data[];
+	uint8_t ext_blocker_data[0] __attribute__ ((aligned (__alignof__(void *))));
+	void * ext_blocker_waitq;   /* same address as ext_blocker_data */
 };
+ 
+static char __attribute__((__unused__))        /* assert_static_global() */
+validate_ext_blocker[- /* ext_blocker_data and ext_blocker_waitq must match */
+	(   offsetof(struct scst_ext_blocker, ext_blocker_waitq) !=
+	    offsetof(struct scst_ext_blocker, ext_blocker_data)	    )];
 
 /*
  * SCST device
