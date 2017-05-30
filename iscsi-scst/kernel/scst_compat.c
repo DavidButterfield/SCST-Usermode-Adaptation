@@ -68,11 +68,20 @@ SCST_init(const char *dev, int readonly)
     sys_service_init(NULL/*cfg*/);  /* initialize sys_service provider, sys_thread_current */
     /*** Now we have a memory allocator ***/
 
-    err = UMC_init("/fuse/scst/proc");		/* usermode_lib.c must be first after sys */
-    verify_noerr(err, "UMC_init");
+    /* These signals are received via signalfd, so disable normal delivery */
+    sigset_t fd_sig;
+    sigemptyset(&fd_sig);
+    sigaddset(&fd_sig, SIGINT);
+    sigaddset(&fd_sig, SIGQUIT);
+    err = pthread_sigmask(SIG_BLOCK, &fd_sig, NULL);
+    expect_noerr(err, "pthread_sigmask");
 
+    /* Direct these signals from signalfd to our handlers */
     mte_signal_handler_set(SIGINT, sigint_handler);
     mte_signal_handler_set(SIGQUIT, sigquit_handler);
+
+    err = UMC_init("/fuse/scst/proc");		/* usermode_lib.c must be first after sys */
+    verify_noerr(err, "UMC_init");
 
     err = UMC_INIT_init_scst();			/* scst_main.c */
     verify_noerr(err, "init_scst");
