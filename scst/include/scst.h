@@ -104,6 +104,10 @@
 
 #define SCST_LOCAL_NAME			"scst_local"
 
+#ifndef SCST_USERMODE_NOT
+#define SCST_USERMODE_NOT() /* NOP in kernel-resident build */
+#endif
+
 /*************************************************************
  ** States of command processing state machine. At first,
  ** "active" states, then - "passive" ones. This is to have

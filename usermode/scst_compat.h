@@ -15,6 +15,9 @@
 #define USERMODE_AIO 1
 #endif
 
+#define SCST_USERMODE_NOT() \
+	    BUG_ON("SCST_USERMODE should never reach here -- ", "%s()", __func__)
+
 #include "usermode_lib.h"
 
 #define __compiler_offsetof(TYPE, MEMBER) __builtin_offsetof(TYPE, MEMBER) /* misc.h */

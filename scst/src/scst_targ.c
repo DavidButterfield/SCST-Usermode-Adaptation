@@ -3474,9 +3474,7 @@ static int scst_do_real_exec(struct scst_cmd *cmd)
 		  scsi_dev->host->host_no, scsi_dev->channel, scsi_dev->id,
 		  (u64)scsi_dev->lun);
 
-#ifdef SCST_USERMODE
-        BUG_ON("SCST_USERMODE should never reach this point");
-#endif
+	SCST_USERMODE_NOT();
 
 	scst_set_exec_start(cmd);
 
@@ -6821,9 +6819,7 @@ static int scst_target_reset(struct scst_mgmt_cmd *mcmd)
 		if (dev->scsi_dev == NULL)
 			continue;
 
-#ifdef SCST_USERMODE
-		BUG_ON("SCST_USERMODE should never reach this point");
-#endif
+		SCST_USERMODE_NOT();
 
 		list_for_each_entry(d, &host_devs, tm_dev_list_entry) {
 			if (dev->scsi_dev->host->host_no ==
@@ -6844,9 +6840,7 @@ static int scst_target_reset(struct scst_mgmt_cmd *mcmd)
 	 */
 
 	list_for_each_entry(dev, &host_devs, tm_dev_list_entry) {
-#ifdef SCST_USERMODE
-		BUG_ON("SCST_USERMODE should never reach this point");
-#endif
+		SCST_USERMODE_NOT();
 
 		/* dev->scsi_dev must be non-NULL here */
 		TRACE(TRACE_MGMT, "Resetting host %d bus ",
@@ -6920,9 +6914,7 @@ static int scst_lun_reset(struct scst_mgmt_cmd *mcmd)
 	scst_call_dev_task_mgmt_fn_received(mcmd, tgt_dev);
 
 	if (dev->scsi_dev != NULL) {
-#ifdef SCST_USERMODE
-		BUG_ON("SCST_USERMODE should never reach this point");
-#endif
+		SCST_USERMODE_NOT();
 
 		TRACE(TRACE_MGMT, "Resetting host %d bus ",
 		      dev->scsi_dev->host->host_no);

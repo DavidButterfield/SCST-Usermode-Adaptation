@@ -1308,9 +1308,7 @@ static void scst_do_job_rd(struct iscsi_thread_pool *p)
 	__releases(&rd_lock)
 {
 	TRACE_ENTRY();
-#ifdef SCST_USERMODE
-        sBUG_ON("SCST_USERMODE should never reach this point");
-#endif
+	SCST_USERMODE_NOT();
 	/*
 	 * We delete/add to tail connections to maintain fairness between them.
 	 *
