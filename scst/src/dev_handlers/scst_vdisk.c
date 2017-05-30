@@ -969,7 +969,7 @@ static struct file *vdev_open_fd(const struct scst_vdisk_dev *virt_dev,
 	sBUG_ON(!name);
 
 	if (!virt_dev->dev_active) {
-		TRACE_MGMT_DBG("Skip openning for not active dev %s", virt_dev->dev->virt_name);
+		TRACE_MGMT_DBG("Skip opening for non-active dev %s", virt_dev->dev->virt_name);
 		fd = ERR_PTR(-EMEDIUMTYPE);
 		goto out;
 	}
@@ -3662,7 +3662,6 @@ out:
  * generally, they are checking for different things. Better to keep different
  * things separately.
  */
-__attribute__((__unused__)) /* when compiled with SCST_USERMODE_TCMU */
 static bool vdisk_no_fd_allowed_commands(const struct scst_cmd *cmd)
 {
 	bool res;
@@ -3737,7 +3736,11 @@ static int blockio_exec(struct scst_cmd *cmd)
 		goto err;
 
 #ifndef SCST_USERMODE_TCMU
-	if (unlikely(virt_dev->fd == NULL)) {
+	if (unlikely(virt_dev->fd == NULL))
+#else
+	if (unlikely(virt_dev->aio_private == NULL))
+#endif
+	{
 		if (!vdisk_no_fd_allowed_commands(cmd)) {
 			/*
 			 * We should not get here, unless the user space
@@ -3754,7 +3757,6 @@ static int blockio_exec(struct scst_cmd *cmd)
 			goto err;
 		}
 	}
-#endif
 
 	cmd->dh_priv = &p;
 	res = vdev_do_job(cmd, ops);
