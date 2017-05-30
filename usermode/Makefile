@@ -113,9 +113,6 @@ EXTRA_CFLAGS += -I$(USERMODE_LIB_SRC)
 EXTRA_CFLAGS += -isystem $(USERMODE_LIB_SRC)/kinclude
 EXTRA_CFLAGS += -isystem /usr/include
 
-# XXXXX bletch
-EXTRA_CFLAGS += -isystem /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
-
 #######################  Enable most compiler warnings  ########################
 
 WFLAGS_WARN += -Wall
