@@ -571,9 +571,11 @@ static inline struct ib_pd *ib_alloc_pd_backport(struct ib_device *device)
 
 /* <linux/sched.h> */
 
+#ifndef set_cpus_allowed_ptr
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26) && \
 	(!defined(RHEL_MAJOR) || RHEL_MAJOR -0 < 6)
 #define set_cpus_allowed_ptr(p, new_mask) set_cpus_allowed((p), *(new_mask))
+#endif
 #endif
 
 /* <linux/scatterlist.h> */
