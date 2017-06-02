@@ -173,7 +173,7 @@ export LOCAL_CFLAGS += $(MY_CFLAGS)
 export LOCAL_LIBS += -L/usr/lib/x86_64-linux-gnu -lubsan
 
 export INFINIBAND_ENABLED := false
-export SCST_INC_DIR := $(CURDIR)/../scst/include
+SCST_INC_DIR := $(CURDIR)/../scst/include
 export src := .
 export KVER = __NONE__
 

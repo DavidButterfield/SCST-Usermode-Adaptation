@@ -199,23 +199,21 @@ endif
 
 else	########## SCST_USERMODE ##########
 
-ifndef SCST_INC_DIR
 SCST_INC_DIR := $(CURDIR)/../scst/include
-endif
-
-ifdef MAKE_PASS2
-# PASS2 we are in iscsi-scst/kernel and include the Makefile therein
-include ../kernel/Makefile	    # set the object component variables
-endif
 
 all: include/iscsi_scst_itf_ver.h
 	$(MAKE) -C usr SCST_INC_DIR=$(SCST_INC_DIR)
-	$(MAKE) -C kernel MAKE_PASS2=MAKE_PASS2 SCST_INC_DIR=$(SCST_INC_DIR) -f ../Makefile modules
+	$(MAKE) -C kernel MAKE_PASS2=kernel SCST_INC_DIR=$(SCST_INC_DIR) -f ../Makefile modules
+
+ifdef MAKE_PASS2
+# PASS2 we are in iscsi-scst/kernel and include the Makefile therein
+include Makefile	    # set the object component variables
+endif
 
 modules:    $(obj-m)
 
 $(obj-m):   $(iscsi-scst-objs)
-	$(LD) -r -o $@ $(iscsi-scst-objs)
+	$(LD) -r -o $@ $(<)
 
 %.o: %.c
 	$(CC) -c -o $(@) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
@@ -274,6 +272,7 @@ extraclean: clean
 	rm -f kernel/*.orig kernel/*.rej \
 		kernel/isert-scst/*.orig kernel/isert-scst/*.rej
 	rm -rf conftest/*/*.rej conftest/*/*.orig
+endif
 
 conftest/cm_listen/result-$(KVER).txt:					\
 	conftest/cm_listen/cm_listen.c					\
@@ -366,7 +365,6 @@ conftest/use_pre_440_wr_structure/result-$(KVER).txt:			\
 	conftest/use_pre_440_wr_structure/Makefile
 	echo "$(call run_conftest,use_pre_440_wr_structure,		\
 		-DUSE_PRE_440_WR_STRUCTURE)" >"$@"
-endif
 
 2release:
 	sed -i.aa s/"^E\?XTRA_CFLAGS += \-DCONFIG_SCST_EXTRACHECKS"/"#EXTRA_CFLAGS += \-DCONFIG_SCST_EXTRACHECKS"/ $(KMOD)/Makefile

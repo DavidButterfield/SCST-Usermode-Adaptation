@@ -36,10 +36,7 @@ SHELL=/bin/bash
 DEV_HANDLERS_DIR = dev_handlers
 
 ifneq ($(PATCHLEVEL),)
-
-ifndef	SCST_INC_DIR
 SCST_INC_DIR := $(SUBDIRS)/../include
-endif
 
 obj-m := scst.o
 
@@ -47,13 +44,13 @@ scst-y        += scst_main.o
 scst-y        += scst_targ.o
 scst-y        += scst_lib.o
 #scst-y        += scst_proc.o
+scst-y        += scst_sysfs.o
 scst-y        += scst_mem.o
 scst-y        += scst_debug.o
 scst-y        += scst_pres.o
 scst-y        += scst_no_dlm.o
 scst-y        += scst_tg.o
 scst-y        += scst_copy_mgr.o
-scst-y        += scst_sysfs.o
 ifndef SCST_USERMODE
 scst-y        += scst_dlm.o
 scst-y        += scst_event.o
@@ -156,19 +153,14 @@ uninstall:
 
 else	########## SCST_USERMODE ##########
 
-PATCHLEVEL=UMC
-include Makefile
-
-all scst mods:	$(SCST_INTF_VER_FILE)
-	$(MAKE) modules
-
-modules:    $(obj-m)
+all: $(SCST_INTF_VER_FILE)
+	$(MAKE) PATCHLEVEL=UMC SUBDIRS=$(shell pwd) $(obj-m)
 
 $(obj-m):   $(scst-y)
-	$(LD) -r -o $@ $(scst-y)
+	$(LD) -r -o $@ $(<)
 
 %.o: %.c
-	$(CC) -c -o $(@) -I$(SCST_INC_DIR) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+	$(CC) -c -o $(@) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
 
 install: all
 
@@ -178,9 +170,6 @@ endif	########## SCST_USERMODE ##########
 
 ########## END OUT-OF-TREE RULES ##########
 endif
-
-ifndef BEEN_HERE
-BEEN_HERE = 1
 
 INSTALL_DIR := $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/extra
 INSTALL_DIR_H := $(DESTDIR)$(PREFIX)/include/scst
@@ -277,7 +266,5 @@ enable_proc:
 	sed -i.aa s/"^s\?cst\-y        += scst_sysfs.o"/"#scst\-y        += scst_sysfs.o"/ Makefile
 	grep "^#scst\-y        += scst_sysfs.o" Makefile >/dev/null
 	rm Makefile.aa
-
-endif	# BEEN_HERE
 
 .PHONY: all install uninstall clean extraclean 2release 2debug 2perf disable_proc enable_proc
