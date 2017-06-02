@@ -48,7 +48,7 @@ ifndef MTE_SRC
 export MTE_SRC = $(MY_SRC)/MTE/trunk/src
 endif
 
-# Path to the "emulated Linux KPI 2.6.24" usermode compatibility library
+# Path to the "emulated Linux KPI" usermode compatibility library
 ifndef USERMODE_LIB_SRC
 USERMODE_LIB_SRC = $(MY_SRC)/UMC/trunk/src
 endif
@@ -113,57 +113,11 @@ EXTRA_CFLAGS += -I$(USERMODE_LIB_SRC)
 EXTRA_CFLAGS += -isystem $(USERMODE_LIB_SRC)/kinclude
 EXTRA_CFLAGS += -isystem /usr/include
 
-#######################  Enable most compiler warnings  ########################
-
-WFLAGS_WARN += -Wall
-WFLAGS_WARN += -Wextra
-WFLAGS_WARN += -Wundef
-WFLAGS_WARN += -Wstrict-prototypes
-WFLAGS_WARN += -Wmissing-prototypes
-WFLAGS_WARN += -Wmissing-declarations
-WFLAGS_WARN += -Wjump-misses-init
-WFLAGS_WARN += -Winit-self
-WFLAGS_WARN += -Wlogical-op
-WFLAGS_WARN += -Wbad-function-cast
-WFLAGS_WARN += -Wcast-align
-WFLAGS_WARN += -Wnested-externs
-WFLAGS_WARN += -Wold-style-definition
-WFLAGS_WARN += -Wmissing-include-dirs
-WFLAGS_WARN += -Wfloat-conversion
-
-### Inhibit (or leave unenabled) some warnings for now because they are too noisy today
-                                                # Number of Warnings
-# WFLAGS_WARN += -Wunsafe-loop-optimizations	#    1
-# WFLAGS_WARN += -Wredundant-decls		#    3
-# WFLAGS_WARN += -Wswitch-enum			#   39
-
-### These format warnings all have to do with using a long value with a long long specifier
-# WFLAGS_WARN += -Wformat=2			#   68, all %ll[dux] with [unsigned] long
-WFLAGS_INHIBIT += -Wno-format			#     	(all)
-
-### These are probably not worth much effort, but maybe a check that the code looks OK
-# WFLAGS_WARN += -Wcast-qual			#   71
-# WFLAGS_WARN += -Wswitch-default		#   59
-# WFLAGS_WARN += -Wshadow			#   21
-
-### These are probably not worth any effort
-# WFLAGS_WARN += -Wwrite-strings		#   27	gives strings a "const"
-						#	leading to "discarded-qualifiers"
-WFLAGS_INHIBIT += -Wno-pointer-sign             #   48  (all)
-WFLAGS_INHIBIT += -Wno-sign-compare             #   64	(extra)
-# WFLAGS_WARN += -Wpointer-arith		#   67	(pedandic)
-WFLAGS_INHIBIT += -Wno-unused-parameter		#   73	(extra)
-# WFLAGS_WARN += -Wconversion			#  746
-# WFLAGS_INHIBIT += -Wno-sign-conversion        # 1960	(conversion)
-
-export EXTRA_WFLAGS := $(WFLAGS_WARN) $(WFLAGS_INHIBIT)
-export EXTRA_CFLAGS := $(EXTRA_CFLAGS) $(EXTRA_WFLAGS)
-
-################################################################################
+-include ../Warnfile				# Enable most compiler warnings
 
 SHELL=/bin/bash
 
-MY_CFLAGS += -g -fPIC -D_GNU_SOURCE $(WFLAGS_WARN) $(WFLAGS_INHIBIT)
+MY_CFLAGS += -g -fPIC -D_GNU_SOURCE $(EXTRA_WFLAGS)
 
 # EXTRA_CFLAGS is used in kernel makefiles
 export EXTRA_CFLAGS += $(MY_CFLAGS)
@@ -244,7 +198,7 @@ extraclean:
 
 cscope:
 	@cscope -b -c -R -s$(USERMODE_LIB_SRC) -s$(SCST_SRC)
-	@ctags        -R . $(USERMODE_LIB_SRC)   $(SCST_SRC)
+	@ctags        -R   $(USERMODE_LIB_SRC)   $(SCST_SRC)
 
 ls:
 	@ls     -ad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
