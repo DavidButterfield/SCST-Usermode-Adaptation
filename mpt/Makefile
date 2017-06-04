@@ -60,6 +60,7 @@ endif
 INSTALL_DIR := $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/extra
 LSI_INC_DIR := $(KDIR)/drivers/message/fusion
 EXTRA_CFLAGS += -I$(LSI_INC_DIR)
+EXTRA_CFLAGS += $(EXTRA_WFLAGS)
 
 ifneq ($(PATCHLEVEL),)
 obj-m += mpt_scst.o

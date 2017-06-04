@@ -1,0 +1,68 @@
+# Warnfile:  included from a Makefile to set WFLAGS_WARN for inclusion near the ends of gcc command lines
+#
+# NOTES:
+#   "-Wno-*" options negate noisy subsets of the first "-W" option seen on the same line.
+#   counts mentioned below are of "distinct" warnings -- multiple warnings at the same file/line count as one
+
+### SCST compiles clean (without warning messages) with these warnings enabled.
+#	"-Wformat" warnings are entirely due to conflation of "long" and "long long" in format specifiers.
+WFLAGS_WARN += -Wall	    -Wno-pointer-sign -Wno-format
+WFLAGS_WARN += -Wextra	    -Wno-sign-compare -Wno-unused-parameter
+WFLAGS_WARN += -Wundef
+WFLAGS_WARN += -Wstrict-prototypes
+WFLAGS_WARN += -Wjump-misses-init
+WFLAGS_WARN += -Wlogical-op
+WFLAGS_WARN += -Wcast-align
+WFLAGS_WARN += -Wold-style-definition
+WFLAGS_WARN += -Wmissing-include-dirs
+WFLAGS_WARN += -Wfloat-conversion
+WFLAGS_WARN += -Wmissing-declarations
+WFLAGS_WARN += -Wmissing-prototypes
+
+ifdef SCST_USERMODE #### Usermode-only build ####
+
+### The iSCSI/VDISK subset of SCST code compiled with SCST_USERMODE builds clean with these warnings enabled
+WFLAGS_WARN += -Wunsafe-loop-optimizations
+WFLAGS_WARN += -Wbad-function-cast
+WFLAGS_WARN += -Winit-self
+WFLAGS_WARN += -Wnested-externs
+WFLAGS_WARN += -Wswitch-enum
+
+else		    #### Kernel-resident build ####
+
+### SCST almost compiles clean for this warning
+#	(3 warnings in iser_rdma.c, scst_lib.c, and chap.c) (kernel .h files clean)
+# WFLAGS_WARN += -Wunsafe-loop-optimizations
+
+### SCST almost compiles clean for this warning (4 warnings) (plus 8 warnings in kernel .h files)
+# WFLAGS_WARN += -Wbad-function-cast
+#   common.c:276: warning: cast from function call of type ‘void *’ to non-matching type ‘long unsigned int’ [-Wbad-function-cast]
+#   common.c:487: warning: cast from function call of type ‘void *’ to non-matching type ‘long unsigned int’ [-Wbad-function-cast]
+#   fileio.c:275: warning: cast from function call of type ‘void *’ to non-matching type ‘long unsigned int’ [-Wbad-function-cast]
+#   conn.c:1009: warning: cast from function call of type ‘long unsigned int’ to non-matching type ‘void *’ [-Wbad-function-cast]
+
+### SCST compiles clean for this warning, but the kernel .h files have 5 warnings
+# WFLAGS_WARN += -Winit-self
+
+### EXCEPT __compiletime_assert_*: SCST compiles clean for this warning, but the kernel .h files have 4 warnings
+# WFLAGS_WARN += -Wnested-externs
+
+### SCST has 77 of these (fewer switch statements with multiple cases each)
+# WFLAGS_WARN += -Wswitch-enum
+
+endif		    #### Kernel-resident build ####
+
+
+### These I fixed only a few of which looked unnecessary and probably unintended
+# WFLAGS_WARN += -Wshadow
+
+### These give varying numbers of warnings, probably not worth any effort
+# WFLAGS_WARN += -Wconversion  -Wno-sign-conversion
+# WFLAGS_WARN += -Wswitch-default
+# WFLAGS_WARN += -Wredundant-decls
+# WFLAGS_WARN += -Wformat=2
+# WFLAGS_WARN += -Wcast-qual
+# WFLAGS_WARN += -Wwrite-strings
+# WFLAGS_WARN += -Wpointer-arith
+
+export EXTRA_WFLAGS := $(WFLAGS_WARN)
