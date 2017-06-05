@@ -44,7 +44,16 @@ ifndef SCST_USERMODE
 iscsi-scst-objs	:= $(iscsi-scst-objs) event.o
 else
 iscsi-scst-objs	:= $(iscsi-scst-objs) scst_compat.o
+
+modules:    $(obj-m)
+
+$(obj-m):   $(iscsi-scst-objs)
+	$(LD) -r -o $(@) $(iscsi-scst-objs)
+
+%.o: %.c
+	$(CC) -c -o $(@) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+
+.PHONY: modules
+
 endif
 
-clean extraclean:
-	rm -rf .tmp_versions *.o *.ko .*.o.cmd .*.ko.cmd *.mod.c

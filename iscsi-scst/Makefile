@@ -197,26 +197,17 @@ else
 .PHONY: Module.symvers
 endif
 
+clean:	xclean
+	$(MAKE) -C $(KDIR) SUBDIRS=$(KMOD) $@
+	$(MAKE) -C $(KDIR) SUBDIRS=$(ISERTMOD) $@
+
 else	########## SCST_USERMODE ##########
 
-SCST_INC_DIR := $(CURDIR)/../scst/include
+SCST_INC_DIR := $(shell pwd)/../scst/include
 
 all: include/iscsi_scst_itf_ver.h
-	$(MAKE) -C usr SCST_INC_DIR=$(SCST_INC_DIR)
-	$(MAKE) -C kernel MAKE_PASS2=kernel SCST_INC_DIR=$(SCST_INC_DIR) -f ../Makefile modules
-
-ifdef MAKE_PASS2
-# PASS2 we are in iscsi-scst/kernel and include the Makefile therein
-include Makefile	    # set the object component variables
-endif
-
-modules:    $(obj-m)
-
-$(obj-m):   $(iscsi-scst-objs)
-	$(LD) -r -o $@ $(<)
-
-%.o: %.c
-	$(CC) -c -o $(@) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+	$(MAKE) -C usr    SCST_INC_DIR=$(SCST_INC_DIR)
+	$(MAKE) -C kernel SCST_INC_DIR=$(SCST_INC_DIR) modules
 
 install: all
 	# @install -vD -m 755 usr/iscsi-scstd $(DESTDIR)$(SBINDIR)/iscsi-scstd
@@ -235,14 +226,7 @@ uninstall:
 		$(DESTDIR)$(MANDIR)/man8/iscsi-scst-adm.8 \
 		# $(DESTDIR)$(SBINDIR)/iscsi-scstd \
 
-# Hack our way down to the subdirectories for clean and extraclean
-ifndef SUBDIRS
-KDIR	    :=.
-else
-KDIR	    :=$(SUBDIRS)
-endif
-KMOD	    :=./kernel
-ISERTMOD    :=$(KMOD)/isert-scst
+clean:	xclean
 
 endif	########## SCST_USERMODE ##########
 
@@ -253,16 +237,19 @@ include/iscsi_scst_itf_ver.h: include/iscsi_scst.h
 	echo -n "ISCSI_VERSION_STRING \"_" >>include/iscsi_scst_itf_ver.h
 	echo "`sha1sum include/iscsi_scst.h|awk '{printf $$1}'`\"" >>include/iscsi_scst_itf_ver.h
 
-ifndef MAKE_PASS2
-clean:
-	$(MAKE) -C usr $@
-	$(MAKE) -C $(KDIR) SUBDIRS=$(KMOD) $@
-	$(MAKE) -C $(KDIR) SUBDIRS=$(ISERTMOD) $@
+.PHONY: xclean
+
+xclean:
+	$(MAKE) -C usr clean
 	rm -f kernel/Modules.symvers kernel/Module.symvers \
 		kernel/Module.markers kernel/modules.order \
 		kernel/isert-scst/Modules.symvers kernel/isert-scst/Module.symvers \
 		kernel/isert-scst/Module.markers kernel/isert-scst/modules.order \
 		include/iscsi_scst_itf_ver.h
+	rm -f kernel/*.o kernel/*.ko kernel/.*.o.cmd kernel/.*.ko.cmd kernel/*.mod.c
+	rm -f kernel/isert-scst/*.o kernel/isert-scst/*.ko kernel/isert-scst/.*.o.cmd
+	rm -f kernel/isert-scst/.*.ko.cmd kernel/isert-scst/*.mod.c
+	rm -rf kernel/.tmp_versions kernel/isert-scst/.tmp_versions
 	rm -rf conftest/*/*.ko conftest/*/*.mod.c conftest/*/Module.symvers conftest/*/*.o \
 		conftest/*/*.o.cmd conftest/*/*.ko.cmd conftest/*/.*.o.cmd conftest/*/.*.ko.cmd \
 		conftest/*/*.order conftest/*/.*.o.d conftest/*/.tmp_versions/ \
@@ -272,7 +259,6 @@ extraclean: clean
 	rm -f kernel/*.orig kernel/*.rej \
 		kernel/isert-scst/*.orig kernel/isert-scst/*.rej
 	rm -rf conftest/*/*.rej conftest/*/*.orig
-endif
 
 conftest/cm_listen/result-$(KVER).txt:					\
 	conftest/cm_listen/cm_listen.c					\

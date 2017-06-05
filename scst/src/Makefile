@@ -60,6 +60,18 @@ obj-$(CONFIG_SCST)   += scst.o dev_handlers/
 
 obj-$(BUILD_DEV) += $(DEV_HANDLERS_DIR)/
 
+ifdef	SCST_USERMODE ####################
+
+modules:    $(obj-m)
+
+$(obj-m):   $(scst-y)
+	$(LD) -r -o $(@) $(scst-y)
+
+%.o: %.c
+	$(CC) -c -o $(@) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+
+endif	########## SCST_USERMODE ##########
+
 else
 ######### BEGIN OUT-OF-TREE RULES #########
 
@@ -154,13 +166,7 @@ uninstall:
 else	########## SCST_USERMODE ##########
 
 all: $(SCST_INTF_VER_FILE)
-	$(MAKE) PATCHLEVEL=UMC SUBDIRS=$(shell pwd) $(obj-m)
-
-$(obj-m):   $(scst-y)
-	$(LD) -r -o $@ $(<)
-
-%.o: %.c
-	$(CC) -c -o $(@) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+	$(MAKE) PATCHLEVEL=UMC SUBDIRS=$(shell pwd) modules
 
 install: all
 
