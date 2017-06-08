@@ -63,7 +63,7 @@ endif
 # MY_CFLAGS are used when compiling the kernel code or daemon code
 # EXTRA_CFLAGS are used when compiling the kernel code
 
-MY_CFLAGS += -Og
+# MY_CFLAGS += -Og
 # MY_CFLAGS += -O1
 # MY_CFLAGS += -O2
 # MY_CFLAGS += -O3
@@ -72,6 +72,7 @@ MY_CFLAGS += -Og
 MY_CFLAGS += -DDEBUG
 # MY_CFLAGS += -DNDEBUG
 MY_CFLAGS += -fsanitize=undefined
+# MY_CFLAGS += -fsanitize=undefined -fno-sanitize-recover
 
 # MY_CFLAGS += -DTRACE_TRACE
 # MY_CFLAGS += -DTRACE_VERBOSE
@@ -180,6 +181,14 @@ check_mte:
 %.o: %.c
 	$(CC) -c -o $(@) -I$(SCST_INC_DIR) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
 
+ram.o:	scsi_defs.h scstu_tcmu.h ram.c
+
+rbd.o:	scsi_defs.h scstu_tcmu.h rbd.c
+
+glfs.o:	scsi_defs.h scstu_tcmu.h darray.h glfs.c
+
+qcow.o:	scsi_defs.h scstu_tcmu.h qcow.c qcow.h qcow2.h
+
 # XXX Add 2perf/2debug stuff
 
 ################################################################################
@@ -190,12 +199,14 @@ valgrind:
 
 clean:
 	rm -rf *.o scst.out
-	make -C .. $@
+	$(MAKE) -C .. $@
+	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 
 extraclean:
 	rm -rf *.o scst.out
 	rm -rf tags cscope.out
-	make -C .. $@
+	$(MAKE) -C .. $@
+	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 
 cscope:
 	@cscope -b -c -R -s$(USERMODE_LIB_SRC) -s$(SCST_SRC)
