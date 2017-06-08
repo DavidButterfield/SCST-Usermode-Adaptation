@@ -404,11 +404,16 @@ static int tcmu_rbd_open(struct tcmu_device *dev)
 		goto stop_image;
 	}
 
-	tcmu_size = tcmu_get_dev_num_lbas(dev) * tcmu_get_dev_block_size(dev);
+	assert(tcmu_get_dev_block_size(dev) >= 512);
+	assert(tcmu_get_dev_block_size(dev)%512 == 0);
+
+	tcmu_size = tcmu_get_device_size(dev);
 	if (tcmu_size == 0) {
 		/* Determine dynamically */
 		tcmu_size = rbd_size;
-		tcmu_dev_warn(dev, "%s: size determined as %lu\n", tcmu_size);
+		tcmu_set_dev_num_lbas(dev, tcmu_size / tcmu_get_dev_block_size(dev));
+		tcmu_dev_info(dev, "%s: size determined as %lu\n",
+			      tcmu_get_dev_cfgstring(dev), tcmu_size);
 	} else if (rbd_size != tcmu_size) {
 		tcmu_dev_err(dev, "device size and backing size disagree: device (num LBAs %lld, block size %ld) backing %lld\n",
 			     tcmu_get_dev_num_lbas(dev),
@@ -416,6 +421,8 @@ static int tcmu_rbd_open(struct tcmu_device *dev)
 		ret = -EIO;
 		goto stop_image;
 	}
+
+	assert(rbd_size >= tcmu_size);
 
 	ret = rbd_stat(state->image, &image_info, sizeof(image_info));
 	if (ret < 0) {

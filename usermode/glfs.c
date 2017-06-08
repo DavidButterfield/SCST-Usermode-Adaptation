@@ -14,7 +14,7 @@
  * under the License.
 */
 
-#define _GNU_SOURCE
+#define _GNU_SOURCE 1
 
 #include <errno.h>
 #include <assert.h>

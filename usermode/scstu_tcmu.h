@@ -175,7 +175,6 @@ static inline void
 tcmu_seek_in_iovec(struct iovec * iov, size_t nbytes)
 {
     while (nbytes >= iov->iov_len) {
-	assert(iov->iov_base);
 	nbytes -= iov->iov_len;
 	iov->iov_len = 0;
 	iov++;

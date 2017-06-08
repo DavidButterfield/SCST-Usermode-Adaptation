@@ -158,12 +158,11 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	if (!config || config[0] != '/' || (config[1] == '@'
 						&& config[2] == '\0')) {
 		anon = true;
-		tcmu_dev_warn(td, "No backing file configured -- "
+		tcmu_dev_info(td, "No backing file configured -- "
 			"anonymous memory will be discarded upon close\n");
 	} else {
 		anon = false;
-		tcmu_dev_dbg(td, "%s: tcmu_ram_open config %s\n",
-				 config);
+		tcmu_dev_dbg(td, "tcmu_ram_open config %s\n", config);
 	}
 
 	mmap_flags = MAP_SHARED;
@@ -184,17 +183,23 @@ static int tcmu_ram_open(struct tcmu_device * td)
 		file_size = lseek(mmap_fd, 0, SEEK_END);
 	}
 
-	size = tcmu_get_device_size(td);    /* framework's idea */
-	if (size == 0)
-		size = file_size;	    /* take size from file */
+	assert(tcmu_get_dev_block_size(td) >= 512);
+	assert(tcmu_get_dev_block_size(td)%512 == 0);
 
-	/* XXX needs to be fixed so this never happens */
-	/* (I think that already should be true under a real tcmu-runner) */
+	size = tcmu_get_device_size(td);
 	if (size == 0) {
-		size = 4*1024*1024*1024l;   //XXX Ugh -- default 4 GB RAMdisk
-		tcmu_dev_info(td, "XXX size unspecified, default size=%lld", size);
+		/* Determine dynamically */
+		size = file_size;	    /* take size from file */
+		/* XXX needs to be fixed so this never happens */
+		/* (I think that already should be true under a real tcmu-runner) */
+		if (size == 0) {
+		    size = 4*1024*1024*1024l;   //XXX Ugh -- default 4 GB RAMdisk
+		    tcmu_dev_warn(td, "XXX size unspecified, default size=%lld", size);
+		}
+		tcmu_set_dev_num_lbas(td, size / tcmu_get_dev_block_size(td));
+		tcmu_dev_info(td, "%s: size determined as %lu\n", config, size);
 	}
-
+	
 	if (size > file_size) {
 		tcmu_dev_info(td, "extending backing file size %lld to %lld",
 				  file_size, size);
@@ -204,7 +209,6 @@ static int tcmu_ram_open(struct tcmu_device * td)
 				  size, file_size);
 	}
 
-	assert(size > 0);
 	assert(file_size >= size);
 
 	if (mmap_fd >= 0) {
@@ -248,8 +252,7 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	s->fd = mmap_fd;
 	tcmu_set_dev_private(td, s);
 	
-	tcmu_dev_dbg(td, "config %s, size %lld\n",
-			 tcmu_get_dev_cfgstring(td), s->size);
+	tcmu_dev_dbg(td, "config %s, size %lld\n", config, s->size);
 	return 0;
 
 out_unmap:
