@@ -3198,7 +3198,10 @@ struct scst_tgt_dev {
 	int tgt_dev_dif_guard_format;
 
 	/* How many cmds alive on this dev in this session */
-	atomic_t tgt_dev_cmd_count ____cacheline_aligned_in_smp;
+#ifdef CONFIG_SCST_MEASURE_LATENCY
+	____cacheline_aligned_in_smp
+#endif
+	atomic_t tgt_dev_cmd_count;
 
 	/* ALUA command filter */
 #define SCST_ALUA_CHECK_OK	0
