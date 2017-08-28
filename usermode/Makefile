@@ -17,6 +17,7 @@
   # USERMODE_TCMU_RAM = defined	    # RAM disk
   # USERMODE_TCMU_QEMU = defined    # QEMU QCOW
   # USERMODE_TCMU_GLFS = defined    # Gluster GLFS
+  # USERMODE_TCMU_SPDK = defined    # Intel SPDK
 
 ################################################################################
 
@@ -153,6 +154,13 @@ TCMU_LIBS = qcow.o
 BACKEND_LIBS = -lz
 endif
 
+ifdef USERMODE_TCMU_SPDK
+TCMU_LIBS = spdk.o
+BACKEND_LIBS = -lspdk_event -lspdk_conf -lspdk_trace # for DPDK event loop
+BACKEND_LIBS += -lspdk_nvme -lspdk_env_dpdk -lspdk_log -lspdk_util -lrte_ring -lrte_mempool -lrte_eal -lrt
+EXTRA_CFLAGS += -I$(CURDIR)
+endif
+
 export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
 
 usermode all:	cscope check_mte
@@ -170,8 +178,9 @@ USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/UMC_fuse.
 scst.out:   $(COMPONENTS) $(TCMU_LIBS)
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
-	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) $(USERMODE_LIB) -lmte \
+	$(CC) -o scst.out $(GCCLDFLAGS) $(COMPONENTS) \
 		    $(TCMU_LIBS) $(BACKEND_LIBS) \
+		    $(USERMODE_LIB) -lmte \
 		    -lfuse -lpthread -laio -ldl $(LOCAL_LIBS) -lc
 
 check_mte:
@@ -181,13 +190,15 @@ check_mte:
 %.o: %.c
 	$(CC) -c -o $(@) -I$(SCST_INC_DIR) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
 
-ram.o:	scsi_defs.h scstu_tcmu.h ram.c
+ram.o:	scsi_defs.h scstu_tcmu.h ram.c tcmu-runner.h libtcmu.h
 
-rbd.o:	scsi_defs.h scstu_tcmu.h rbd.c
+rbd.o:	scsi_defs.h scstu_tcmu.h rbd.c tcmu-runner.h libtcmu.h
 
-glfs.o:	scsi_defs.h scstu_tcmu.h darray.h glfs.c
+glfs.o:	scsi_defs.h scstu_tcmu.h darray.h glfs.c tcmu-runner.h libtcmu.h
 
-qcow.o:	scsi_defs.h scstu_tcmu.h qcow.c qcow.h qcow2.h
+qcow.o:	scsi_defs.h scstu_tcmu.h qcow.c qcow.h qcow2.h tcmu-runner.h libtcmu.h
+
+spdk.o: spdk.c spdk/stdinc.h spdk/nvme.h spdk/env.h tcmu-runner.h libtcmu.h
 
 # XXX Add 2perf/2debug stuff
 
