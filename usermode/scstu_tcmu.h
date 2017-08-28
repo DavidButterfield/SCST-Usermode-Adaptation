@@ -136,7 +136,7 @@ tcmu_memcpy_into_iovec(struct iovec * iov, size_t niov, void * buf, size_t len)
 	++iov;
 	--niov;
     }
-    if (len) sys_warning("iovec too small (to satisfy copy len) by %"PRIu64" bytes", len);
+    if (len) tcmu_warn("iovec too small (to satisfy copy len) by %"PRIu64" bytes", len);
     return ret;
 }
 
@@ -153,7 +153,7 @@ tcmu_memcpy_from_iovec(void * buf, size_t len, struct iovec *iov, size_t niov)
 	++iov;
 	--niov;
     }
-    if (len) sys_warning("iovec too small (to satisfy copy len) by %"PRIu64" bytes", len);
+    if (len) tcmu_warn("iovec too small (to satisfy copy len) by %"PRIu64" bytes", len);
     return ret;
 }
 
@@ -182,9 +182,5 @@ tcmu_seek_in_iovec(struct iovec * iov, size_t nbytes)
     iov->iov_len -= nbytes;
     iov->iov_base += nbytes;
 }
-
-// XXX These may be needed in future
-// off_t tcmu_compare_with_iovec(void *mem, struct iovec *iovec, size_t size);
-// void	tcmu_zero_iovec(struct iovec *iovec, size_t niov);
 
 #endif	/* SCSTU_TCMU_H */
