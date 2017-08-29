@@ -5,12 +5,12 @@ An adaptation of the iSCSI-SCST storage server software to run entirely in userm
 
 <SMALL>
 
-Branches:
+Branches:  
  + scst_base  - unmodified source from SCST repository that the two branches below are based on
  + SCST_fixes - generic changes to SCST source (for both usermode and kernel-resident builds) [included in usermode]
  + usermode   - SCST Usermode supports tcmu-runner backstore handlers as well as local files and block devices
 
-Old Branch:
+Old Branch:  
  + master     - the original work described by the paper, supporting local files and block devices for backstore
 
 </SMALL>
