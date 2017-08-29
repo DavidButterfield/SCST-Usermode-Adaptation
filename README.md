@@ -3,6 +3,7 @@
 An adaptation of the iSCSI-SCST storage server software to run entirely in usermode on an unmodified Linux kernel  
 *David A. Butterfield*
 
+<SMALL>
 Branches:
  + scst_base  - unmodified source from SCST repository that the two branches below are based on
  + SCST_fixes - generic changes to SCST source (for both usermode and kernel-resident builds) [included in usermode]
@@ -10,6 +11,7 @@ Branches:
 
 Old Branch:
  + master     - the original work described by the paper, supporting local files and block devices for backstore
+</SMALL>
 
 This project adapts the SCST iSCSI storage server software, which normally
 resides in the Linux kernel, to run entirely in usermode on an unmodified
