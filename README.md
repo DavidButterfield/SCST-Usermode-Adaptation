@@ -3,18 +3,6 @@
 An adaptation of the iSCSI-SCST storage server software to run entirely in usermode on an unmodified Linux kernel  
 *David A. Butterfield*
 
-<SMALL>
-
-Branches:  
- + scst_base  - unmodified source from SCST repository that the two branches below are based on
- + SCST_fixes - generic changes to SCST source (for both usermode and kernel-resident builds) [included in usermode]
- + usermode   - SCST Usermode supports tcmu-runner backstore handlers as well as local files and block devices
-
-Old Branch:  
- + master     - the original work described by the paper, supporting local files and block devices for backstore
-
-</SMALL>
-
 This project adapts the SCST iSCSI storage server software, which normally
 resides in the Linux kernel, to run entirely in usermode on an unmodified
 kernel.  The resulting executable can run as a regular (non-super) user, as long
@@ -40,6 +28,14 @@ set of tcmu-runner backstore handlers.
 ![SCST Usermode Adaptation and tcmu-runner backend driver](https://github.com/DavidButterfield/SCST-Usermode-Adaptation/blob/usermode/usermode/scstu_tcmur.png
  "SCST Usermode Adaptation and tcmu-runner backend driver")
 * * *
+
+Branches:  
+ + scst_base  - unmodified source from SCST repository that the two branches below are based on
+ + SCST_fixes - generic changes to SCST source (for both usermode and kernel-resident builds) [included in usermode]
+ + usermode   - SCST Usermode supports tcmu-runner backstore handlers as well as local files and block devices
+
+Old Branch:  
+ + master     - the original work described by the paper, supporting local files and block devices for backstore
 
 The adaptation uses about 80,000 lines of the SCST source code, a subset
 supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
