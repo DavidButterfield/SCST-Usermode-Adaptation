@@ -3,6 +3,14 @@
 An adaptation of the iSCSI-SCST storage server software to run entirely in usermode on an unmodified Linux kernel  
 *David A. Butterfield*
 
+Branches:
+ + scst_base  - unmodified source from SCST repository that the two branches below are based on
+ + SCST_fixes - generic changes to SCST source (for both usermode and kernel-resident builds) [included in usermode]
+ + usermode   - SCST Usermode supports tcmu-runner backstore handlers as well as local files and block devices
+
+Old Branch:
+ + master     - the original work described by the paper, supporting local files and block devices for backstore
+
 This project adapts the SCST iSCSI storage server software, which normally
 resides in the Linux kernel, to run entirely in usermode on an unmodified
 kernel.  The resulting executable can run as a regular (non-super) user, as long
@@ -11,13 +19,18 @@ and performance study is
 [here](https://davidbutterfield.github.io/SCST-Usermode-Adaptation/docs/SCST_Usermode.html
        "A paper describing the work in detail").
 
-Branches:
- + scst_base  - unmodified source from SCST repository that the two branches below are based on
- + SCST_fixes - generic changes to SCST source (for both usermode and kernel-resident builds) [included in usermode]
- + usermode   - SCST Usermode supports tcmu-runner backstore handlers as well as local files and block devices
+The left side of the diagram below shows the original "in-kernel" configuration
+alongside the adapted "usermode" configuration.
 
-Old Branch:
- + master     - the original work described by the paper, supporting local files and block devices for backstore
+Additional work done since that report implements an "scst_tcmur" interface
+module allowing SCST_Usermode to access backing storage using the same
+interface used by the LIO tcmu-runner facility.  Through this backstore handler
+interface, SCST_Usermode can utilize backing storage implemented by any of
+Ceph/RBD, QEMU/qcow, Gluster/glfs, or Intel/SPDK.
+
+The right side of the diagram below shows the Linux kernel-resident LIO
+implementation alongside the SCST_Usermode implemention, both sharing a common
+set of tcmu-runner backstore handlers.
 
 * * *
 ![SCST Usermode Adaptation and tcmu-runner backend driver](https://github.com/DavidButterfield/SCST-Usermode-Adaptation/blob/usermode/usermode/scstu_tcmur.png
