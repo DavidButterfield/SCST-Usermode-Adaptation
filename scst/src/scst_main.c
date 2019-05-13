@@ -182,11 +182,11 @@ int scst_auto_cm_assignment = true;
 module_param_named(scst_threads, scst_threads, int, S_IRUGO);
 MODULE_PARM_DESC(scst_threads, "SCSI target threads count");
 
-module_param_named(scst_max_cmd_mem, scst_max_cmd_mem, int, S_IRUGO);
+module_param_named(scst_max_cmd_mem, scst_max_cmd_mem, unsigned int, S_IRUGO);
 MODULE_PARM_DESC(scst_max_cmd_mem, "Maximum memory allowed to be consumed by "
 	"all SCSI commands of all devices at any given time in MB");
 
-module_param_named(scst_max_dev_cmd_mem, scst_max_dev_cmd_mem, int, S_IRUGO);
+module_param_named(scst_max_dev_cmd_mem, scst_max_dev_cmd_mem, unsigned int, S_IRUGO);
 MODULE_PARM_DESC(scst_max_dev_cmd_mem, "Maximum memory allowed to be consumed "
 	"by all SCSI commands of a device at any given time in MB");
 
@@ -881,7 +881,7 @@ int scst_get_cmd_counter(void)
 {
 	int i, res = 0;
 
-	for (i = 0; i < (int)ARRAY_SIZE(scst_percpu_infos); i++)
+	for (i = 0; i < nr_cpu_ids; i++)
 		res += atomic_read(&scst_percpu_infos[i].cpu_cmd_count);
 	return res;
 }
@@ -2722,12 +2722,13 @@ static int __init init_scst(void)
 		goto out_destroy_sgv_pool;
 #endif
 
-	for (i = 0; i < (int)ARRAY_SIZE(scst_percpu_infos); i++) {
+	assert(nr_cpu_ids <= NR_CPUS);
+	for (i = 0; i < nr_cpu_ids; i++) {
 		atomic_set(&scst_percpu_infos[i].cpu_cmd_count, 0);
 		spin_lock_init(&scst_percpu_infos[i].tasklet_lock);
 		INIT_LIST_HEAD(&scst_percpu_infos[i].tasklet_cmd_list);
 		tasklet_init(&scst_percpu_infos[i].tasklet,
-			     (void *)scst_cmd_tasklet,
+			     scst_cmd_tasklet,
 			     (unsigned long)&scst_percpu_infos[i]);
 	}
 
@@ -2848,7 +2849,15 @@ out_deinit_threads:
 
 static void __exit exit_scst(void)
 {
+	int i;
 	TRACE_ENTRY();
+
+	assert(nr_cpu_ids <= NR_CPUS);
+	for (i = 0; i < nr_cpu_ids; i++) {
+		assert(atomic_get(&scst_percpu_infos[i].cpu_cmd_count) == 0);
+		assert(list_empty(&scst_percpu_infos[i].tasklet_cmd_list));
+		tasklet_kill(&scst_percpu_infos[i].tasklet);
+	}
 
 	/* ToDo: unregister_cpu_notifier() */
 
