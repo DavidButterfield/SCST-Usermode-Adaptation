@@ -10525,15 +10525,11 @@ static int vdisk_write_proc(char *buffer, char **start, off_t offset,
 				TRACE_DBG("%s", "NULLIO");
 			} else if (!strncmp("BLOCKIO", p, 7)) {
 				p += 7;
-#if defined(SCST_USERMODE) && !defined(SCST_USERMODE_AIO)
-				WARN_ON(SCST_USERMODE, "BLOCKIO ignored");
-#else
 				virt_dev->blockio = 1;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 				res = vdisk_create_bioset(virt_dev);
 				if (res != 0)
 					goto out_free_vdev;
-#endif
 #endif
 				/* Bad hack for anyway going out procfs */
 				virt_dev->vdev_devt = &vdisk_blk_devtype;
