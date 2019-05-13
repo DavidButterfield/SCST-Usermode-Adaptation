@@ -18,16 +18,17 @@
 #define SCST_USERMODE_NOT() \
 	    BUG_ON("SCST_USERMODE should never reach here -- ", "%s()", __func__)
 
+#define KBUILD_MODNAME			"SCST"
+
+#include "UMC_kernel.h"
+#define LINUX_VERSION_CODE		KERNEL_VERSION(2, 6, 24)
 #include "usermode_lib.h"
 
-#define __compiler_offsetof(TYPE, MEMBER) __builtin_offsetof(TYPE, MEMBER) /* misc.h */
-
-/* Invoked by iscsi_scstd.c:main() via kernel_open() / create_and_open_dev() */
-/* Whatever we return from SCST_init gets passed back to us in SCST_ctldev_ioctl(fd_arg) */
-extern int  SCST_init(const char *dev, int readonly);
+extern void SCST_init(void);
+extern void SCST_exit(void);
 
 /* Called from ctldev.c daemon code to issue an "ioctl" to the "kernel" code */
-extern int  SCST_ctldev_ioctl(int fd_arg, unsigned int cmd, unsigned long arg);
+extern int SCST_ctldev_ioctl(int fd_arg, unsigned int cmd, unsigned long arg);
 
 /* Called from iscsi_scstd.c:main() to open a socket to receive events from "kernel" code */
 extern int SCST_nl_open(void);
@@ -43,20 +44,6 @@ extern int SCST_nl_open(void);
 /* iSCSI "between" includes the endpoints */
 #define between(seq1, seq2, seq3)			((seq3) - (seq2) >= (seq1) - (seq2))
 #define before(seq1, seq2)				((int)((seq1) - (seq2)) < 0)
-
-/* XXX crypto_hash not yet translated to usermode */
-struct hash_desc {
-    struct crypto_hash    * tfm;
-    uint32_t		    flags;
-};
-
-#define CRYPTO_ALG_ASYNC				0x00000080
-#define crypto_has_alg(name_str, x, flag)		false
-#define crypto_alloc_hash(type_str, x, alg)		NULL
-#define crypto_hash_init(hash)				E_OK
-#define crypto_hash_update(hash, sg, nbytes)		E_OK
-#define crypto_hash_final(hash, id)			E_OK
-#define crypto_free_hash(tfm)				DO_NOTHING()
 
 /*** UNUSED ***/
 
@@ -75,8 +62,6 @@ struct host {
     struct hostt * hostt;
 };
 
-#define ENABLE_CLUSTERING 1	/* nonzero */
-
 struct scsi_device {
 	void * parent;
 	struct host * host;
@@ -91,32 +76,29 @@ struct scsi_device {
 	unsigned int sector_size;
 };
 
-#define queue_max_hw_sectors(rq)	0xffff //XXX OK?
-#define to_scsi_device(device)		(void *)FATAL(to_scsi_device)
-#define generic_unplug_device(rq)	DO_NOTHING()
-#define QUEUE_FLAG_BIDI			IGNORED
+#define scsi_register_interface(interface)      (_USE(interface), E_OK)
+#define scsi_unregister_interface(interface)    DO_NOTHING()
+#define to_scsi_device(device)			UMC_STUB(to_scsi_device, NULL)
 
-#define ip_compute_csum(data, len)	FATAL(ip_compute_csum)
-#define dlm_new_lockspace(name, namelen, lockspace, flags, lvblen) \
-					FATAL(dlm_new_lockspace)
-#define scsi_execute(dev, cdb, direction, buf, bufsize, sense, timeout, x, y) \
-					FATAL(scsi_execute)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29)
+#define scsi_execute(dev, cdb, direction, buf, bufsize, sense, timeout, x, y, z) UMC_STUB(scsi_execute, 0)
+#else
+#define scsi_execute(dev, cdb, direction, buf, bufsize, sense, timeout, x, y) UMC_STUB(scsi_execute, 0)
+#endif
 
 int scsi_reset_provider(struct scsi_device * sdev, int flags);
 #define SCSI_TRY_RESET_DEVICE		IGNORED
 #define SCSI_TRY_RESET_BUS		IGNORED
+#define SCSI_TRY_RESET_TARGET		IGNORED
+#define QUEUE_FLAG_BIDI			IGNORED
 
-#define BLK_MAX_CDB 16
+#define BLK_MAX_CDB			16
 
-struct ib_device {
-};
-
-#define ib_alloc_pd(device)             FATAL(ib_alloc_pd)
-
-/* Include a few real kernel files */
+/* Include a few real kernel header files */
 #include "UMC/scsi/scsi_proto.h"
 #include "UMC/scsi/scsi_common.h"
 #include "UMC/scsi/scsi.h"
+#include "UMC/scsi/scsi_request.h"
 #include "UMC/scsi/scsi_cmnd.h"
 #include "UMC/scsi/scsi_eh.h"
 
