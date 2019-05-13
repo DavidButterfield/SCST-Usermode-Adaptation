@@ -32,7 +32,6 @@
 
 #ifdef SCST_USERMODE
 #include <pthread.h>
-extern void SCST_exit(void);
 #endif
 
 #include <scst_const.h>
@@ -1079,10 +1078,10 @@ retry:
 		 * thread is expected to exit when this happens.
 		 */
 		log_info("kernel module shutdown -- daemon exits");
-#ifndef SCST_USERMODE			/* daemon shutdown */
+#ifndef SCST_USERMODE		/* daemon shutdown */
 		exit(1);
 #else /* SCST_USERMODE */
-		SCST_exit();		/* shutdown all the "kernel" modules */
+		close_listeners();	/* for valgrind's sake */
 		pthread_exit(NULL);
 #endif /* SCST_USERMODE */
 	}

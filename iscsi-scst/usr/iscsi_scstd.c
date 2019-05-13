@@ -169,6 +169,17 @@ static void create_listen_socket(struct pollfd *array)
 		exit(1);
 }
 
+extern void close_listeners(void);
+void close_listeners(void)
+{
+	int i;
+	for (i = 0; i < LISTEN_MAX; i++)
+		if (poll_array[POLL_LISTEN + i].fd != -1)
+			close(poll_array[POLL_LISTEN + i].fd);
+	close(ipc_fd);
+	close(nl_fd);
+}
+
 static struct connection *alloc_and_init_conn(int fd)
 {
 	struct pollfd *pollfd;
@@ -665,6 +676,11 @@ static void event_loop(void)
 	poll_array[POLL_IPC].events = POLLIN;
 	poll_array[POLL_NL].fd = nl_fd;
 	poll_array[POLL_NL].events = POLLIN;
+
+	for (i = 0; i < LISTEN_MAX; i++) {
+		poll_array[POLL_INCOMING + i].fd = -1;
+		poll_array[POLL_INCOMING + i].events = 0;
+	}
 
 	for (i = 0; i < INCOMING_MAX; i++) {
 		poll_array[POLL_INCOMING + i].fd = -1;

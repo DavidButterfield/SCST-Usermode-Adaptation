@@ -227,6 +227,8 @@ extern int conn_blocked;
 #define LISTEN_MAX		8
 #define INCOMING_MAX		256
 
+extern void close_listeners(void);
+
 enum {
 	POLL_LISTEN,
 	POLL_IPC = POLL_LISTEN + LISTEN_MAX,
