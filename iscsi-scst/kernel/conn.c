@@ -475,7 +475,7 @@ void iscsi_make_conn_rd_active(struct iscsi_conn *conn)
 #else
 		/* Schedule an ASAP "softirq" callback to rd_wakeup_handler */
 		conn->rd_state = ISCSI_CONN_RD_STATE_WAKING;
-		sys_callback_schedule(conn->sock->rd_poll_event_task,
+		sys_callback_schedule(conn->sock->sk->rd_poll_event_task,
 				      iscsi_conn_rd_wakeup_handler,
 				      conn->sock->sk, 0, E_OK, "sock read wakeup");
 #endif

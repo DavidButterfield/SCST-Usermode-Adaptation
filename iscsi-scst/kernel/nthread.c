@@ -1643,7 +1643,7 @@ retry:
 			set_fs(oldfs);
 #else
 			struct msghdr msg = { .msg_iov = iop, .msg_iovlen = count };
-			res = (int)UMC_kernelize64(sendmsg(file->fd, &msg, flags | (sg ? MSG_MORE : 0)));
+			res = (int)UMC_kernelize64(sendmsg(file->inode->UMC_fd, &msg, flags | (sg ? MSG_MORE : 0)));
 #endif
 			}
 			TRACE_WRITE("sid %#Lx, cid %u, res %d, iov_len %zd",
