@@ -45,7 +45,8 @@
 #include <string.h>
 #include <sys/syscall.h>
 #include <assert.h>
-
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <scsi/scsi.h>
 
 #include <sys/mman.h>
@@ -148,8 +149,8 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	char *config;
 	bool anon;
 	int err, mmap_flags, mmap_fd;
-	size_t file_size;
-	ssize_t size;
+	ssize_t file_size;
+	ssize_t sys_size;
 	void *ram;
 	state_t s;
 
@@ -183,33 +184,38 @@ static int tcmu_ram_open(struct tcmu_device * td)
 		file_size = lseek(mmap_fd, 0, SEEK_END);
 	}
 
-	assert(tcmu_get_dev_block_size(td) >= 512);
-	assert(tcmu_get_dev_block_size(td)%512 == 0);
+	tcmu_set_dev_block_size(td, 4096);
+	sys_size = tcmu_get_device_size(td);
 
-	size = tcmu_get_device_size(td);
-	if (size == 0) {
-		/* Determine dynamically */
-		size = file_size;	    /* take size from file */
-		/* XXX needs to be fixed so this never happens */
-		/* (I think that already should be true under a real tcmu-runner) */
-		if (size == 0) {
-		    size = 4*1024*1024*1024l;   //XXX Ugh -- default 4 GB RAMdisk
-		    tcmu_dev_warn(td, "XXX size unspecified, default size=%lld", size);
+	tcmu_dev_info(td, "%s sys_size=%lld file_size=%lld", config, sys_size, file_size);
+
+	if (file_size == 0) {
+		if (sys_size == 0) {
+			file_size = 1*1024*1024*1024l;   //XXX Ugh -- default 1 GB RAMdisk
+			tcmu_dev_warn(td, "%s size unspecified, default size=%lld",
+					config, file_size);
+		} else {
+			file_size = sys_size;
 		}
-		tcmu_set_dev_num_lbas(td, size / tcmu_get_dev_block_size(td));
-		tcmu_dev_info(td, "%s: size determined as %lu\n", config, size);
-	}
-	
-	if (size > file_size) {
-		tcmu_dev_info(td, "extending backing file size %lld to %lld",
-				  file_size, size);
-		file_size = size;
-	} else if (size < file_size) {
-		tcmu_dev_warn(td, "%s space unused: size %lld < file_size %lld",
-				  size, file_size);
+		tcmu_dev_warn(td, "%s file is empty, using size=%lld", config, file_size);
 	}
 
-	assert(file_size >= size);
+	if (sys_size > file_size) {
+		/* XXX or fail instead? */
+		tcmu_dev_info(td, "%s extending backing file size %lld to sys_size %lld",
+				  config, file_size, sys_size);
+		file_size = sys_size;
+		lseek(mmap_fd, file_size, SEEK_SET);
+		write(mmap_fd, "X", 1);
+	} else if (sys_size < file_size) {
+		tcmu_dev_warn(td, "%s space unused: sys_size %lld < file_size %lld",
+				  config, sys_size, file_size);
+	}
+
+	tcmu_set_dev_num_lbas(td, file_size / tcmu_get_dev_block_size(td));
+	tcmu_dev_info(td, "%s: size determined as %lu\n", config, file_size);
+
+	assert(file_size >= sys_size);
 
 	if (mmap_fd >= 0) {
 		if (ftruncate(mmap_fd, file_size) < 0) {
@@ -224,16 +230,16 @@ static int tcmu_ram_open(struct tcmu_device * td)
 		}
 	}
 
-	ram = mmap(NULL, size, PROT_READ|PROT_WRITE, mmap_flags, mmap_fd, 0);
+	ram = mmap(NULL, file_size, PROT_READ|PROT_WRITE, mmap_flags, mmap_fd, 0);
 	if (ram == MAP_FAILED) {
 		err = -errno;
 		tcmu_dev_err(td, "%s: cannot mmap size=%lld (fd=%d) (%d -- %s)\n",
-				 config, size, mmap_fd, err, strerror(-err));
+				 config, file_size, mmap_fd, err, strerror(-err));
 		goto out_close;
 	}
 
 	if (do_mlock(td)) {
-		if (mlock2(ram, size, MLOCK_ONFAULT) < 0) {
+		if (mlock2(ram, file_size, MLOCK_ONFAULT) < 0) {
 			err = -errno;
 			tcmu_dev_warn(td, "%s: mlock (%d -- %s)\n",
 					  config, err, strerror(-err));
@@ -248,7 +254,7 @@ static int tcmu_ram_open(struct tcmu_device * td)
 		goto out_unmap;
 	}
 	s->ram = ram;
-	s->size = size;
+	s->size = file_size;
 	s->fd = mmap_fd;
 	tcmu_set_dev_private(td, s);
 	
@@ -256,7 +262,7 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	return 0;
 
 out_unmap:
-	munmap(ram, size);
+	munmap(ram, file_size);
 out_close:
 	close(mmap_fd);
 out_fail:
