@@ -21,6 +21,7 @@
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
 #include <linux/kernel.h>
+#include <linux/rbtree.h>
 
 #ifndef pr_fmt
 #define pr_fmt(fmt)	KBUILD_MODNAME ": " fmt
@@ -119,6 +120,8 @@ static inline int drbd_blkdev_put(struct block_device *bdev, fmode_t mode)
 #define blkdev_put(b, m)	drbd_blkdev_put(b, m)
 #endif
 
+typedef u8 __bitwise blk_status_t;
+
 #ifdef COMPAT_HAVE_BIO_BI_STATUS
 static inline void drbd_bio_endio(struct bio *bio, blk_status_t status)
 {
@@ -133,26 +136,26 @@ static inline void drbd_bio_endio(struct bio *bio, blk_status_t status)
 #else
 
 #ifndef BLK_STS_OK
-typedef u8 __bitwise blk_status_t;
 #define BLK_STS_OK 0
 #define BLK_STS_NOTSUPP		((__force blk_status_t)1)
 #define BLK_STS_MEDIUM		((__force blk_status_t)7)
 #define BLK_STS_RESOURCE	((__force blk_status_t)9)
 #define BLK_STS_IOERR		((__force blk_status_t)10)
 #endif
-static int blk_status_to_errno(blk_status_t status)
+
+static inline int blk_status_to_errno(blk_status_t status)
 {
 	return  status == BLK_STS_OK ? 0 :
 		status == BLK_STS_RESOURCE ? -ENOMEM :
 		status == BLK_STS_NOTSUPP ? -EOPNOTSUPP :
 		-EIO;
 }
-static inline blk_status_t errno_to_blk_status(int errno)
+static inline blk_status_t errno_to_blk_status(int err)
 {
 	blk_status_t status =
-		errno == 0 ? BLK_STS_OK :
-		errno == -ENOMEM ? BLK_STS_RESOURCE :
-		errno == -EOPNOTSUPP ? BLK_STS_NOTSUPP :
+		err == 0 ? BLK_STS_OK :
+		err == -ENOMEM ? BLK_STS_RESOURCE :
+		err == -EOPNOTSUPP ? BLK_STS_NOTSUPP :
 		BLK_STS_IOERR;
 
 	return status;
@@ -601,8 +604,8 @@ static inline void blk_queue_write_cache(struct request_queue *q, bool enabled, 
 } while(0)
 #define adjust_ra_pages(q, b) _adjust_ra_pages((q)->backing_dev_info->ra_pages, (b)->backing_dev_info->ra_pages)
 #else /* < v4.11 */
-#define bdi_rw_congested(BDI) bdi_rw_congested(&BDI)
-#define bdi_congested(BDI, BDI_BITS) bdi_congested(&BDI, (BDI_BITS))
+#define bdi_rw_congested(BDI) bdi_rw_congested(&(BDI))
+#define bdi_congested(BDI, BDI_BITS) bdi_congested(&(BDI), (BDI_BITS))
 #define bdi_from_device(device) (&device->ldev->backing_bdev->bd_disk->queue->backing_dev_info)
 #define init_bdev_info(bdev_info, drbd_congested, device) do { \
 	(bdev_info).congested_fn = drbd_congested; \
