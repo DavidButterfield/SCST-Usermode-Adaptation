@@ -1,0 +1,69 @@
+# XXX HACKUP XXXXXX
+GITHEAD := ABC
+GITDIFF := XYZ
+
+OBJS =	drbd_actlog.o drbd_bitmap.o drbd_main.o drbd_nl.o \
+	drbd_receiver.o drbd_req.o drbd_sender.o drbd_state.o
+
+OBJS2 =	drbd_buildtag.o drbd_interval.o drbd_nla.o drbd_proc.o \
+	drbd_strings.o drbd_transport.o lru_cache.o
+
+OBJS_COMPAT += drbd-kernel-compat/nsecs_to_jiffies.o 
+OBJS_COMPAT += drbd-kernel-compat/blkdev_issue_zeroout.o
+OBJS_COMPAT += drbd-kernel-compat/drbd_wrappers.o
+# OBJS_COMPAT += drbd-kernel-compat/idr.o
+
+OBJS_NO = drbd_debugfs.o kref_debug.o drbd_kref_debug.o
+
+%.o: %.c 
+	$(CC) -c -o $(@) -I../drbd-headers -I. -Idrbd-kernel-compat $(CFLAGS) $(EXTRA_CFLAGS) $(<)
+
+.PHONY: all clean extraclean dep
+
+all:	drbd.o
+
+drbd.o:	$(OBJS) $(OBJS2) $(OBJS_COMPAT) drbd_transport_tcp.o
+	ld -r $(OBJS) $(OBJS2) $(OBJS_COMPAT) drbd_transport_tcp.o -o $(@)
+
+clean:
+	rm -f *.[oas] .*.d .depend
+	rm -f drbd-kernel-compat/*.[oas]
+
+extraclean: clean
+
+.PHONY: .drbd_git_revision
+.drbd_git_revision:
+	@echo GIT-hash: $(GITHEAD)$(GITDIFF) > $@
+
+
+##### Copied from drbd/Kbuild #####
+SHELL=/bin/bash
+
+drbd_buildtag.c: $(addprefix $(obj)/,$(filter-out drbd_buildtag.o,$(drbd-y)))
+	@$(echo) '  GEN     $@ $(echo-why)'					\
+	@set -e; exec > $@.new;							\
+	echo -e "/* automatically generated. DO NOT EDIT. */";			\
+	echo -e "#include <linux/drbd.h>";					\
+	echo -e "#include <linux/drbd_config.h>";				\
+	echo -e "const char *drbd_buildtag(void)\n{";				\
+	if test -e $(src)/../.git &&						\
+	   GITHEAD=$$(cd $(src) && git rev-parse HEAD); then			\
+		GITDIFF=$$(cd $(src)/.. && git diff --name-only HEAD |		\
+			tr -s '\t\n' '  ' |					\
+			sed -e 's/^/ /;s/ *$$//');				\
+		echo -e "\treturn \"GIT-hash: $$GITHEAD$$GITDIFF\"";		\
+	elif test -e $(src)/.drbd_git_revision ; then				\
+		echo -e "\treturn \"$$(cat $(src)/.drbd_git_revision)\"";	\
+	elif test -e $@ ; then							\
+		grep return $@ ;						\
+	else									\
+		echo >&2 "Your DRBD source tree is broken. Unpack again.";      \
+		exit 1;								\
+	fi ;									\
+	if [ -z "${WANT_DRBD_REPRODUCIBLE_BUILD}" ] || [ -z "${SOURCE_DATE_EPOCH}" ] ; then	\
+		buildinfo="build by $$USER@$$HOSTNAME, `date "+%F %T"`" ;			\
+	else 											\
+		buildinfo="reproducible build, `date -u -d@${SOURCE_DATE_EPOCH} "+%F %T"`" ; 	\
+	fi ; 											\
+	echo -e "\t\t\" $$buildinfo\";\n}";							\
+	mv -f $@.new $@
