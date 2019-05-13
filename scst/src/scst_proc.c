@@ -48,7 +48,7 @@
  * PDE() macros internal to procfs"
  * (c30480b92cf497aa3b463367a82f1c2fdc5c46e9).
  */
-static inline void *PDE_DATA(const struct inode *inode)
+static inline void *PDE_DATA(struct inode *inode)
 {
 	return PROC_I(inode)->pde->data;
 }
