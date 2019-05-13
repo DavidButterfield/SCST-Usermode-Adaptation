@@ -104,11 +104,11 @@ module_param_named(fault_devs, drbd_fault_devs, int, 0644);
 #endif
 
 /* module parameters we can keep static */
-static bool drbd_disable_sendpage;
-static bool drbd_allow_oos; /* allow_open_on_secondary */
+static int drbd_disable_sendpage;
+static int drbd_allow_oos; /* allow_open_on_secondary */
 MODULE_PARM_DESC(allow_oos, "DONT USE!");
-module_param_named(disable_sendpage, drbd_disable_sendpage, bool, 0644);
-module_param_named(allow_oos, drbd_allow_oos, bool, 0);
+module_param_named(disable_sendpage, drbd_disable_sendpage, int, 0644);
+module_param_named(allow_oos, drbd_allow_oos, int, 0);
 
 /* module parameters shared with defaults */
 unsigned int drbd_minor_count = DRBD_MINOR_COUNT_DEF;
@@ -144,7 +144,7 @@ const struct kernel_param_ops param_ops_drbd_protocol_version = {
 #endif
 
 unsigned int drbd_protocol_version_min = PRO_VERSION_MIN;
-module_param_named(protocol_version_min, drbd_protocol_version_min, drbd_protocol_version, 0644);
+module_param_named(protocol_version_min, drbd_protocol_version_min, unsigned int, 0644);
 
 
 /* in 2.6.x, our device mapping and config info contains our virtual gendisks
@@ -1829,7 +1829,7 @@ static void dcbp_set_start(struct p_compressed_bm *p, int set)
 static void dcbp_set_pad_bits(struct p_compressed_bm *p, int n)
 {
 	BUG_ON(n & ~0x7);
-	p->encoding = (p->encoding & (~0x7 << 4)) | (n << 4);
+	p->encoding = (p->encoding & ((unsigned)~0x7 << 4)) | (n << 4);
 }
 
 static int fill_bitmap_rle_bits(struct drbd_peer_device *peer_device,

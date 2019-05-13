@@ -19,7 +19,7 @@ sector_t interval_end(struct rb_node *node)
  * may have changed.
  */
 static void
-update_interval_end(struct rb_node *node, void *__unused)
+update_interval_end(struct rb_node *node, void *not_used)
 {
 	struct drbd_interval *this = rb_entry(node, struct drbd_interval, rb);
 	sector_t end;

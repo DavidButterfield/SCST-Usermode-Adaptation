@@ -1690,7 +1690,7 @@ next_bio:
 		bio->bi_next = NULL;
 
 		/* strip off REQ_UNPLUG unless it is the last bio */
-		if (bios && DRBD_REQ_UNPLUG)
+		if (bios && (DRBD_REQ_UNPLUG != 0))
 			bio->bi_opf &= ~DRBD_REQ_UNPLUG;
 		drbd_generic_make_request(device, fault_type, bio);
 

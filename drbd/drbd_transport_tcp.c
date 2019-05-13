@@ -481,7 +481,9 @@ static int dtt_try_connect(struct drbd_transport *transport, struct dtt_path *pa
 		case -ETIMEDOUT:
 		case -EINPROGRESS:
 		case -EINTR:
+#if ERESTARTSYS != EINTR
 		case -ERESTARTSYS:
+#endif
 		case -ECONNREFUSED:
 		case -ECONNRESET:
 		case -ENETUNREACH:

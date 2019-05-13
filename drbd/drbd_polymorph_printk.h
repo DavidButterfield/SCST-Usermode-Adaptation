@@ -159,6 +159,7 @@ void drbd_dyn_dbg_with_wrong_object_type(void);
  *
  * Unlike the assert macro, this macro returns a boolean result.
  */
+#undef expect
 #define expect(x, exp) ({							\
 		bool _bool = (exp);						\
 		if (!_bool && drbd_ratelimit())					\

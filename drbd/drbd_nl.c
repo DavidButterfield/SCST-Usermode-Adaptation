@@ -694,10 +694,19 @@ static int drbd_khelper(struct drbd_device *device, struct drbd_connection *conn
 	magic_printk(KERN_INFO, "helper command: %s %s\n", drbd_usermode_helper, cmd);
 	notify_helper(NOTIFY_CALL, device, connection, cmd, 0);
 	ret = call_usermodehelper(drbd_usermode_helper, argv, envp, UMH_WAIT_PROC);
-	magic_printk(ret ? KERN_WARNING : KERN_INFO,
+
+	if (ret) {
+		magic_printk(KERN_WARNING,
 		     "helper command: %s %s exit code %u (0x%x)\n",
 		     drbd_usermode_helper, cmd,
 		     (ret >> 8) & 0xff, ret);
+	} else {
+		magic_printk(KERN_INFO,
+		     "helper command: %s %s exit code %u (0x%x)\n",
+		     drbd_usermode_helper, cmd,
+		     (ret >> 8) & 0xff, ret);
+	}
+
 	notify_helper(NOTIFY_RESPONSE, device, connection, cmd, ret);
 
 	if (current == resource->worker.task)
