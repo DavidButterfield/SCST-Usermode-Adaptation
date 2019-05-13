@@ -39,6 +39,33 @@
 #define spin_unlock(lock)	    //XXXXX
 #endif
 
+/* Hack up some locks and atomics to use */
+typedef pthread_mutex_t spinlock_t;
+#undef spin_lock_init
+#define spin_lock_init(lock)		pthread_mutex_init(lock, NULL)
+#define spin_lock(lock)			do { } while (pthread_mutex_trylock(lock))
+#define spin_unlock(lock)		pthread_mutex_unlock(lock)
+
+#define __barrier()                     __sync_synchronize()
+
+typedef struct { int32_t volatile i; }  atomic_t;   /* must be signed */
+
+#define ATOMIC_INIT(n)                  ((atomic_t){ .i = (n) })
+					//XXX Figure out which of these barriers isn't needed
+#define atomic_get(ptr)                 ({ __barrier(); int32_t __ret = (ptr)->i; __barrier(); __ret; })
+
+#define atomic_add_return(n, ptr)       __sync_add_and_fetch(&(ptr)->i, (n))
+#define atomic_sub_return(n, ptr)       __sync_sub_and_fetch(&(ptr)->i, (n))
+#define atomic_inc_return(ptr)          atomic_add(1, (ptr))
+#define atomic_dec_return(ptr)          atomic_sub(1, (ptr))
+
+#define atomic_add(n, ptr)              atomic_add_return((n), (ptr))
+#define atomic_sub(n, ptr)              atomic_sub_return((n), (ptr))
+#define atomic_inc(ptr)                 atomic_inc_return(ptr)
+#define atomic_dec(ptr)                 atomic_dec_return(ptr)
+
+#endif
+
 /* Each NVMe controller has a set of namespaces */
 struct ctrlr_entry {
     struct spdk_nvme_ctrlr        * ctrlr;	/* SPDK controller data */
