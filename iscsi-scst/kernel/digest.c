@@ -96,6 +96,8 @@ static __be32 digest_header(struct iscsi_pdu *pdu)
 	unsigned int nbytes = sizeof(struct iscsi_hdr);
 	int asize = (pdu->ahssize + 3) & -4;
 
+	SCST_USERMODE_NOT();
+
 	sg_init_table(sg, 2);
 
 	sg_set_buf(&sg[0], &pdu->bhs, nbytes);
