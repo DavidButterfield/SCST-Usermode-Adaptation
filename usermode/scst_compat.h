@@ -95,10 +95,7 @@ int scsi_reset_provider(struct scsi_device * sdev, int flags);
 #define BLK_MAX_CDB			16
 
 /* Include a few real kernel header files */
-#include "UMC/scsi/scsi_proto.h"
-#include "UMC/scsi/scsi_common.h"
 #include "UMC/scsi/scsi.h"
-#include "UMC/scsi/scsi_request.h"
 #include "UMC/scsi/scsi_cmnd.h"
 #include "UMC/scsi/scsi_eh.h"
 

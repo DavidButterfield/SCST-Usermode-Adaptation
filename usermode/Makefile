@@ -270,7 +270,7 @@ COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst
 	      $(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o \
 	      $(DRBD_SRC)/drbd/drbd.o
 
-USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/UMC_fuse.o
+USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/UMC_fuse.o $(USERMODE_LIB_SRC)/UMC_genl.o
 
 scst.out:   $(TCMU_LIBS) UMC_app.o drbd_compat.o #XXX $(COMPONENTS) made by 'all' target
 	# Gather up all the objects we need from SCST kernel and daemon code;

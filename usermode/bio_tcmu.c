@@ -359,15 +359,16 @@ tcmu_make_request(struct request_queue *rq_unused, struct bio * bio)
 
     uint32_t iovn = 0;
     size_t aio_op_len = 0;
-    uint8_t * segaddr = bio->bi_io_vec[bio->bi_idx].bv_page->vaddr + bio->bi_io_vec[bio->bi_idx].bv_offset;
-    size_t seglen = bio->bi_io_vec[bio->bi_idx].bv_len;   /* first segment of I/O buffer */
 
     /* Translate the segments of the (scattered) I/O buffer into iovec entries,
      * coalescing adjacent buffer segments.  (It is OK that coalescing means we
      * might not use all of the iovec array)
      */
-    while (seglen > 0) {
-	assert_lt(bio->bi_idx, bio->bi_vcnt);
+    while (bio->bi_idx < bio->bi_vcnt) {
+	size_t seglen = bio->bi_io_vec[bio->bi_idx].bv_len;	    /* get next sg segment */
+	uint8_t * segaddr = bio->bi_io_vec[bio->bi_idx].bv_page->vaddr
+				+ bio->bi_io_vec[bio->bi_idx].bv_offset;
+
 	if (iovn > 0 && segaddr == op->iovec[iovn-1].iov_base + op->iovec[iovn-1].iov_len) {
 	    op->iovec[iovn-1].iov_len += seglen;    /* coalesce with previous entry */
 	} else {
@@ -377,11 +378,7 @@ tcmu_make_request(struct request_queue *rq_unused, struct bio * bio)
 	    ++iovn;
 	}
 	aio_op_len += seglen;
-	bio->bi_idx++;
-	seglen = bio->bi_io_vec[bio->bi_idx].bv_len;	    /* get next sg segment */
-	if (seglen)
-	    segaddr = bio->bi_io_vec[bio->bi_idx].bv_page->vaddr
-				+ bio->bi_io_vec[bio->bi_idx].bv_offset;
+	++bio->bi_idx;
     }
 
     expect_eq(aio_op_len, bio->bi_size);
@@ -465,24 +462,26 @@ bio_tcmu_create(int minor, const char * cfg)
 
     TRACE_ENTRY();
 
-    char * name = kasprintf(IGNORED, "/UMCdev/tcmu%03u", minor);
+    char name[sizeof(disk->disk_name)];
+    memset(name, 0, sizeof(name));
+    snprintf(name, sizeof(name), "tcmu%03u", minor);
 
     if (bio_tcmu_minors[minor]) {
 	err = -EBUSY;
-	goto out_free_name;
+	goto out;
     }
 
     if (!cfg || !strlen(cfg)) {
 	tcmu_err("%s: empty cfg string\n", name);
 	err = -EINVAL;
-	goto out_free_name;
+	goto out;
     }
 
     if (strlen(cfg) >= sizeof(tcmu_dev->cfgstring)) {
 	tcmu_err("%s: cfg string too long (%u/%u): '%s'\n",
 		 name, strlen(cfg), sizeof(tcmu_dev->cfgstring), cfg);
 	err = -EINVAL;
-	goto out_free_name;
+	goto out;
     }
 
     tcmu_bdev = record_alloc(tcmu_bdev);
@@ -491,17 +490,16 @@ bio_tcmu_create(int minor, const char * cfg)
     disk->fops = &bio_tcmu_fops;
     disk->major = bio_tcmu_major;
     disk->first_minor = minor;
-    disk->disk_name = name;
+    memcpy(disk->disk_name, name, sizeof(disk->disk_name));
     disk->private_data = tcmu_bdev;
 
     disk->queue = blk_alloc_queue(IGNORED);
     disk->queue->make_request_fn = tcmu_make_request;
     disk->queue->queuedata = tcmu_bdev;
-    dev = device_alloc();
-    disk_to_dev(disk) = dev;	/* must be before add_disk */
 
     add_disk(disk);		/* sets dev->devt */
 
+    dev = disk_to_dev(disk);
     bdev = bdget(dev->devt);	/* must be after add_disk */
     bdev->bd_contains = bdev;
     bdev->bd_disk = disk;
@@ -616,10 +614,6 @@ fail_free:
     del_gendisk(disk);	/* frees dev and name */
     bdput(bdev);
     record_free(tcmu_bdev);
-    goto out;
-
-out_free_name:
-    vfree(name);
     goto out;
 }
 
