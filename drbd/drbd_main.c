@@ -3839,6 +3839,10 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 	}
 
 	add_disk(disk);
+#if 1
+	disk_to_dev(disk)->this_bdev = device->this_bdev;	    //XXXXX
+	disk_to_dev(disk)->this_bdev->bd_disk = disk;		    //XXXXX
+#endif
 	device->have_quorum[OLD] =
 	device->have_quorum[NEW] =
 		(resource->res_opts.quorum == QOU_OFF);
@@ -5453,22 +5457,28 @@ int drbd_wait_misc(struct drbd_device *device, struct drbd_peer_device *peer_dev
 #endif
 void lock_all_resources(void)
 {
+#if 0
 	struct drbd_resource *resource;
 	int __maybe_unused i = 0;
+#endif
 
 	mutex_lock(&resources_mutex);
+#if 0
 	local_irq_disable();
 	for_each_resource(resource, &drbd_resources)
-		spin_lock_nested(&resource->req_lock, i++);
+		spin_lock_nested(&resource->req_lock, i++); //XXXXX
+#endif
 }
 
 void unlock_all_resources(void)
 {
+#if 0
 	struct drbd_resource *resource;
 
 	for_each_resource(resource, &drbd_resources)
 		spin_unlock(&resource->req_lock);
 	local_irq_enable();
+#endif
 	mutex_unlock(&resources_mutex);
 }
 

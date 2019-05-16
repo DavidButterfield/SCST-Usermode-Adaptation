@@ -269,6 +269,7 @@ extern u64 directly_connected_nodes(struct drbd_resource *, enum which_state);
 
 /* sequence arithmetic for dagtag (data generation tag) sector numbers.
  * dagtag_newer_eq: true, if a is newer than b */
+//XXX is this right when a=0 and b=0x8000000000000000 ?
 #define dagtag_newer_eq(a,b)      \
 	(typecheck(u64, a) && \
 	 typecheck(u64, b) && \

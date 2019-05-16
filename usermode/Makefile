@@ -258,7 +258,7 @@ usermode all:	cscope check_mte
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/iscsi-scst all			    # iSCSI-SCST
 	$(MAKE) drbd
 	$(MAKE) scst.out
-	$(MAKE) drbd-utils
+	# $(MAKE) drbd-utils
 
 drbd-utils:
 	EXTRA_CFLAGS="$(MY_CFLAGS) -DDO_NODE_PREEXISTS_CHECK=0 -DPROC_PREFIX=\\\"/fuse/scst\\\"" $(MAKE) -C $(DRBD_UTIL_SRC) all

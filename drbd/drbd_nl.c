@@ -211,6 +211,10 @@ static int drbd_adm_prepare(struct drbd_config_context *adm_ctx,
 
 	memset(adm_ctx, 0, sizeof(*adm_ctx));
 
+#ifdef BOGUS
+	//XXX You cannot find the ops for a command number by indexing this array.
+	//XXX The array is unordered and packed.  You must search the list of ops.
+	//XXX See genl_get_cmd().
 	/*
 	 * genl_rcv_msg() only checks if commands with the GENL_ADMIN_PERM flag
 	 * set have CAP_NET_ADMIN; we also require CAP_SYS_ADMIN for
@@ -219,6 +223,7 @@ static int drbd_adm_prepare(struct drbd_config_context *adm_ctx,
 	if ((drbd_genl_ops[cmd].flags & GENL_ADMIN_PERM) &&
 	    drbd_security_netlink_recv(skb, CAP_SYS_ADMIN))
 		return -EPERM;
+#endif
 
 	adm_ctx->reply_skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (!adm_ctx->reply_skb) {
@@ -6068,7 +6073,7 @@ void notify_resource_state(struct sk_buff *skb,
 		err = -ENOMEM;
 		if (!skb)
 			goto failed;
-		multicast = true;
+		//XXXXX multicast = true;
 	}
 
 	err = -EMSGSIZE;
@@ -6098,8 +6103,8 @@ void notify_resource_state(struct sk_buff *skb,
 nla_put_failure:
 	nlmsg_free(skb);
 failed:
-	drbd_err(resource, "Error %d while broadcasting event. Event seq:%u\n",
-			err, seq);
+	drbd_err(resource, "Error %d in %s while broadcasting event. Event seq:%u\n",
+			err, __func__, seq);
 }
 
 void notify_device_state(struct sk_buff *skb,
@@ -6147,8 +6152,8 @@ void notify_device_state(struct sk_buff *skb,
 nla_put_failure:
 	nlmsg_free(skb);
 failed:
-	drbd_err(device, "Error %d while broadcasting event. Event seq:%u\n",
-		 err, seq);
+	drbd_err(device, "Error %d in %s while broadcasting event. Event seq:%u\n",
+		 err, __func__, seq);
 }
 
 /* open coded path_parms_to_skb() iterating of the list */
@@ -6198,8 +6203,8 @@ void notify_connection_state(struct sk_buff *skb,
 nla_put_failure:
 	nlmsg_free(skb);
 failed:
-	drbd_err(connection, "Error %d while broadcasting event. Event seq:%u\n",
-		 err, seq);
+	drbd_err(connection, "Error %d in %s while broadcasting event. Event seq:%u\n",
+		 err, __func__, seq);
 }
 
 void notify_peer_device_state(struct sk_buff *skb,
@@ -6248,8 +6253,8 @@ void notify_peer_device_state(struct sk_buff *skb,
 nla_put_failure:
 	nlmsg_free(skb);
 failed:
-	drbd_err(peer_device, "Error %d while broadcasting event. Event seq:%u\n",
-		 err, seq);
+	drbd_err(peer_device, "Error %d in %s while broadcasting event. Event seq:%u\n",
+		 err, __func__, seq);
 }
 
 void drbd_broadcast_sync_progress(struct drbd_peer_device *peer_device)
@@ -6305,8 +6310,8 @@ unlock_fail:
 	mutex_unlock(&notification_mutex);
 fail:
 	nlmsg_free(skb);
-	drbd_err(resource, "Error %d while broadcasting event. Event seq:%u\n",
-		 err, seq);
+	drbd_err(resource, "Error %d in %s while broadcasting event. Event seq:%u\n",
+		 err, __func__, seq);
 }
 
 void notify_helper(enum drbd_notification_type type,
@@ -6353,8 +6358,8 @@ unlock_fail:
 	mutex_unlock(&notification_mutex);
 fail:
 	nlmsg_free(skb);
-	drbd_err(resource, "Error %d while broadcasting event. Event seq:%u\n",
-		 err, seq);
+	drbd_err(resource, "Error %d in %s while broadcasting event. Event seq:%u\n",
+		 err, __func__, seq);
 }
 
 static void notify_initial_state_done(struct sk_buff *skb, unsigned int seq)
