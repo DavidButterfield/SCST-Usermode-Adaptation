@@ -540,7 +540,9 @@ static inline int __ratelimit(struct ratelimit_state *rs)
 
 /* See also commit b62730baea32 */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 34)
+#ifndef rcu_dereference_protected
 #define rcu_dereference_protected(p, c) rcu_dereference(p)
+#endif
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 0, 0) && !defined(kfree_rcu)

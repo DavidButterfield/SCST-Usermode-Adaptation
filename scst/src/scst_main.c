@@ -881,6 +881,7 @@ int scst_get_cmd_counter(void)
 {
 	int i, res = 0;
 
+	BUG_ON(nr_cpu_ids > NR_CPUS);
 	for (i = 0; i < nr_cpu_ids; i++)
 		res += atomic_read(&scst_percpu_infos[i].cpu_cmd_count);
 	return res;
@@ -2722,8 +2723,7 @@ static int __init init_scst(void)
 		goto out_destroy_sgv_pool;
 #endif
 
-	assert(nr_cpu_ids <= NR_CPUS);
-	for (i = 0; i < nr_cpu_ids; i++) {
+	for (i = 0; i < (int)ARRAY_SIZE(scst_percpu_infos); i++) {
 		atomic_set(&scst_percpu_infos[i].cpu_cmd_count, 0);
 		spin_lock_init(&scst_percpu_infos[i].tasklet_lock);
 		INIT_LIST_HEAD(&scst_percpu_infos[i].tasklet_cmd_list);
@@ -2852,10 +2852,9 @@ static void __exit exit_scst(void)
 	int i;
 	TRACE_ENTRY();
 
-	assert(nr_cpu_ids <= NR_CPUS);
-	for (i = 0; i < nr_cpu_ids; i++) {
-		assert(atomic_get(&scst_percpu_infos[i].cpu_cmd_count) == 0);
-		assert(list_empty(&scst_percpu_infos[i].tasklet_cmd_list));
+	for (i = 0; i < (int)ARRAY_SIZE(scst_percpu_infos); i++) {
+		BUG_ON(atomic_get(&scst_percpu_infos[i].cpu_cmd_count) != 0);
+		BUG_ON(!list_empty(&scst_percpu_infos[i].tasklet_cmd_list));
 		tasklet_kill(&scst_percpu_infos[i].tasklet);
 	}
 
