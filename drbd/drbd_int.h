@@ -2214,6 +2214,11 @@ static inline void __drbd_chk_io_error_(struct drbd_device *device,
 {
 	enum drbd_io_error_p ep;
 
+	if (device->ldev == NULL) {
+	    drbd_err(device, "chk_io_error on NULL device->ldev");
+	    return;	//XXX Is this impossible (assuming a working "kernel")?
+	}
+
 	rcu_read_lock();
 	ep = rcu_dereference(device->ldev->disk_conf)->on_io_error;
 	rcu_read_unlock();

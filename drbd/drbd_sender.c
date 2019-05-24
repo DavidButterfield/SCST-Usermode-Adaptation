@@ -710,6 +710,10 @@ static int make_resync_request(struct drbd_peer_device *peer_device, int cancel)
 	peer_device->rs_in_flight += number * BM_SECT_PER_BIT;
 	if (number <= 0)
 		goto requeue;
+#if 0
+	if (number < 4)
+	    number = 4;    //XXX
+#endif
 
 	for (i = 0; i < number; i++) {
 		/* Stop generating RS requests, when half of the send buffer is filled */
@@ -1657,9 +1661,10 @@ static void maybe_send_unplug_remote(struct drbd_connection *connection, bool se
 		 * we occasionally miss an unplug event. */
 
 		/* Paranoia: to avoid a continuous stream of unplug-hints,
-		 * in case we never get any unplug events */
+		 * in case we never get any unplug events.
+		 * But don't confuse dagtag_newer_eq with integer overflow of (0 - 2^63) */
 		connection->todo.unplug_dagtag_sector[connection->todo.unplug_slot] =
-			connection->send.current_dagtag_sector + (1ULL << 63);
+			connection->send.current_dagtag_sector + (1ULL << 62);
 		/* advance the current unplug slot */
 		connection->todo.unplug_slot ^= 1;
 	} else if (!send_anyways)

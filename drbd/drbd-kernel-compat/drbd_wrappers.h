@@ -21,7 +21,6 @@
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
 #include <linux/kernel.h>
-#include <linux/rbtree.h>
 
 #ifndef pr_fmt
 #define pr_fmt(fmt)	KBUILD_MODNAME ": " fmt
@@ -50,7 +49,7 @@ static	inline int drbd_always_getpeername(struct socket *sock, struct sockaddr *
 #ifdef COMPAT_SOCK_OPS_RETURNS_ADDR_LEN
 	return sock->ops->getname(sock, uaddr, 2);
 #else
-	int len = 0;
+	int len = sizeof(struct sockaddr_storage);
 	int err = sock->ops->getname(sock, uaddr, &len, 2);
 	return err ?: len;
 #endif
@@ -119,8 +118,6 @@ static inline int drbd_blkdev_put(struct block_device *bdev, fmode_t mode)
 }
 #define blkdev_put(b, m)	drbd_blkdev_put(b, m)
 #endif
-
-typedef u8 __bitwise blk_status_t;
 
 #ifdef COMPAT_HAVE_BIO_BI_STATUS
 static inline void drbd_bio_endio(struct bio *bio, blk_status_t status)
@@ -1032,7 +1029,8 @@ extern int blkdev_issue_zeroout(struct block_device *bdev, sector_t sector,
 
 # ifndef blk_queue_discard
 #  define blk_queue_discard(q)   (0)
-#  define QUEUE_FLAG_DISCARD    (-1)
+//#  define QUEUE_FLAG_DISCARD    (-1)	//XXX has to be a valid bit number
+#  define QUEUE_FLAG_DISCARD    (0)
 # endif
 
 # ifndef blk_queue_secdiscard

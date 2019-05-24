@@ -106,7 +106,7 @@ static struct drbd_epoch *previous_epoch(struct drbd_connection *connection, str
 static struct page *page_chain_del(struct page **head, int n)
 {
 	struct page *page;
-	struct page *tmp;
+	struct page *tmp = NULL;
 
 	BUG_ON(!n);
 	BUG_ON(!head);

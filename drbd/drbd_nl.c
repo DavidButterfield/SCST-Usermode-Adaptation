@@ -1255,7 +1255,7 @@ static void opener_info(struct drbd_resource *resource,
 
 		drbd_msg_sprintf_info(reply_skb,
 				      "/dev/drbd%d opened by %s (pid %d) "
-				      "at %04ld-%02d-%02d %02d:%02d:%02d.%03ld",
+				      "at %04d-%02d-%02d %02d:%02d:%02d.%03ld",
 				      device->minor,
 				      o->comm, o->pid,
 				      tm.tm_year + 1900,
@@ -6124,7 +6124,7 @@ void notify_device_state(struct sk_buff *skb,
 		err = -ENOMEM;
 		if (!skb)
 			goto failed;
-		multicast = true;
+		//XXXXX multicast = true;
 	}
 
 	err = -EMSGSIZE;
@@ -6174,7 +6174,7 @@ void notify_connection_state(struct sk_buff *skb,
 		err = -ENOMEM;
 		if (!skb)
 			goto failed;
-		multicast = true;
+		//XXXXX multicast = true;
 	}
 
 	err = -EMSGSIZE;
@@ -6225,7 +6225,7 @@ void notify_peer_device_state(struct sk_buff *skb,
 		err = -ENOMEM;
 		if (!skb)
 			goto failed;
-		multicast = true;
+		//XXXXX multicast = true;
 	}
 
 	err = -EMSGSIZE;
@@ -6275,6 +6275,7 @@ void notify_path(struct drbd_connection *connection, struct drbd_path *path,
 	unsigned int seq = atomic_inc_return(&drbd_genl_seq);
 	struct sk_buff *skb = NULL;
 	struct drbd_genlmsghdr *dh;
+	bool multicast = false;	//XXXXX
 	int err;
 
 	path_info.path_established = path->established;
@@ -6298,11 +6299,13 @@ void notify_path(struct drbd_connection *connection, struct drbd_path *path,
 		goto unlock_fail;
 
 	genlmsg_end(skb, dh);
-	err = drbd_genl_multicast_events(skb, GFP_NOWAIT);
-	skb = NULL;
-	/* skb has been consumed or freed in netlink_broadcast() */
-	if (err && err != -ESRCH)
+	if (multicast) {
+	    err = drbd_genl_multicast_events(skb, GFP_NOWAIT);
+	    skb = NULL;
+	    /* skb has been consumed or freed in netlink_broadcast() */
+	    if (err && err != -ESRCH)
 		goto unlock_fail;
+	}
 	mutex_unlock(&notification_mutex);
 	return;
 
@@ -6323,6 +6326,7 @@ void notify_helper(enum drbd_notification_type type,
 	unsigned int seq = atomic_inc_return(&drbd_genl_seq);
 	struct sk_buff *skb = NULL;
 	struct drbd_genlmsghdr *dh;
+	bool multicast = false;	//XXXXX
 	int err;
 
 	strlcpy(helper_info.helper_name, name, sizeof(helper_info.helper_name));
@@ -6346,11 +6350,13 @@ void notify_helper(enum drbd_notification_type type,
 	    drbd_helper_info_to_skb(skb, &helper_info, true))
 		goto unlock_fail;
 	genlmsg_end(skb, dh);
-	err = drbd_genl_multicast_events(skb, GFP_NOWAIT);
-	skb = NULL;
-	/* skb has been consumed or freed in netlink_broadcast() */
-	if (err && err != -ESRCH)
+	if (multicast) {
+	    err = drbd_genl_multicast_events(skb, GFP_NOWAIT);
+	    skb = NULL;
+	    /* skb has been consumed or freed in netlink_broadcast() */
+	    if (err && err != -ESRCH)
 		goto unlock_fail;
+	}
 	mutex_unlock(&notification_mutex);
 	return;
 

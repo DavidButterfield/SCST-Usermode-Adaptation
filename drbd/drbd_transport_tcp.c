@@ -651,7 +651,8 @@ retry:
 		spin_unlock_bh(&listener->listener.waiters_lock);
 
 		s_estab = NULL;
-		err = kernel_accept(listener->s_listen, &s_estab, O_NONBLOCK);
+		err = kernel_accept(listener->s_listen, &s_estab, O_NONBLOCK); //XXXXX
+
 		if (err < 0)
 			return err;
 

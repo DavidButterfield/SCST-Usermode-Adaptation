@@ -973,6 +973,8 @@ static void new_or_recycle_send_buffer_page(struct drbd_send_buffer *sbuf)
 			goto have_page;
 		}
 
+		//XXX Don't you need to set something like TASK_*INTERRUPTIBLE first?
+		//XXX I think this just yields the processor but the thread remains runnable(?)
 		schedule_timeout(HZ / 10);
 	}
 have_page:
@@ -3761,8 +3763,9 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 #ifdef COMPAT_HAVE_BLK_QUEUE_MERGE_BVEC
 	blk_queue_merge_bvec(q, drbd_merge_bvec);
 #endif
+	q->queue_lock = &resource->req_lock; /* used by blk_queue_flag_set() */
 #ifdef blk_queue_plugged
-	q->queue_lock = &resource->req_lock; /* needed since we use */
+	/* needed since we use */
 	/* plugging on a queue, that actually has no requests! */
 	q->unplug_fn = drbd_unplug_fn;
 #endif
@@ -3839,10 +3842,12 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 	}
 
 	add_disk(disk);
-#if 1
-	disk_to_dev(disk)->this_bdev = device->this_bdev;	    //XXXXX
-	disk_to_dev(disk)->this_bdev->bd_disk = disk;		    //XXXXX
+
+#if 1	//XXXXX Where does this happen in a real kernel?
+	disk_to_dev(disk)->this_bdev = device->this_bdev;   //XXXXX
+	disk_to_dev(disk)->this_bdev->bd_disk = disk;	    //XXXXX
 #endif
+
 	device->have_quorum[OLD] =
 	device->have_quorum[NEW] =
 		(resource->res_opts.quorum == QOU_OFF);
@@ -5467,6 +5472,8 @@ void lock_all_resources(void)
 	local_irq_disable();
 	for_each_resource(resource, &drbd_resources)
 		spin_lock_nested(&resource->req_lock, i++); //XXXXX
+#else
+	sys_warning("XXXXXXXXXX LOCK ALL RESOURCES");
 #endif
 }
 
@@ -5478,6 +5485,8 @@ void unlock_all_resources(void)
 	for_each_resource(resource, &drbd_resources)
 		spin_unlock(&resource->req_lock);
 	local_irq_enable();
+#else
+	sys_warning("XXXXXXXXXX UNLOCK ALL RESOURCES");
 #endif
 	mutex_unlock(&resources_mutex);
 }

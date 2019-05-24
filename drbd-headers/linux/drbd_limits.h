@@ -51,6 +51,7 @@
 
 /* net { */
   /* timeout, unit centi seconds
+   *	(XXX I do not think that word means what you think it means)
    * more than one minute timeout is not useful */
 #define DRBD_TIMEOUT_MIN 1
 #define DRBD_TIMEOUT_MAX 600

@@ -268,6 +268,7 @@ GENL_struct(DRBD_NLA_DEVICE_STATISTICS, 20, device_statistics,
 	__u64_field(11, 0, dev_exposed_data_uuid)
 	__u64_field(12, 0, dev_current_uuid)
 	__u32_field(13, 0, dev_disk_flags)
+	//XXX This misaligns the 64-bit history_uuids, leading to misaligned access
 	__bin_field(14, 0, history_uuids, HISTORY_UUIDS * sizeof(__u64))
 )
 
