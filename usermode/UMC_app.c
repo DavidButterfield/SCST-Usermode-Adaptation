@@ -108,20 +108,11 @@ UMC_constructor(void)
     err = UMC_init("/fuse/scst/proc");	//XXXX need a separate dir for DRBD
     verify_noerr(err, "UMC_init");
 
-    trace("XXX sleep(2)");
-    sleep(2);
-
     trace("UMC_constructor calls tcmu_bio_init()");
     tcmu_bio_init();
 
-    trace("XXX sleep(2)");
-    sleep(2);
-
     trace("UMC_constructor calls DRBD_init()");
     DRBD_init();
-
-    trace("XXX sleep(2)");
-    sleep(2);
 
     trace("UMC_constructor calls SCST_init()");
     SCST_init();

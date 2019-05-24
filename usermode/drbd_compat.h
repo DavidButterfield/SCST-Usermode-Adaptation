@@ -29,19 +29,16 @@ extern int  DRBD_ctldev_ioctl(int fd_arg, unsigned int cmd, unsigned long arg);
 /* Called at program start to open a socket to receive events from "kernel" code */
 extern int DRBD_nl_open(void);
 
-//#define MS_RDONLY			1
-
 /* Setting these to affect DRBD's backport behavior */
 #define COMPAT_HAVE_BIOSET_CREATE_FRONT_PAD
 #define COMPAT_HLIST_FOR_EACH_ENTRY_HAS_THREE_PARAMETERS
 #define COMPAT_HAVE_FILE_INODE
 #define COMPAT_DRBD_RELEASE_RETURNS_VOID
-
+#define COMPAT_HAVE_OPEN_BDEV_EXCLUSIVE
 #define COMPAT_HAVE_IDR_ALLOC
 #define IDR_GET_NEXT_EXPORTED
-
-#define CONFIG_DRBD_FAULT_INJECTION 0
 #define __LINUX_MUTEX_H
 
+#define CONFIG_DRBD_FAULT_INJECTION 0
 
 #endif /* DRBD_COMPAT_H */

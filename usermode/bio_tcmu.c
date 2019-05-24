@@ -19,7 +19,7 @@
 #define LOGID "bio_tcmu"
 #define trace_tcmu(fmtargs...)	sys_notice("TCMU: "fmtargs)
 
-#if 1
+#if 0
 #define TRACE_ENTRY()	    trace_tcmu("ENTER %s", __func__)
 #define TRACE_EXIT()	    trace_tcmu("EXIT %s", __func__)
 #define TRACE_EXIT_RES(res) trace_tcmu("EXIT %s returning %d", __func__, (res))
@@ -28,14 +28,13 @@
 #define TRACE_EXIT()	    /* */
 #define TRACE_EXIT_RES(res) /* */
 #endif
- 
+
 /* XXX Only one handler type can be registered at a time for now */
 static struct tcmur_handler * bio_tcmu_handler;
 
 static struct kmem_cache * op_cache;
 
 static int bio_tcmu_major = 3;	//XXXXX
-static int bio_tcmu_minor = 0;
 
 #define BIO_TCMU_MAX_MINORS 256	//XXX
 struct tcmu_device * bio_tcmu_minors[BIO_TCMU_MAX_MINORS];
@@ -388,8 +387,10 @@ tcmu_make_request(struct request_queue *rq_unused, struct bio * bio)
     op->len = aio_op_len;	    /* I/O bytes */
     op->tcmu_dev = tcmu_dev;
 
+#if 0
     tcmu_dev_info(tcmu_dev, "%s %lu bytes at sector %lu",
 			is_write?"WRITE":" READ", aio_op_len, bio->bi_sector);
+#endif
 
     /* Submit the command to the handler */
     sam_stat_t sam_stat;
@@ -583,7 +584,7 @@ bio_tcmu_create(int minor, const char * cfg)
 		    tcmu_get_dev_num_lbas(tcmu_dev), tcmu_get_dev_block_size(tcmu_dev),
 		    tcmu_get_dev_num_lbas(tcmu_dev) * tcmu_get_dev_block_size(tcmu_dev),
 		    dev_size);
-	err = EBADFD;	    /* messed-up state */
+	err = -EBADFD;	    /* messed-up state */
 	goto fail_close;
     }
 

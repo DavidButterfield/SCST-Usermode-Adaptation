@@ -5,7 +5,7 @@
 #
 # This Makefile expects its make(1) to be invoked in the Makefile's directory.
 
-# XXX These usemode Makefiles are all hacked junk that need to be replaced.
+# XXX These usermode Makefiles are all hacked junk that need to be replaced.
 
 ### Run DRBD utilities with these environment variables set:
 ### PROC_DRBD=/fuse/proc/drbd
@@ -58,22 +58,22 @@ endif
 
 # Path to the "emulated Linux KPI" usermode compatibility library
 ifndef USERMODE_LIB_SRC
-USERMODE_LIB_SRC = $(MY_SRC)/UMC/src
+export USERMODE_LIB_SRC = $(MY_SRC)/UMC/src
 endif
 
 # Path to the SCST source tree (which we are assumed at a location within)
 ifndef SCST_SRC
-export SCST_SRC = $(CURDIR)/..
+export SCST_SRC = $(MY_SRC)/SCST-Usermode-Adaptation
 endif
 
 # Path to the DRBD source tree
 ifndef DRBD_SRC
-export DRBD_SRC = $(CURDIR)/..
+export DRBD_SRC = $(MY_SRC)/SCST-Usermode-Adaptation
 endif
 
 # Path to the DRBD utilities source tree
 ifndef DRBD_UTIL_SRC
-export DRBD_UTIL_SRC = $(CURDIR)/../../drbd-utils
+export DRBD_UTIL_SRC = $(MY_SRC)/drbd-utils
 endif
 
 ################################################################################
@@ -90,13 +90,14 @@ endif
 
 # Explicit -O0 overrides other -O settings in subordinate Makefiles
 MY_CFLAGS += -O0
-# MY_CFLAGS += -Og
+# MY_CFLAGS += -Og  # interferes with GDB: locals "optimized out"
 # MY_CFLAGS += -O1
-# MY_CFLAGS += -O2
-# MY_CFLAGS += -O3
+# MY_CFLAGS += -O2 -fno-strict-aliasing
+# MY_CFLAGS += -O3 -fno-strict-aliasing
 
 # Enable assert/expect and some other checking and/or tracing
 MY_CFLAGS += -DDEBUG
+#XXX MY_CFLAGS += -fsanitize=undefined
 # MY_CFLAGS += -DNDEBUG
 
 # MY_CFLAGS += -DTRACE_TRACE
@@ -141,14 +142,12 @@ DRBDU_CFLAGS += -isystem $(USERMODE_LIB_SRC)/kinclude
 
 #######################  Enable most compiler warnings  ########################
 
-# NOTES:
-#   "-Wno-*" options negate noisy subsets of the first "-W" option seen on the same line.
-#   counts mentioned below are of "distinct" warnings -- multiple warnings at the same file/line count as one
+# NOTE: "-Wno-*" options negate noisy subsets of the first "-W" option seen on the same line.
 
-### SCST compiles clean (without warning messages) with these warnings enabled.
-#	"-Wformat" warnings are entirely due to conflation of "long" and "long long" in format specifiers.
+# "-Wformat" warnings in SCST are entirely due to conflation of "long" and "long long" in format specifiers XXX
+
 WFLAGS_WARN += -Wall	    -Wno-pointer-sign -Wno-format
-WFLAGS_WARN += -Wextra	    -Wno-sign-compare -Wno-unused-parameter -Wimplicit-fallthrough=2
+WFLAGS_WARN += -Wextra	    -Wno-sign-compare -Wno-unused-parameter -Wimplicit-fallthrough=0
 WFLAGS_WARN += -Wundef
 WFLAGS_WARN += -Wstrict-prototypes
 WFLAGS_WARN += -Wjump-misses-init
@@ -157,34 +156,29 @@ WFLAGS_WARN += -Wcast-align
 WFLAGS_WARN += -Wold-style-definition
 WFLAGS_WARN += -Wmissing-include-dirs
 WFLAGS_WARN += -Wfloat-conversion
-WFLAGS_WARN += -Wmissing-declarations
-WFLAGS_WARN += -Wmissing-prototypes
-
-WFLAGS_WARN += -Wunsafe-loop-optimizations
 WFLAGS_WARN += -Wbad-function-cast
 WFLAGS_WARN += -Wnested-externs
-# WFLAGS_WARN += -Wswitch-enum
+
+# WFLAGS_WARN += -Wmissing-declarations	    # 3 in DRBD
+# WFLAGS_WARN += -Wmissing-prototypes	    # same 3
+
+# WFLAGS_WARN += -Winit-self		    # 4 in DRBD to avoid uninitialized warnings  XXX
+# WFLAGS_WARN += -Wcast-qual		    # 2 In genetlink.h kernel header file!
+
+# WFLAGS_WARN += -Wswitch-enum		    # 18 switches in DRBD, 6 in SCST
+# WFLAGS_WARN += -Wswitch-default	    # dozens in SCST and DRBD
+
+### No one will ever fix these
 # WFLAGS_WARN += -fstrict-aliasing -Wstrict-aliasing
+# WFLAGS_WARN += -Wunsafe-loop-optimizations
 
-WFLAGS_WARN += -fsanitize=undefined
-
-# DRBD does this to avoid uninitialized warnings!  XXX
-#WFLAGS_WARN += -Winit-self
-
-### These give varying numbers of warnings, probably not worth any effort
+### These give plenty of warnings, probably not worth any effort
+# WFLAGS_WARN += -Wformat=2
 # WFLAGS_WARN += -Wshadow
 # WFLAGS_WARN += -Wconversion  -Wno-sign-conversion
-# WFLAGS_WARN += -Wswitch-default
-# WFLAGS_WARN += -Wredundant-decls
-# WFLAGS_WARN += -Wformat=2
-# WFLAGS_WARN += -Wcast-qual
 # WFLAGS_WARN += -Wwrite-strings
 # WFLAGS_WARN += -Wpointer-arith
-
-### DRBD
-WFLAGS_WARN += -Wno-unused-variable         #XXX
-WFLAGS_WARN += -Wno-unused-but-set-variable #XXX
-WFLAGS_WARN += -Wno-unused-function         #XXX
+# WFLAGS_WARN += -Wredundant-decls
 
 export EXTRA_WFLAGS := $(WFLAGS_WARN) 
 
@@ -192,7 +186,11 @@ export EXTRA_WFLAGS := $(WFLAGS_WARN)
 
 SHELL=/bin/bash
 
-MY_CFLAGS += -g -fPIC -D_GNU_SOURCE
+GCCLDFLAGS = -static -Wl,-z,now	    # -Wl,-O1
+export LOCAL_LD_FLAGS = $(GCCLDFLAGS)
+export LOCAL_LIBS = -lubsan -lrt -lpthread -ldl -lc
+
+MY_CFLAGS += -g -ggdb -fno-omit-frame-pointer -D_GNU_SOURCE -fPIC
 SCSTU_CFLAGS += $(MY_CFLAGS) $(EXTRA_WFLAGS)
 DRBDU_CFLAGS += $(MY_CFLAGS) $(EXTRA_WFLAGS)
 TCMU_CFLAGS += $(MY_CFLAGS) $(EXTRA_WFLAGS)
@@ -207,14 +205,11 @@ TCMU_CFLAGS += -I$(CURDIR)
 
 # LOCAL_CFLAGS appears to be used instead of EXTRA_CFLAGS in real usermode makefiles
 export LOCAL_CFLAGS += $(MY_CFLAGS) $(EXTRA_WFLAGS) -DSCST_USERMODE
-export LOCAL_LIBS += -L/usr/local/lib -L/usr/lib/x86_64-linux-gnu -lubsan
 
 export INFINIBAND_ENABLED := false
 SCST_INC_DIR := $(CURDIR)/../scst/include
 export src := .
 export KVER = __NONE__
-
-GCCLDFLAGS = -Wl,-z,now -Wl,-O1 -Wl,-L/usr/lib -Wl,-L/usr/lib/x86_64-linux-gnu/
 
 ifdef USERMODE_TCMU_RBD
 TCMU_LIBS = rbd.o
@@ -241,7 +236,7 @@ TCMU_LIBS = spdk.o
 BACKEND_LIBS = -lspdk_nvme -lspdk_nvmf -lspdk_env_dpdk -lspdk_log -lspdk_sock -lspdk_util
 BACKEND_LIBS += -lrte_eal -lrte_mempool -lrte_bus_pci -lrte_pci -lrte_ring -lspdk_util -lrte_kvargs
 BACKEND_LIBS += -lrte_cfgfile -lrte_cmdline -lrte_mbuf
-BACKEND_LIBS += -luuid -lnuma -lrt
+BACKEND_LIBS += -luuid -lnuma
 # BACKEND_LIBS += -lspdk_iscsi
 endif
 
@@ -276,10 +271,9 @@ scst.out:   $(TCMU_LIBS) UMC_app.o drbd_compat.o #XXX $(COMPONENTS) made by 'all
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
 	$(CC) -o scst.out $(GCCLDFLAGS) \
-		    $(COMPONENTS) \
-		    UMC_app.o drbd_compat.o $(TCMU_LIBS) \
-		    $(LOCAL_LIBS) $(BACKEND_LIBS) $(USERMODE_LIB) \
-		    -lmte -lfuse -lpthread -laio -ldl -lc
+		    $(COMPONENTS) UMC_app.o drbd_compat.o \
+		    $(TCMU_LIBS) $(BACKEND_LIBS) $(USERMODE_LIB) \
+		    -lmte -lfuse -laio $(LOCAL_LIBS) -lc
 
 check_mte:
 	@# The libmte.so module should have been installed in /lib or somewhere .so files can be found

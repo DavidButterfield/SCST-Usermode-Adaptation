@@ -58,6 +58,8 @@
 #include "tcmu-runner.h"
 #include "libtcmu.h"
 
+#define ROUND_DOWN(v, q)    ((v) / (q) * (q))
+
 typedef struct tcmu_ram {
 	void	      *	ram;
 	size_t		size;
@@ -181,7 +183,7 @@ static int tcmu_ram_open(struct tcmu_device * td)
 					 config, err, strerror(-err));
 			goto out_fail;
 		}
-		file_size = lseek(mmap_fd, 0, SEEK_END);
+		file_size = ROUND_DOWN(lseek(mmap_fd, 0, SEEK_END), 4096);
 	}
 
 	tcmu_set_dev_block_size(td, 4096);
@@ -206,7 +208,7 @@ static int tcmu_ram_open(struct tcmu_device * td)
 				  config, file_size, sys_size);
 		file_size = sys_size;
 		lseek(mmap_fd, file_size, SEEK_SET);
-		write(mmap_fd, "X", 1);
+		err = write(mmap_fd, "X", 1);
 	} else if (sys_size < file_size) {
 		tcmu_dev_warn(td, "%s space unused: sys_size %lld < file_size %lld",
 				  config, sys_size, file_size);
