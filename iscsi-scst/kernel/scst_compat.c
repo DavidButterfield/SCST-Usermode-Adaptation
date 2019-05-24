@@ -112,7 +112,6 @@ SCST_exit(void)
 /******************************************************************************/
 
 /* Called from daemon code to issue an "ioctl" request to the kernel code */
-int SCST_ctldev_ioctl(int fd_arg_ignored, unsigned int cmd, unsigned long arg);
 int
 SCST_ctldev_ioctl(int fd_arg_ignored, unsigned int cmd, unsigned long arg)
 {

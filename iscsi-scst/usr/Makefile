@@ -43,7 +43,7 @@ else
 # Make a "library" of all the user daemon code, to be linked with the "kernel" code
 all: iscsi-scstlib.o iscsi-scst-adm
 iscsi-scstlib.o: .depend_d $(OBJS_D)
-	$(LD) $(OBJS_D) $(LOCAL_LD_FLAGS) -r -o $@
+	$(LD) $(OBJS_D) -r -o $@
 endif
 
 iscsi-scstd: .depend_d $(OBJS_D)
