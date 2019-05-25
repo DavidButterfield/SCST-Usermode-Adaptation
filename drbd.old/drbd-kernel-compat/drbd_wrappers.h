@@ -133,6 +133,7 @@ static inline void drbd_bio_endio(struct bio *bio, blk_status_t status)
 #else
 
 #ifndef BLK_STS_OK
+typedef u8 __bitwise blk_status_t;
 #define BLK_STS_OK 0
 #define BLK_STS_NOTSUPP		((__force blk_status_t)1)
 #define BLK_STS_MEDIUM		((__force blk_status_t)7)
