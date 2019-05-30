@@ -675,7 +675,7 @@ tcmu_bio_init(void)
     err = handler_init();
     if (err) {
 	sys_warning("handler_init() returned ERROR %d", err);
-	expect(bio_tcmu_handler == NULL);
+	expect_eq(bio_tcmu_handler, NULL);
 	bio_tcmu_handler = NULL;	/* just in case */
 	kmem_cache_destroy(op_cache);
 	op_cache = NULL;
@@ -720,10 +720,10 @@ tcmu_bio_exit(void)
     assert(bio_tcmu_handler);
     assert(op_cache);
     if (bio_tcmu_handler) {
-	expect(bio_tcmu_handler->registered);
+	expect_ne(bio_tcmu_handler->registered, 0);
 	if (bio_tcmu_handler->handler_exit) {
 	    bio_tcmu_handler->handler_exit();
-	    expect(bio_tcmu_handler == NULL);
+	    expect_eq(bio_tcmu_handler, NULL);
 	}
 	bio_tcmu_handler = NULL;
     }
