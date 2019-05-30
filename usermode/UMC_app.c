@@ -41,13 +41,13 @@ APP_shutdown(void)
     trace("APP_shutdown calls DRBD_exit()");
     DRBD_exit();
 
-    trace("XXX sleep(2)");
+    trace("XXX sleep(4)");
     sleep(2);
 
     trace("APP_shutdown calls tcmu_bio_exit()");
     tcmu_bio_exit();
 
-    trace("XXX sleep(2)");
+    trace("XXX sleep(1)");
     sleep(2);
 
     trace("APP_shutdown calls UMC_exit()");

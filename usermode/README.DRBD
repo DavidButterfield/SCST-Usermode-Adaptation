@@ -1,0 +1,198 @@
+Thu May 30 00:34:42 MDT 2019
+    This is an early runnable version of usermode SCST/DRBD -- incomplete and buggy!
+
+Demo config:
+    I set up a small DRBD device of 1 GB, with ext4 filesystem
+
+    One Node (K) running standard DRBD 9.0 in the kernel (exposing /dev/drbd1)
+	DRBD's backing device is a partition on a real disk /dev/sda1
+	Replicated device can be mounted as /dev/drbd1 (when primary)
+
+    One Node (U) running DRBD 9.0 in USERMODE in a process with SCST (dev internal only)
+	DRBD's backing device is a block device implemented as a 1 GB ramdisk
+	The ramdisk is an mmap(2) backed by a 1 GB file /tmp/cfg2
+	Replicated device is plumbed underneath SCST as an SCST vdisk backing bdev
+	SCST exposes the volume as a SCSI device through iSCSI
+
+    An iSCSI initiator with a session to Node (U)
+	When Node U is primary, iSCSI initiator can mount the replicated filesystem
+	Exposes the SCSI device as a block device, mountable as /dev/sdj
+
+    I've written bio_tcmu to connect a bio request to a tcmu-runner storage backend handler.
+    TCMU itself is not involved -- I'm just repurposing their backend handlers by translating
+    bio requests into the protocol expected by the TCMU handlers.
+
+    There are several TCMU handlers for different usermode storage providers such as ceph, qemu,
+    and gluster; I've written one for an mmap(2) ramdisk, used here.  (I also have a prototype
+    of a handler for spdk.)  All of those would interface into bio_tcmu at the same place
+    occupied by tcmu_ram in this diagram.
+
+
+			    iSCSI
+  /dev/sdj ---> Initiator <=======> SCST-iSCSI 
+					|
+				    SCST-core					    [Node U]
+					|	 bio	      bio
+				    SCST-vdisk <=====> DRBD <=====> bio_tcmu
+							|		|     mmap
+							|	    tcmu_ram <====> /tmp/cfg2
+							|1GbE
+							|
+							|
+							|     bio
+				       /dev/drbd1 ---> DRBD <=====> sd		    [Node K]
+
+
+    It is also possible to plumb SCST-vdisk directly to bio_tcmu through the bio interface.
+    The sample scst.conf file below defines two SCST device instances:
+	/UMCdev/tcmu000	    connects SCST directly to bio_tcmu's block device (/tmp/cfg1)
+	/UMCdev/drbd1	    connects SCST to DRBD's block device (/tmp/cfg2)
+
+Capabilities -- with this config I was able to do the following:
+    Monitor network connection between Nodes (U) and (K) using tcpdump
+    Establish network communication between Nodes (U) and (K)
+    Use Node K to create an ext4 filesystem on the replicated device
+    Change primary to Node (U) and mount the replicated device on /mnt/x
+    Copy the source code repositories (including drbd and scst) onto the replicated device
+    Run "make" and successfully build the usermode binary
+	Observe replication traffic in tcpdump during the build
+    Lacking a mechanism to get SCST to close the DRBD device, for now I substitute this:
+	Unmount /mnt/x, then kill SCST/DRBD usermode process
+	Restart SCST/DRBD usermode process [See limitations below]
+	Re-establish network replication
+    Set Node (K) as primary and mount /dev/drbd1 as /mnt/x
+    Observe the built binaries from the make done on Node (U)
+    Run "make clean" and "make all" to do the successful build again on Node (K)
+	Observe replication traffic in tcpdump during the build
+
+Limitations:
+    Many things are hacked just enough to get it to work, and neglecting performance.
+    Netlink multicast is not yet implemented, so anything like "drbdsetup wait*" hangs.
+
+    drbdmeta assumes it can access the device through /dev/drbd*, but this is not the case on
+    Node (U).  This is a problem because after a server restart drbdmeta needs to apply the
+    activity log before DRBD will attach the device.
+
+    At the moment my workaround is to destroy the metadata on Node U every time the server
+    process (containing SCST and DRBD) is restarted, and let it resync from Node (K).  With my
+    1 GB filesystem this takes around 25 seconds.  I tell drbdmeta to operate directly on the
+    backing file for the ramdisk:
+
+	sudo drbdmeta 1 v09 /tmp/cfg2 internal create-md 1 --force 
+
+    Then start the usermode SCST/DRBD server:
+
+	sudo ./scst.out -f	    # start the usermode SCST/DRBD server
+
+    On Node (U) I use drbdsetup rather than drbdadm because the latter also assumes access via
+    /dev/drbd* (at least by invoking drbdmeta):
+
+	drbdsetup new-resource r0 0
+	drbdsetup new-minor r0 1 0
+	drbdsetup new-peer r0 1 --_name=bottom
+	drbdsetup new-path r0 1 ipv4:192.168.1.9:7788 ipv4:192.168.1.37:7788
+	drbdsetup attach 1 /UMCdev/tcmu001 /UMCdev/tcmu001 internal
+	drbdsetup connect r0 1
+	drbdsetup peer-device-options --resync-rate=40000 --c-plan-ahead=0 --c-min-rate=0 r0 1 0
+	<wait for sync to finish>
+	drbdsetup primary r0
+	scstadmin -config /etc/scst.conf
+	drbdsetup status --statistics --verbose
+
+    (The "/UMCdev" names are the magic device names used internally to the usermode process)
+
+/******************************************************************************/
+
+resource r0 {
+    on bottom {
+	device	    /dev/drbd1;
+	disk	    /dev/sda1;
+	address	    192.168.1.37:7788;
+	meta-disk   internal;
+    }
+    on blackbox {
+	device	    /dev/drbd1;
+	disk	    /UMCdev/tcmu001;
+	address	    192.168.1.9:7788;
+	meta-disk   internal;
+    }
+}
+
+/******************************************************************************/
+
+# /etc/scst.conf
+# Comments must start a line (no comments at end of line after commands)
+
+[OPTIONS]
+# Copy configuration options during a -writeconfig
+KEEP_CONFIG TRUE
+# For FC targets, issue a LIP after every assignment change
+ISSUE_LIP FALSE
+
+[HANDLER vdisk]
+#DEVICE <vdisk name>,<device path>,<options>,<block size>,<t10 device id>
+### DEVICE null_NULLIO,/dev/zero,NULLIO,512,N000
+### DEVICE zero_ZERO,/dev/zero,NV_CACHE,512,Z000
+### DEVICE zero_BZERO,/dev/zero,BLOCKIO,512,BZ000
+
+######### TCMU DEVICE #########
+# Connection from SCST VDISK through bio_tcmu to a TCMU handler storage backend
+#
+DEVICE disk_ram000,/UMCdev/tcmu000,BLOCKIO,4096,tcmu000
+
+######### DRBD device #########
+# Connection from SCST VDISK through bio_tcmu to a DRBD block device
+# (The DRBD block device backed (locally) via bio_tcmu to a TCMU handler)
+#
+# DEVICE disk_drbd1,/UMCdev/drbd1,BLOCKIO|READ_ONLY,4096,drbd1
+DEVICE disk_drbd1,/UMCdev/drbd1,BLOCKIO,4096,drbd1
+
+[GROUP Default]
+
+[GROUP blackbox]
+USER iqn.1993-08.org.debian:01:42f44c781338
+
+[ASSIGNMENT blackbox]
+### DEVICE null_NULLIO,0
+### DEVICE zero_ZERO,1
+### DEVICE zero_BZERO,2
+DEVICE disk_ram000,0
+DEVICE disk_drbd1,1
+
+### [ASSIGNMENT Default]
+### DEVICE disk_sda5,/dev/sda5,,4096,sda5
+### DEVICE file_b1,/tmp/disk_b1,NV_CACHE,512,F_b1
+
+[TARGETS enable]
+#HOST <wwn identifier>
+
+[TARGETS disable]
+#HOST <wwn identifier>
+
+/******************************************************************************/
+
+# /etc/iscsi-scstd.conf
+
+Target iqn.2001-04.com.example.blackbox:1
+	QueuedCommands 2048
+	RspTimeout 90
+	NOPInInterval 30
+	NOPInTimeout 30
+	MaxSessions 0
+	InitialR2T No
+	ImmediateData Yes
+	MaxConnections 1
+	MaxRecvDataSegmentLength 16773120
+	MaxXmitDataSegmentLength 16773120
+	MaxBurstLength 16773120
+	FirstBurstLength 16773120
+	DefaultTime2Wait 0
+	DefaultTime2Retain 0
+	MaxOutstandingR2T 8
+	DataPDUInOrder Yes
+	DataSequenceInOrder Yes
+	ErrorRecoveryLevel 0
+	HeaderDigest None
+	DataDigest None
+
+/******************************************************************************/

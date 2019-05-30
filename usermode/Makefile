@@ -246,8 +246,9 @@ endif
 
 export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
 
-usermode all:	cscope check_mte
+usermode all:	check_mte
 	$(MAKE) -C $(USERMODE_LIB_SRC) all							    # UMC library
+	$(MAKE) cscope
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst all				    # SCST CORE
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o    # SCST-VDISK
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/iscsi-scst all			    # iSCSI-SCST
@@ -313,19 +314,19 @@ clean:
 	$(MAKE) -C .. $@
 	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 	$(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode $@
-	$(MAKE) -C $(DRBD_UTIL_SRC) $@
+	# $(MAKE) -C $(DRBD_UTIL_SRC) $@
 
 extraclean:
 	rm -rf *.o scst.out
 	rm -rf tags cscope.out
 	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 	$(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode $@
-	$(MAKE) -C $(DRBD_UTIL_SRC) distclean
 	$(MAKE) -C .. $@
+	# $(MAKE) -C $(DRBD_UTIL_SRC) distclean
 
 cscope:
-	@cscope -b -c -R -s$(USERMODE_LIB_SRC) -s$(SCST_SRC) -s$(MTE_SRC)
-	@ctags        -R   $(USERMODE_LIB_SRC)   $(SCST_SRC)   $(MTE_SRC)
+	cscope -b -c -R `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) $(MTE_SRC) $(DRBD_SRC)/drbd $(DRBD_SRC)/drbd-headers -name \*.c -o -name \*.h`
+	@ctags       -R		 $(USERMODE_LIB_SRC) $(SCST_SRC) $(MTE_SRC)
 
 ls:
 	@ls     -ad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`

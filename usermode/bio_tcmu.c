@@ -598,7 +598,7 @@ bio_tcmu_create(int minor, const char * cfg)
 
     sys_notice(LOGID" handler %s attach target %s size %"PRIu64"/%"PRIu64" block_size %ld%s",
 	       tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev),
-	       dev_size, size, bdev->bd_block_size, is_rdonly ? " READONLY" : "");
+	       dev_size, size, bdev->bd_block_size, is_rdonly ? " READONLY" : "READ/WRITE");
 
     bio_tcmu_minors[minor] = tcmu_dev;
 
