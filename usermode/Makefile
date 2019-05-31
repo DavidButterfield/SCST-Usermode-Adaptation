@@ -79,6 +79,8 @@ endif
 
 ################################################################################
 
+BUILD_STATIC=1	    # for a better debugging experience
+
 # LOCAL_CFLAGS are used when compiling linux usermode code -- it comprises other FLAGS below
 # EXTRA_CFLAGS are used when compiling linux kernel code for usermode -- similar
 
@@ -130,10 +132,11 @@ DRBDU_CFLAGS += -DDRBD_USERMODE			# Tell C source files to use DRBD_USERMODE ada
 # Directory containing header files for usermode compatibility for kernel code
 SCSTU_CFLAGS += -I$(USERMODE_LIB_SRC)
 DRBDU_CFLAGS += -I$(USERMODE_LIB_SRC)
-TCMU_CFLAGS += -I$(USERMODE_LIB_SRC)
+TCMU_CFLAGS  += -I$(USERMODE_LIB_SRC)
 
-SCSTU_CFLAGS += -I$(SYS_SERVICE_INCL)	#XXX ?
-DRBDU_CFLAGS += -I$(SYS_SERVICE_INCL)	#XXX ?
+SCSTU_CFLAGS += -I$(SYS_SERVICE_INCL)
+DRBDU_CFLAGS += -I$(SYS_SERVICE_INCL)
+TCMU_CFLAGS  += -I$(SYS_SERVICE_INCL)
 
 # Fiddle around with #include searching to get some from kernel and some from /usr/include;
 # kinclude contains empty surrogate header files, and a few symlinks to real kernel headers;
@@ -141,7 +144,6 @@ DRBDU_CFLAGS += -I$(SYS_SERVICE_INCL)	#XXX ?
 SCSTU_CFLAGS += -isystem $(USERMODE_LIB_SRC)/kinclude
 SCSTU_CFLAGS += -isystem /usr/include	#XXX ?
 DRBDU_CFLAGS += -isystem $(USERMODE_LIB_SRC)/kinclude
-# DRBDU_CFLAGS += -isystem /usr/include	#XXX ?
 
 #######################  Enable most compiler warnings  ########################
 
@@ -189,7 +191,7 @@ export EXTRA_WFLAGS := $(WFLAGS_WARN)
 
 SHELL=/bin/bash
 
-GCCLDFLAGS = -static -Wl,-z,now	    # -Wl,-O1
+GCCLDFLAGS = $(BUILD_TYPE) -Wl,-z,now	    # -Wl,-O1
 export LOCAL_LD_FLAGS = $(GCCLDFLAGS)
 export LOCAL_LIBS = -lubsan -lrt -lpthread -ldl -lc
 
@@ -249,6 +251,19 @@ endif
 
 export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
 
+ifdef BUILD_STATIC
+LIB_SUFFIX="a"
+BUILD_TYPE=-static
+else
+LIB_SUFFIX="so"
+BUILD_TYPE=
+endif
+
+LIBMTE := $(shell if [ -f /lib/libmte.$(LIB_SUFFIX) ] ; \
+		    then /bin/echo "-lmte" ; \
+		    else /bin/echo "$(MTE_SRC)/libmte.$(LIB_SUFFIX)" ; \
+		 fi)
+
 usermode all:	cscope check_mte
 	$(MAKE) -C $(USERMODE_LIB_SRC) all							    # UMC library
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst all				    # SCST CORE
@@ -275,11 +290,10 @@ scst.out:   $(TCMU_LIBS) UMC_app.o drbd_compat.o #XXX $(COMPONENTS) made by 'all
 	$(CC) -o scst.out $(GCCLDFLAGS) \
 		    $(COMPONENTS) UMC_app.o drbd_compat.o \
 		    $(TCMU_LIBS) $(BACKEND_LIBS) $(USERMODE_LIB) \
-		    -lmte -lfuse -laio $(LOCAL_LIBS) -lc
+		    $(LIBMTE) -lfuse -laio $(LOCAL_LIBS) -lc
 
 check_mte:
-	@# The libmte.so module should have been installed in /lib or somewhere .so files can be found
-	@if [[ ! -f /lib/libmte.so ]] ; then $(MAKE) -C $(MTE_SRC) install; fi
+	@if [[ ! -f /lib/libmte.$(LIB_SUFFIX) ]] ; then $(MAKE) -C $(MTE_SRC) ; fi
 
 %.o: %.c
 	$(CC) -c -o $(@) $(TCMU_CFLAGS) $(<)
@@ -312,6 +326,7 @@ valgrind:
 
 clean:
 	rm -rf *.o scst.out
+	rm -rf tags cscope.out
 	$(MAKE) -C .. $@
 	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 	$(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode $@
