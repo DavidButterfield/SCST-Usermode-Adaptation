@@ -1,0 +1,5 @@
+You are in the usermode branch of SCST-Usermode-Adaptation
+
+You want to be in the "drbd" branch
+
+ALSO make sure your usermode_compat clone has the "drbd" branch checked out
