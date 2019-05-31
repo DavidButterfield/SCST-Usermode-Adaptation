@@ -1,4 +1,8 @@
 # SCST-Usermode-Adaptation
+
+**For DRBD info see usermode/README.DRBD**
+
+
 **SCST iSCSI Storage Server Usermode Adaptation**  
 An adaptation of the iSCSI-SCST storage server software to run entirely in usermode on an unmodified Linux kernel  
 *David A. Butterfield*
