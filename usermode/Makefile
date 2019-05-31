@@ -32,7 +32,8 @@ USERMODE_TCMU_RAM = defined	    # RAM disk
 # You can pass in alternative source directories to override these defaults.
 #
 # Default source tree layout assumption:
-#   a directory with these subdirectories: SCST  MTE  UMC
+#   a directory with these subdirectories: MTE  usermode_compat  SCST-Usermode-Adaptation 
+#   (the name of the SCST-Usermode-Adaptation directory doesn't matter)
 #
 # (MTE only needs to be there if not installed on the system (in /usr/include).
 
@@ -46,7 +47,7 @@ endif
 # specifies where they are:
 ifndef SYS_SERVICE_INCL
 export SYS_SERVICE_INCL = $(shell if [ -d $(MY_SRC)/MTE/include ]; \
-				  then echo -I$(MY_SRC)/MTE/include; \
+				  then echo $(MY_SRC)/MTE/include; \
 				  fi)
 endif
 
@@ -58,7 +59,7 @@ endif
 
 # Path to the "emulated Linux KPI" usermode compatibility library
 ifndef USERMODE_LIB_SRC
-export USERMODE_LIB_SRC = $(MY_SRC)/UMC/src
+export USERMODE_LIB_SRC = $(MY_SRC)/usermode_compat/src
 endif
 
 # Path to the SCST source tree (which we are assumed at a location within)
@@ -68,7 +69,7 @@ endif
 
 # Path to the DRBD source tree
 ifndef DRBD_SRC
-export DRBD_SRC = $(MY_SRC)/SCST-Usermode-Adaptation
+export DRBD_SRC = $(MY_SRC)/drbd-9.0
 endif
 
 # Path to the DRBD utilities source tree
@@ -124,13 +125,15 @@ ifdef USERMODE_TCMU
 SCSTU_CFLAGS += -DSCST_USERMODE_TCMU		# blockio using tcmu-runner backstore handlers
 endif
 
+DRBDU_CFLAGS += -DDRBD_USERMODE			# Tell C source files to use DRBD_USERMODE adaptations
+
 # Directory containing header files for usermode compatibility for kernel code
 SCSTU_CFLAGS += -I$(USERMODE_LIB_SRC)
 DRBDU_CFLAGS += -I$(USERMODE_LIB_SRC)
 TCMU_CFLAGS += -I$(USERMODE_LIB_SRC)
 
-SCSTU_CFLAGS += $(SYS_SERVICE_INCL)	#XXX ?
-DRBDU_CFLAGS += $(SYS_SERVICE_INCL)	#XXX ?
+SCSTU_CFLAGS += -I$(SYS_SERVICE_INCL)	#XXX ?
+DRBDU_CFLAGS += -I$(SYS_SERVICE_INCL)	#XXX ?
 
 # Fiddle around with #include searching to get some from kernel and some from /usr/include;
 # kinclude contains empty surrogate header files, and a few symlinks to real kernel headers;
@@ -199,12 +202,12 @@ TCMU_CFLAGS += $(MY_CFLAGS) $(EXTRA_WFLAGS)
 SCSTU_CFLAGS += -include $(SCST_SRC)/usermode/scst_compat.h
 
 # Force drbd_compat.h to be #included at the start of every DRBD kernel.c file, for usermode shims
-DRBDU_CFLAGS += -include $(DRBD_SRC)/usermode/drbd_compat.h
+DRBDU_CFLAGS += -include $(SCST_SRC)/usermode/drbd_compat.h	# XXX
 
 TCMU_CFLAGS += -I$(CURDIR)
 
 # LOCAL_CFLAGS appears to be used instead of EXTRA_CFLAGS in real usermode makefiles
-export LOCAL_CFLAGS += $(MY_CFLAGS) $(EXTRA_WFLAGS) -DSCST_USERMODE
+export LOCAL_CFLAGS += $(MY_CFLAGS) $(EXTRA_WFLAGS) -DSCST_USERMODE -DDRBD_USERMODE
 
 export INFINIBAND_ENABLED := false
 SCST_INC_DIR := $(CURDIR)/../scst/include
@@ -246,18 +249,16 @@ endif
 
 export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
 
-usermode all:	check_mte
+usermode all:	cscope check_mte
 	$(MAKE) -C $(USERMODE_LIB_SRC) all							    # UMC library
-	$(MAKE) cscope
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst all				    # SCST CORE
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o    # SCST-VDISK
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/iscsi-scst all			    # iSCSI-SCST
 	$(MAKE) drbd
 	$(MAKE) scst.out
-	# $(MAKE) drbd-utils
 
 drbd-utils:
-	EXTRA_CFLAGS="$(MY_CFLAGS) -DDO_NODE_PREEXISTS_CHECK=0 -DPROC_PREFIX=\\\"/fuse/scst\\\"" $(MAKE) -C $(DRBD_UTIL_SRC) all
+	EXTRA_CFLAGS="$(MY_CFLAGS) -DDRBD_USERMODE" $(MAKE) -C $(DRBD_UTIL_SRC)
 
 drbd:	cscope
 	EXTRA_CFLAGS="$(DRBDU_CFLAGS)" $(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode all
@@ -307,34 +308,26 @@ spdk.o: spdk.c spdk/stdinc.h spdk/nvme.h spdk/env.h tcmu-runner.h libtcmu.h
 
 VALGRIND_OPTS = --leak-check=full --show-leak-kinds=all --num-callers=30 --track-fds=yes --sim-hints=no-nptl-pthread-stackcache --track-origins=yes
 valgrind:
-	PROC_PREFIX=/fuse/scst UMC_DRBD_PID=17 valgrind $(VALGRIND_OPTS) ./scst.out -f
+	PROC_PREFIX=/fuse/scst valgrind $(VALGRIND_OPTS) ./scst.out -f
 
 clean:
 	rm -rf *.o scst.out
 	$(MAKE) -C .. $@
 	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 	$(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode $@
-	# $(MAKE) -C $(DRBD_UTIL_SRC) $@
 
 extraclean:
 	rm -rf *.o scst.out
 	rm -rf tags cscope.out
+	$(MAKE) -C .. $@
 	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 	$(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode $@
-	$(MAKE) -C .. $@
-	# $(MAKE) -C $(DRBD_UTIL_SRC) distclean
 
 cscope:
 	cscope -b -c -R `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) $(MTE_SRC) $(DRBD_SRC)/drbd $(DRBD_SRC)/drbd-headers -name \*.c -o -name \*.h`
-	@ctags       -R		 $(USERMODE_LIB_SRC) $(SCST_SRC) $(MTE_SRC)
+	@ctags       -R		 $(USERMODE_LIB_SRC) $(SCST_SRC) $(MTE_SRC) $(DRBD_SRC)/drbd $(DRBD_SRC)/drbd-headers
 
-ls:
-	@ls     -ad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
-
-l:
-	@ls -lsrtad Make* `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) -type f | egrep "Make|\.[ch]$$" | egrep -v "\.mod\.c$$"`
-
-.PHONY:	all components check_mte valgrind clean extraclean cscope ls l
+.PHONY:	all usermode drbd drbd-utils check_mte valgrind clean extraclean cscope
 
 ##### Copied from drbd/Kbuild #####
 # for some reason some of the commands below only work correctly in bash,
