@@ -1,14 +1,16 @@
-Thu May 30 00:34:42 MDT 2019
-    This is an early runnable version of usermode SCST/DRBD -- incomplete and buggy!
+Thu May 30 17:08:36 MDT 2019
+    This is a very early runnable version of usermode SCST/DRBD -- incomplete and buggy!
+    The drbd source code is (nearly) unmodified, with its expected kernel environment
+    simulated around it.  Build information at the end below.
 
 Demo config:
-    I set up a small DRBD device of 1 GB, with ext4 filesystem
+    I set up a small DRBD device of 1 GB, internal metadata, with ext4 filesystem
 
     One Node (K) running standard DRBD 9.0 in the kernel (exposing /dev/drbd1)
 	DRBD's backing device is a partition on a real disk /dev/sda1
 	Replicated device can be mounted as /dev/drbd1 (when primary)
 
-    One Node (U) running DRBD 9.0 in USERMODE in a process with SCST (dev internal only)
+    One Node (U) running DRBD 9.0 in USERMODE in a process with SCST (dev_t internal only)
 	DRBD's backing device is a block device implemented as a 1 GB ramdisk
 	The ramdisk is an mmap(2) backed by a 1 GB file /tmp/cfg2
 	Replicated device is plumbed underneath SCST as an SCST vdisk backing bdev
@@ -16,58 +18,73 @@ Demo config:
 
     An iSCSI initiator with a session to Node (U)
 	When Node U is primary, iSCSI initiator can mount the replicated filesystem
-	Exposes the SCSI device as a block device, mountable as /dev/sdj
+	Exposes the SCSI device as a block device, mountable as /dev/sdj (on my initiator)
 
     I've written bio_tcmu to connect a bio request to a tcmu-runner storage backend handler.
     TCMU itself is not involved -- I'm just repurposing their backend handlers by translating
-    bio requests into the protocol expected by the TCMU handlers.
+    bio requests into the protocol expected by the existing TCMU handlers.
 
     There are several TCMU handlers for different usermode storage providers such as ceph, qemu,
-    and gluster; I've written one for an mmap(2) ramdisk, used here.  (I also have a prototype
-    of a handler for spdk.)  All of those would interface into bio_tcmu at the same place
-    occupied by tcmu_ram in this diagram.
+    and gluster; I've written one for an mmap(2) ramdisk, used here.  I also have a prototype of
+    a handler for SPDK, which would interface into bio_tcmu from the same place occupied by
+    tcmu_ram in this diagram.
 
-
-			    iSCSI
+                            iSCSI
   /dev/sdj ---> Initiator <=======> SCST-iSCSI 
-					|
-				    SCST-core					    [Node U]
-					|	 bio	      bio
-				    SCST-vdisk <=====> DRBD <=====> bio_tcmu
-							|		|     mmap
-							|	    tcmu_ram <====> /tmp/cfg2
-							|1GbE
-							|
-							|
-							|     bio
-				       /dev/drbd1 ---> DRBD <=====> sd		    [Node K]
+                                        |
+                                    SCST-core                                   [Node U]
+                                        |        bio          bio
+                                    SCST-vdisk <=====> DRBD <=====> bio_tcmu
+                                                        ^               |     mmap
+                                                        |           tcmu_ram <====> /tmp/cfg2
+                                                        |1GbE
+                                                        |
+                                                        |
+                                                        v     bio
+                                       /dev/drbd1 ---> DRBD <=====> sda1        [Node K]
 
+    It is also possible to plumb SCST-vdisk directly to bio_tcmu through the bio interface,
+    bypassing DRBD (in that case the exposed device is unreplicated, of course).
 
-    It is also possible to plumb SCST-vdisk directly to bio_tcmu through the bio interface.
-    The sample scst.conf file below defines two SCST device instances:
-	/UMCdev/tcmu000	    connects SCST directly to bio_tcmu's block device (/tmp/cfg1)
-	/UMCdev/drbd1	    connects SCST to DRBD's block device (/tmp/cfg2)
+    A sample scst.conf file below defines the following two SCST device instances, one connected
+    as shown above, the other a direct connection from SCST to TCMU ram module as just mentioned.
 
-Capabilities -- with this config I was able to do the following:
+    initiator	SCST	        program-internal	backing file
+    ----------	-----	-------------------------------	------------
+     /dev/sdi	LUN 0			/UMCdev/tcmu000	  /tmp/cfg1
+     /dev/sdj	LUN 1	/UMCdev/drbd1	/UMCdev/tcmu001	  /tmp/cfg2
+
+    The /tmp/cfg names are currently hardcoded in bio_tcmu.c.
+
+Demo capabilities -- with this config I was able to do the following:
     Monitor network connection between Nodes (U) and (K) using tcpdump
-    Establish network communication between Nodes (U) and (K)
+    Establish DRBD replication connection between Nodes (U) and (K)
     Use Node K to create an ext4 filesystem on the replicated device
-    Change primary to Node (U) and mount the replicated device on /mnt/x
-    Copy the source code repositories (including drbd and scst) onto the replicated device
-    Run "make" and successfully build the usermode binary
-	Observe replication traffic in tcpdump during the build
+    Change primary to Node (U) and mount the replicated device on /mnt/j
+    mkdir /mnt/j/git ; cd /mnt/j/git 
+    Download the source repositories from github directly onto the replicated device
+    Run "make" and successfully build the usermode binary on Node (U)
+	while observing replication traffic in tcpdump during the build
     Lacking a mechanism to get SCST to close the DRBD device, for now I substitute this:
-	Unmount /mnt/x, then kill SCST/DRBD usermode process
-	Restart SCST/DRBD usermode process [See limitations below]
-	Re-establish network replication
+	Unmount /mnt/j, then kill SCST/DRBD usermode process with ^\ (SIGQUIT)
+	Restart SCST/DRBD usermode process [See Limitations below]
+	Re-establish network replication, but do not make Node (U) primary
     Set Node (K) as primary and mount /dev/drbd1 as /mnt/x
     Observe the built binaries from the make done on Node (U)
+    Save a copy of the binary built on Node (U)
     Run "make clean" and "make all" to do the successful build again on Node (K)
-	Observe replication traffic in tcpdump during the build
+	while observing replication traffic in tcpdump during the build
+    Strip the two binaries and they compare equal except 20 bytes probably timestamp
+    Make Node (U) primary and use scstadmin again to configure SCST
+    mount /dev/sdj /mnt/j
+    Copy the binary built on Node (U) onto the local disk
+    Restart the server on Node (U), running the executable built on the replicated device.
 
 Limitations:
     Many things are hacked just enough to get it to work, and neglecting performance.
-    Netlink multicast is not yet implemented, so anything like "drbdsetup wait*" hangs.
+    The Makefiles have optimizations turned off and debugs turned on.
+
+    Netlink multicast emulation not yet implemented, so anything like "drbdsetup wait*" hangs.
 
     drbdmeta assumes it can access the device through /dev/drbd*, but this is not the case on
     Node (U).  This is a problem because after a server restart drbdmeta needs to apply the
@@ -75,17 +92,17 @@ Limitations:
 
     At the moment my workaround is to destroy the metadata on Node U every time the server
     process (containing SCST and DRBD) is restarted, and let it resync from Node (K).  With my
-    1 GB filesystem this takes around 25 seconds.  I tell drbdmeta to operate directly on the
-    backing file for the ramdisk:
+    1 GB filesystem this takes around 25 seconds.  Before starting the server process, I tell
+    drbdmeta to operate directly on the backing file for the ramdisk:
 
 	sudo drbdmeta 1 v09 /tmp/cfg2 internal create-md 1 --force 
 
     Then start the usermode SCST/DRBD server:
 
-	sudo ./scst.out -f	    # start the usermode SCST/DRBD server
+	sudo ./scst.out -f
 
     On Node (U) I use drbdsetup rather than drbdadm because the latter also assumes access via
-    /dev/drbd* (at least by invoking drbdmeta):
+    /dev/drbd* (if nothing else at least by invoking drbdmeta):
 
 	drbdsetup new-resource r0 0
 	drbdsetup new-minor r0 1 0
@@ -94,12 +111,16 @@ Limitations:
 	drbdsetup attach 1 /UMCdev/tcmu001 /UMCdev/tcmu001 internal
 	drbdsetup connect r0 1
 	drbdsetup peer-device-options --resync-rate=40000 --c-plan-ahead=0 --c-min-rate=0 r0 1 0
+
 	<wait for sync to finish>
+
 	drbdsetup primary r0
-	scstadmin -config /etc/scst.conf
+	scstadmin -config /etc/scst.conf	    # configure SCST
 	drbdsetup status --statistics --verbose
 
-    (The "/UMCdev" names are the magic device names used internally to the usermode process)
+    (The "/UMCdev" names are the magic device names used internally in the usermode process)
+
+    Something I expect NOT to work is running the server executable off of a disk it implements.
 
 /******************************************************************************/
 
@@ -122,6 +143,7 @@ resource r0 {
 
 # /etc/scst.conf
 # Comments must start a line (no comments at end of line after commands)
+# (This is the ancient format of the SCST config file used by /proc in version 2.6.24)
 
 [OPTIONS]
 # Copy configuration options during a -writeconfig
@@ -135,12 +157,12 @@ ISSUE_LIP FALSE
 ### DEVICE zero_ZERO,/dev/zero,NV_CACHE,512,Z000
 ### DEVICE zero_BZERO,/dev/zero,BLOCKIO,512,BZ000
 
-######### TCMU DEVICE #########
+######### TCMU DEVICE (unreplicated) #########
 # Connection from SCST VDISK through bio_tcmu to a TCMU handler storage backend
 #
 DEVICE disk_ram000,/UMCdev/tcmu000,BLOCKIO,4096,tcmu000
 
-######### DRBD device #########
+######### DRBD device (replicated) #########
 # Connection from SCST VDISK through bio_tcmu to a DRBD block device
 # (The DRBD block device backed (locally) via bio_tcmu to a TCMU handler)
 #
@@ -196,3 +218,77 @@ Target iqn.2001-04.com.example.blackbox:1
 	DataDigest None
 
 /******************************************************************************/
+
+Need some build instructions here.  But the process is a mess at the moment.
+
+Also, the DRBD Makefiles below require various build tools which I installed one
+by one as it complained about not having them.  I should make a list of those...
+
+Make a git directory and clone these repositories into it from github:
+    mkdir ~/git
+    cd ~/git
+    git clone https://github.com/DavidButterfield/MTE.git
+    git clone https://github.com/DavidButterfield/usermode_compat.git
+    git clone https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git
+    git clone https://github.com/DavidButterfield/drbd-9.0.git
+    git clone https://github.com/DavidButterfield/drbd-utils.git
+
+Checkout the right branches:
+    MTE				master		# should be default
+    usermode_compat		drbd
+    SCST-Usermode-Adaptation	drbd
+    drbd-9.0			usermode	# should be default
+    drbd-utils			usermode	# should be default
+
+Also get linux-2.6.32.27 (only need the kernel headers) into the same "git" directory.
+    wget https://cdn.kernel.org/pub/linux/kernel/v2.6/linux-2.6.32.27.tar.gz
+    gunzip linux-2.6.32.27.tar.gz
+    tar xvf linux-2.6.32.27.tar
+    rm linux-2.6.32.27.tar	    # if FS is only 1GB
+
+Apply drbd-9.0/PATCH.drbd-kernel-compat in drbd/drbd-kernel-compat.
+    This is a temporary workaround because drbd-kernel-compat is not in the
+    same repository (eventually the patch will go into a fork of the underlying
+    repository or something).
+
+In the drbd-utils directory:
+    ./autogen.sh
+    ./configure --prefix=/usr --localstatedir=/var --sysconfdir=/etc --with-build-usermode
+    make
+    # If this machine only runs DRBD in USERMODE, may as well install the utilities.
+    # But if kernel-based DRBD is installed, don't destroy its utilities by installing these.
+    sudo make install	# only if you don't run kernel-based DRBD!
+
+Normally you should not make in the drbd-9.0 directory -- that will make a version that expects
+to interact with the kernel.  The make for DRBD-Usermode is done from scst/usermode/Makefile
+passing in the appropriate flags to drbd-9.0/drbd/Makefile.usermode.
+
+However, a make in drbd-9.0 does have to be done once, to get it to download the headers and
+compatibility code from some place external to the drbd-9.0 repository.  That make will create a
+file drbd-9.0/drbd/compat.h which ***MUST BE DELETED*** for the usermode compile to succeed.
+
+In the SCST-Usermode-Adaptation directory for now we must use emulated /proc (not /sys).
+This is enabled by:
+    cd SCST-Usermode-Adaptation
+    make enable_proc
+
+If everything is right, it should now work to build from the directory
+SCST-Usermode-Adaptation/usermode.  BUT... the dependencies are not computed
+correctly in the Makefiles, so for now I always do a clean make:
+    cd SCST-Usermode-Adaptation/usermode
+    make clean
+    make
+
+That should produce the SCST/DRBD usermode server as scst.out.  There should be no compile
+errors, but there will be a few warnings; these can be ignored:
+    a few unused variable / unused function
+    #warning In the PROCFS build EXTENDED COPY not supported [-Wcpp]
+    #warning "BDI_CAP_STABLE_WRITES not available" [-Wcpp]
+    Using 'getaddrinfo' in statically linked apps requires at runtime the shared libraries...
+    Using 'dlopen' in statically linked apps requires at runtime the shared libraries
+
+The binary is built statically so that addr2line works right for stacktraces.
+
+To RUN the utilities so that the scripts refer to the simulated /proc that talks to the usermode
+server process (rather than the real /proc that talks to kernel), ***SET ENVIRONMENT VARIABLE***
+    export PROC_PREFIX=/fuse/scst
