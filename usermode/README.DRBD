@@ -1,4 +1,4 @@
-Fri May 31 13:32:36 MDT 2019
+Fri May 31 19:19:36 MDT 2019
     This is a very early runnable version of usermode SCST/DRBD -- incomplete & probably buggy!
 
     The drbd source code is (nearly) unmodified, with its expected kernel environment simulated
@@ -29,9 +29,9 @@ Demo config:
     bio requests from DRBD or SCST into the protocol expected by the existing TCMU handlers.
 
     There are several TCMU handlers for different usermode storage providers such as ceph, qemu,
-    and gluster; I've written one for an mmap(2) ramdisk, used here.  I also have a prototype of
-    a handler for SPDK, which would interface into bio_tcmu from the same place occupied by
-    tcmu_ram in this diagram.
+    and gluster; I've written a simple one for an mmap(2) ramdisk, used here.  I also have
+    started a prototype of a handler for SPDK, which interfaces into bio_tcmu from the same
+    place occupied by tcmu_ram in this diagram.
 
                             iSCSI
   /dev/sdj ---> Initiator <=======> SCST-iSCSI 
@@ -84,9 +84,13 @@ Demo capabilities -- with this config I was able to do the following:
     Copy the binary built on Node (U) onto the local disk
     Restart the server on Node (U), running the executable built on the replicated device.
 
+    In a separate configuration I ran two usermode SCST/DRBD servers on two machines
+    doing the same sort of replication as above (but not using any kernel-based DRBD).
+
 Limitations:
     Many things are hacked just enough to get it to work, and neglecting performance.
-    The Makefiles have optimizations turned off and debugs turned on.
+    The Makefiles have optimizations turned off and debugs turned on.  But not taking any
+    measurements, the performance seemed pretty much like normal, watching my makes run.
 
     Netlink multicast emulation not yet implemented, so anything like "drbdsetup wait*" hangs.
 
@@ -223,13 +227,18 @@ Target iqn.2001-04.com.example.blackbox:1
 
 /******************************************************************************/
 
-Need some build instructions here.  But the process is a mess at the moment.
+Need some build instructions here.  The process is rather a mess at the moment.  It isn't as
+automatic as it ought to be, so you'll likely have to actually read what's below.
 
-Also, the DRBD Makefiles require various build tools which I installed one by one as it
-complained about not having them.  I should make a list of those...
+Also, some Makefiles require various build tools which I installed one by one as it complained
+about not having them.  I should make a list of those...
 
 The good news is that I've carried out this entire build sequence in a directory *on* a
-replicated device implemented by DRBD running in usermode, producing a runnable binary server.
+replicated device implemented by DRBD running in usermode, and got a runnable binary server.
+
+I have only run the usermode server on machines without DRBD installed in the kernel.
+The description below assumes that there are no DRBD modules or utilities installed.
+(That would likely be very confusing, though it might work if assigned separate ports)
 
 Make a git directory and clone these repositories into it from github:
     mkdir ~/git
@@ -253,36 +262,42 @@ Also get linux-2.6.32.27 (only need the kernel headers) into the same "git" dire
     tar xvf linux-2.6.32.27.tar
     rm linux-2.6.32.27.tar	    # for space if FS is only 1GB
 
-Apply drbd-9.0/PATCH.drbd-kernel-compat in drbd/drbd-kernel-compat.
-    This is a temporary workaround because drbd-kernel-compat is not in the
-    same repository (eventually the patch will go into a fork of the underlying
-    repository or something).
-
-In the drbd-utils directory:
+In the drbd-utils source directory:
+    ## Build the drbd utilities "--with-build-usermode" to control a usermode DRBD server
     ./autogen.sh
-    # If you omit --without-manual, it will take a long time for the make to complete.
+    ## If you omit --without-manual, it will take a long time for the make to complete.
     ./configure --prefix=/usr --localstatedir=/var --sysconfdir=/etc \
 					    --with-build-usermode --without-manual
     make
-    # If this machine only runs DRBD in USERMODE, you may as well install the utilities.
-    # But if kernel-based DRBD is installed, don't destroy its utilities by installing these.
-    sudo make install	# only if you don't run kernel-based DRBD!
+    sudo make install
 
-Normally you should not make in the drbd-9.0 directory -- that will make a version that expects
-to interact with the kernel.  The make for usermode DRBD is done from scst/usermode/Makefile
-passing in the appropriate flags to drbd-9.0/drbd/Makefile.usermode.
+In the drbd-9.0 source directory:
+    ## Normally you should not need to "make" in the drbd-9.0 directory -- that might make a
+    ## version that expects to interact with the kernel.  The make for usermode DRBD is done
+    ## from SCST-Usermode-Adaptation/usermode/Makefile passing in the appropriate flags to
+    ## drbd-9.0/drbd/Makefile.usermode
+    ##
+    ## However, a make in drbd-9.0 does have to be done ONCE, to get it to download the headers
+    ## and compatibility code from some places external to the drbd-9.0 repository.  That make
+    ## creates drbd-9.0/drbd/compat.h which ***MUST BE DELETED*** before the usermode compile.
+    ##
+    ## After the additional code gets downloaded by that "make", there is a (temporary
+    ## workaround) patch that has to be applied to it:
+    cd drbd/drbd-kernel-compat
+    patch -p1 < ../../PATCH.drbd-kernel-compat
 
-However, a make in drbd-9.0 does have to be done once, to get it to download the headers and
-compatibility code from some place external to the drbd-9.0 repository.  That make will create a
-file drbd-9.0/drbd/compat.h which ***MUST BE DELETED*** for the usermode compile to succeed.
-
-In SCST for now we must use emulated /proc (not /sys).  This is enabled by:
+For now SCST has to use emulated /proc (not /sys).  This is enabled by:
     cd SCST-Usermode-Adaptation
     make enable_proc
 
-If everything is right, it should now work to build from the directory
-SCST-Usermode-Adaptation/usermode.  BUT... the dependencies are not computed
-correctly in the Makefiles, so for now I always do a clean make:
+scstadmin relies on a modified SCST.PM, which gets installed in the right place somehow.
+    ## I think it was from doing			    XXX recheck this
+    cd SCST-Usermode-Adaptation
+    make scstadm_install
+
+If everything is right, it should now successfully build in SCST-Usermode-Adaptation/usermode.
+BUT... the dependencies are not computed correctly in the Makefiles, so for now I always do a
+clean make:
     cd SCST-Usermode-Adaptation/usermode
     make clean
     make
@@ -297,6 +312,20 @@ errors, but there will be a few warnings; these can be ignored:
 
 The binary is built statically so that addr2line works right for stacktraces.
 
-To RUN the utilities so that the scripts refer to the simulated /proc that talks to the usermode
-server process (rather than the real /proc that talks to kernel), ***SET ENVIRONMENT VARIABLE***
+Configuration files:
+    ## The example config files shown above are from Node (U) in my setup.  Put those in
+    ## /etc/iscsi-scstd.conf and /etc/scst.conf.  The DRBD config for the resource is also
+    ## shown above and goes somewhere in /etc/drbd.d
+
+    ## SCST also needs these directories created:
+    mkdir -p /var/lib/scst/pr
+    mkdir -p /var/lib/scst/vdev_mode_pages
+
+Create the ramdisk backing files (names currently hardcoded in bio_tcmu.c):
+    ## You can make them bigger, but remember the full resync every server restart
+    dd if=/dev/zero of=/tmp/cfg1 bs=4096 count=256	    # 1 GiB (unreplicated)
+    dd if=/dev/zero of=/tmp/cfg2 bs=4096 count=256	    # 1 GiB (replicated)
+
+To RUN the DRBD utilities so that the scripts refer to the simulated /proc that talks to the
+usermode server process (rather than the real /proc that talks to kernel), ***SET ENVIRONMENT***
     export PROC_PREFIX=/fuse/scst
