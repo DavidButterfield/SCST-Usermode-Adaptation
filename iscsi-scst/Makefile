@@ -203,6 +203,8 @@ clean:	xclean
 
 else	########## SCST_USERMODE ##########
 
+INCDIR := $(shell pwd)/include
+
 SCST_INC_DIR := $(shell pwd)/../scst/include
 
 all: include/iscsi_scst_itf_ver.h
