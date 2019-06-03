@@ -1,4 +1,4 @@
-Sun 02 Jun 2019 11:40:03 AM MDT
+Mon 03 Jun 2019 01:55:30 AM MDT
     This is a very early runnable version of usermode SCST/DRBD -- incomplete & probably buggy!
 
     The drbd source code is (nearly) unmodified, with its expected kernel environment simulated
@@ -135,13 +135,13 @@ Limitations:
 
 resource r0 {
     on bottom {
-	device	    /dev/drbd1;
+	device	    drbd1;
 	disk	    /dev/sda1;
 	address	    192.168.1.37:7788;
 	meta-disk   internal;
     }
     on blackbox {
-	device	    /dev/drbd1;
+	device	    drbd1;
 	disk	    /UMCdev/tcmu001;
 	address	    192.168.1.9:7788;
 	meta-disk   internal;
@@ -235,8 +235,8 @@ Need some build instructions here.  The process is rather a mess at the moment. 
 automatic as it ought to be, so you'll likely have to actually read what's below.
 
 Also, some Makefiles require various build tools which I installed one by one as it complained
-about not having them.  Here's a (probably partial) list:
-    libfuse-dev  flex  exuberant-ctags  cscope
+about not having them.  These are some of them:
+    libfuse-dev  libaio-dev  autoconf  flex  exuberant-ctags  cscope
 
 The good news is that I've carried out this entire build sequence in a directory *on* a
 replicated device implemented by DRBD running in usermode, and got a runnable binary server.
@@ -302,7 +302,7 @@ For now SCST has to use emulated /proc (not /sys).  This is enabled by:
 Install the usermode version of scstadmin and SCST.pm (this must be done AFTER running the
 "make enable_proc" above):
     cd SCST-Usermode-Adaptation
-    make scstadm
+    sudo make scstadm
     sudo make scstadm_install
 
 If everything is right, it should now successfully build in SCST-Usermode-Adaptation/usermode.
