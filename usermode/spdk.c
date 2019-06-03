@@ -64,8 +64,6 @@ typedef struct { int32_t volatile i; }  atomic_t;   /* must be signed */
 #define atomic_inc(ptr)                 atomic_inc_return(ptr)
 #define atomic_dec(ptr)                 atomic_dec_return(ptr)
 
-#endif
-
 /* Each NVMe controller has a set of namespaces */
 struct ctrlr_entry {
     struct spdk_nvme_ctrlr        * ctrlr;	/* SPDK controller data */
@@ -648,7 +646,6 @@ tcmu_spdk_handler_init(void)
     setrlimit(RLIMIT_CORE, &core_limits);
     spdk_log_set_level(SPDK_LOG_DEBUG);
     spdk_log_set_print_level(SPDK_LOG_DEBUG);
-    spdk_log_set_trace_flag("all");
 #else
     spdk_log_set_level(SPDK_LOG_INFO);
     spdk_log_set_print_level(SPDK_LOG_INFO);
