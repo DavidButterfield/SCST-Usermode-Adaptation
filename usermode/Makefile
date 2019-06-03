@@ -249,7 +249,8 @@ ifdef USERMODE_BIO_TCMU
 TCMU_LIBS += bio_tcmu.o
 endif
 
-export SCST_USERMODE = 1		    # Tell sub-makefiles to do SCST_USERMODE build
+export SCST_USERMODE = 1	    # Tell sub-makefiles to do SCST_USERMODE build
+export DRBD_USERMODE = 1	    # Tell sub-makefiles to do DRBD_USERMODE build
 
 ifdef BUILD_STATIC
 LIB_SUFFIX="a"

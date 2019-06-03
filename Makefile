@@ -16,6 +16,9 @@
 #
 #
 
+export SCST_USERMODE = 1	# Tell sub-makefiles to do SCST_USERMODE build
+export DRBD_USERMODE = 1	# Tell sub-makefiles to do DRBD_USERMODE build
+
 SHELL = /bin/bash
 
 # Define the location to the kernel src. Can be defined here or on
@@ -92,65 +95,65 @@ help:
 	@echo "		scstadm_install   : scstadmin: install"
 	@echo "		scstadm_uninstall : scstadmin: uninstall"
 	@echo ""
-	@echo "		qla               : make QLA target driver"
-	@echo "		qla_pull          : pull the latest version of the QLA target driver from the QLogic's git"
-	@echo "		qla_clean         : qla target: clean "
-	@echo "		qla_extraclean    : qla target: clean + clean dependencies"
-	@echo "		qla_install       : qla target: install"
-	@echo "		qla_uninstall     : qla target: uninstall"
-	@echo ""
-	@echo "		qla_old           : make old Qlogic chipsets target driver"
-	@echo "		qla_old_clean     : qla old target: clean "
-	@echo "		qla_old_extraclean: qla old target: clean + clean dependencies"
-	@echo "		qla_old_install   : qla old target: install"
-	@echo "		qla_old_uninstall : qla old target: uninstall"
-	@echo ""
+	@#echo "		qla               : make QLA target driver"
+	@#echo "		qla_pull          : pull the latest version of the QLA target driver from the QLogic's git"
+	@#echo "		qla_clean         : qla target: clean "
+	@#echo "		qla_extraclean    : qla target: clean + clean dependencies"
+	@#echo "		qla_install       : qla target: install"
+	@#echo "		qla_uninstall     : qla target: uninstall"
+	@#echo ""
+	@#echo "		qla_old           : make old Qlogic chipsets target driver"
+	@#echo "		qla_old_clean     : qla old target: clean "
+	@#echo "		qla_old_extraclean: qla old target: clean + clean dependencies"
+	@#echo "		qla_old_install   : qla old target: install"
+	@#echo "		qla_old_uninstall : qla old target: uninstall"
+	@#echo ""
 	@echo "		iscsi             : make iSCSI target"
 	@echo "		iscsi_clean       : ISCSI target: clean "
 	@echo "		iscsi_extraclean  : ISCSI target: clean + clean dependencies"
 	@echo "		iscsi_install     : ISCSI target: install"
 	@echo "		iscsi_uninstall   : ISCSI target: uninstall"
 	@echo ""
-	@echo "		emulex             : make Emulex target"
-	@echo "		emulex_clean       : Emulex target: clean "
-	@echo "		emulex_extraclean  : Emulex target: clean + clean dependencies"
-	@echo "		emulex_install     : Emulex target: install"
-	@echo "		emulex_uninstall   : Emulex target: uninstall"
-	@echo ""
-	@echo "		lsi               : make LSI MPT target"
-	@echo "		lsi_clean         : lsi target: clean "
-	@echo "		lsi_extraclean    : lsi target: clean + clean dependencies"
-	@echo "		lsi_install       : lsi target: install"
-	@echo "		lsi_uninstall     : lsi target: uninstall"
-	@echo ""
-	@echo "		srpt              : make SRP target"
-	@echo "		srpt_clean        : srp target: clean "
-	@echo "		srpt_extraclean   : srp target: clean + clean dependencies"
-	@echo "		srpt_install      : srp target: install"
-	@echo "		srpt_uninstall    : srp target: uninstall"
-	@echo ""
-	@echo "		mvsas             : make MVSAS target"
-	@echo "		mvsas_clean       : mvsas target: clean "
-	@echo "		mvsas_extraclean  : mvsas target: clean + clean dependencies"
-	@echo "		mvsas_install     : mvsas target: install"
-	@echo "		mvsas_uninstall   : mvsas target: uninstall"
-	@echo ""
-	@echo "		fcst              : make FCoE target"
-	@echo "		fcst_clean        : FCoE target: clean "
-	@echo "		fcst_extraclean   : FCoE target: clean + clean dependencies"
-	@echo "		fcst_install      : FCoE target: install"
-	@echo "		fcst_uninstall    : FCoE target: uninstall"
-	@echo ""
-	@echo "		scst_local	  : make scst_local target"
-	@echo "		scst_local_install : scst_local target: install"
-	@echo "		scst_local_uninstall : scst_local target: uninstall"
-	@echo ""
-	@echo "		usr               : make user space targets"
-	@echo "		usr_clean         : usr target: clean "
-	@echo "		usr_extraclean    : usr target: clean + clean dependencies"
-	@echo "		usr_install       : usr target: install"
-	@echo "		usr_uninstall     : usr target: uninstall"
-	@echo ""
+	@#echo "		emulex             : make Emulex target"
+	@#echo "		emulex_clean       : Emulex target: clean "
+	@#echo "		emulex_extraclean  : Emulex target: clean + clean dependencies"
+	@#echo "		emulex_install     : Emulex target: install"
+	@#echo "		emulex_uninstall   : Emulex target: uninstall"
+	@#echo ""
+	@#echo "		lsi               : make LSI MPT target"
+	@#echo "		lsi_clean         : lsi target: clean "
+	@#echo "		lsi_extraclean    : lsi target: clean + clean dependencies"
+	@#echo "		lsi_install       : lsi target: install"
+	@#echo "		lsi_uninstall     : lsi target: uninstall"
+	@#echo ""
+	@#echo "		srpt              : make SRP target"
+	@#echo "		srpt_clean        : srp target: clean "
+	@#echo "		srpt_extraclean   : srp target: clean + clean dependencies"
+	@#echo "		srpt_install      : srp target: install"
+	@#echo "		srpt_uninstall    : srp target: uninstall"
+	@#echo ""
+	@#echo "		mvsas             : make MVSAS target"
+	@#echo "		mvsas_clean       : mvsas target: clean "
+	@#echo "		mvsas_extraclean  : mvsas target: clean + clean dependencies"
+	@#echo "		mvsas_install     : mvsas target: install"
+	@#echo "		mvsas_uninstall   : mvsas target: uninstall"
+	@#echo ""
+	@#echo "		fcst              : make FCoE target"
+	@#echo "		fcst_clean        : FCoE target: clean "
+	@#echo "		fcst_extraclean   : FCoE target: clean + clean dependencies"
+	@#echo "		fcst_install      : FCoE target: install"
+	@#echo "		fcst_uninstall    : FCoE target: uninstall"
+	@#echo ""
+	@#echo "		scst_local	  : make scst_local target"
+	@#echo "		scst_local_install : scst_local target: install"
+	@#echo "		scst_local_uninstall : scst_local target: uninstall"
+	@#echo ""
+	@#echo "		usr               : make user space targets"
+	@#echo "		usr_clean         : usr target: clean "
+	@#echo "		usr_extraclean    : usr target: clean + clean dependencies"
+	@#echo "		usr_install       : usr target: install"
+	@#echo "		usr_uninstall     : usr target: uninstall"
+	@#echo ""
 	@echo "		enable_proc       : switch to procfs interface"
 	@echo "		disable_proc      : switch to sysfs interface (default)"
 	@echo ""
@@ -164,67 +167,67 @@ help:
 all:
 	cd $(SCST_DIR) && $(MAKE) $@
 #	@if [ -d $(DOC_DIR) ]; then cd $(DOC_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; else if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi fi
+#	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; else if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi fi
 #	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(LSI_DIR) ]; then cd $(LSI_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
 	@if [ -d $(ISCSI_DIR) ]; then cd $(ISCSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
-	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
 
 install:
 	cd $(SCST_DIR) && $(MAKE) $@
 #	@if [ -d $(DOC_DIR) ]; then cd $(DOC_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; else if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi fi
+#	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; else if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi fi
 #	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(LSI_DIR) ]; then cd $(LSI_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
 	@if [ -d $(ISCSI_DIR) ]; then cd $(ISCSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
-	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
 
 uninstall:
 	cd $(SCST_DIR) && $(MAKE) $@
 #	@if [ -d $(DOC_DIR) ]; then cd $(DOC_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; else if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi fi
+#	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; else if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi fi
 #	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(LSI_DIR) ]; then cd $(LSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
 	@if [ -d $(ISCSI_DIR) ]; then cd $(ISCSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
-	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
 
 clean:
 	cd $(SCST_DIR) && $(MAKE) $@
 	@if [ -d $(DOC_DIR) ]; then cd $(DOC_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_INI_DIR) ]; then cd $(QLA_INI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_OLD_INI_DIR) ]; then cd $(QLA_OLD_INI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_INI_DIR) ]; then cd $(QLA_INI_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_OLD_INI_DIR) ]; then cd $(QLA_OLD_INI_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(LSI_DIR) ]; then cd $(LSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
 	@if [ -d $(ISCSI_DIR) ]; then cd $(ISCSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
-	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
 
 extraclean:
 	-rm -f TAGS tags cscope.out
 	cd $(SCST_DIR) && $(MAKE) $@
 	@if [ -d $(DOC_DIR) ]; then cd $(DOC_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_INI_DIR) ]; then cd $(QLA_INI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_OLD_INI_DIR) ]; then cd $(QLA_OLD_INI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_INI_DIR) ]; then cd $(QLA_INI_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_OLD_INI_DIR) ]; then cd $(QLA_OLD_INI_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(LSI_DIR) ]; then cd $(LSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
 	@if [ -d $(ISCSI_DIR) ]; then cd $(ISCSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
-	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(EMULEX_DIR) ]; then cd $(EMULEX_DIR) && $(MAKE) $@; fi
 
 .PHONY: usermode
 usermode:
@@ -501,41 +504,41 @@ release-archive:
 
 2perf: extraclean
 	cd $(SCST_DIR) && $(MAKE) $@
-	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(LSI_DIR) ]; then cd $(LSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
 	@if [ -d $(ISCSI_DIR) ]; then cd $(ISCSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
-	@if [ -d $(FCST_DIR) ]; then cd $(FCST_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(FCST_DIR) ]; then cd $(FCST_DIR) && $(MAKE) $@; fi
 
 2release: extraclean
 	cd $(SCST_DIR) && $(MAKE) $@
-	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(LSI_DIR) ]; then cd $(LSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
 	@if [ -d $(ISCSI_DIR) ]; then cd $(ISCSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
-	@if [ -d $(FCST_DIR) ]; then cd $(FCST_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(FCST_DIR) ]; then cd $(FCST_DIR) && $(MAKE) $@; fi
 
 2debug: extraclean
 	cd $(SCST_DIR) && $(MAKE) $@
-	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(LSI_DIR) ]; then cd $(LSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
 	@if [ -d $(ISCSI_DIR) ]; then cd $(ISCSI_DIR) && $(MAKE) $@; fi
-	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
-	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
-	@if [ -d $(FCST_DIR) ]; then cd $(FCST_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(USR_DIR) ]; then cd $(USR_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(SCST_LOCAL_DIR) ]; then cd $(SCST_LOCAL_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(FCST_DIR) ]; then cd $(FCST_DIR) && $(MAKE) $@; fi
 
 enable_proc: extraclean
 	cd $(SCST_DIR) && $(MAKE) $@
-	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(LSI_DIR) ]; then cd $(LSI_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
 	@if [ -d $(ISCSI_DIR) ]; then cd $(ISCSI_DIR) && $(MAKE) $@; fi
@@ -544,8 +547,8 @@ enable_proc: extraclean
 
 disable_proc: extraclean
 	cd $(SCST_DIR) && $(MAKE) $@
-	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
-	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_DIR) ]; then cd $(QLA_DIR) && $(MAKE) $@; fi
+#	@if [ -d $(QLA_OLD_DIR) ]; then cd $(QLA_OLD_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(LSI_DIR) ]; then cd $(LSI_DIR) && $(MAKE) $@; fi
 #	@if [ -d $(SRP_DIR) ]; then cd $(SRP_DIR) && $(MAKE) $@; fi
 	@if [ -d $(ISCSI_DIR) ]; then cd $(ISCSI_DIR) && $(MAKE) $@; fi
