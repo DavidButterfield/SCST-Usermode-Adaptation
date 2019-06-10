@@ -13,11 +13,10 @@
 
 #define KBUILD_MODNAME			"DRBD"
 
-#include "UMC_kernel.h"
-#define LINUX_VERSION_CODE              KERNEL_VERSION(2, 6, 32)
-#include "usermode_lib.h"
+//XXX kstrtoull is used by DRBD but does not exist in kernel 2.6.32
+#define kstrtoull(str, base, var)       strict_strtoull((str), (base), (var))
 
-#include "../scst/include/backport.h"	//XXX steal some backport from scst
+#include "usermode_lib.h"
 
 /* Called from APP_init() at gcc process constructor time (before main()) */
 extern void DRBD_init(void);
@@ -35,7 +34,6 @@ extern int DRBD_nl_open(void);
 #define COMPAT_HAVE_FILE_INODE
 #define COMPAT_DRBD_RELEASE_RETURNS_VOID
 #define COMPAT_HAVE_OPEN_BDEV_EXCLUSIVE
-#define COMPAT_HAVE_IDR_ALLOC
 #define IDR_GET_NEXT_EXPORTED
 #define __LINUX_MUTEX_H
 

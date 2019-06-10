@@ -69,7 +69,7 @@
  */
 #define READ_CAPACITY_16		0x10
 
-#ifndef _SCSI_PROTO_H_ // else error: redeclaration of ‘enum scsi_protocol’
+#if 0
 /* SCSI protocols; these are taken from SPC-3 section 7.5 */
 enum scsi_protocol {
 	SCSI_PROTOCOL_FCP = 0,	/* Fibre Channel */

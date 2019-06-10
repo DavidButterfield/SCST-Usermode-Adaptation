@@ -12,8 +12,9 @@
 #include <sys/resource.h>
 #endif
 
-#include "sys_debug.h"
 #include "usermode_lib.h"
+#include <asm/unaligned.h>	//XXX from reference kernel
+
 #include "bio_tcmu.h"
 
 #define LOGID "bio_tcmu"

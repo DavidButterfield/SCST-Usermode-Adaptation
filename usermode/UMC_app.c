@@ -4,24 +4,28 @@
  * Usermode Compatibility startup and shutdown --
  * Establishes "kernel" environment before starting the "application" module(s)
  */
-#define TRACE_TRACE true
 #include <mtelib.h>
 #include <sys_debug.h>
 #include <pthread.h>
 
 #define NAME UMC_APP
 
-extern int UMC_init(const char * procname);
-extern int UMC_exit(void);
+#define MODULE_NAME_LEN                 56  //XXX
+#define MODULE_ARCH_INIT                0xED0CBAD0  /*  DAB's "usermode arch" */    //XXX
+struct module { char name[MODULE_NAME_LEN]; int arch; string_t version; };
+struct module __this_module = { .name = "SCST/DRBD", .arch = MODULE_ARCH_INIT, .version = "ZERO" };
 
-extern int SCST_init(void);
-extern int SCST_exit(void);
+extern error_t UMC_init(char * procname);
+extern error_t UMC_exit(void);
 
-extern int DRBD_init(void);
-extern int DRBD_exit(void);
+extern error_t SCST_init(void);
+extern error_t SCST_exit(void);
 
-extern int tcmu_bio_init(void);
-extern int tcmu_bio_exit(void);
+extern error_t DRBD_init(void);
+extern error_t DRBD_exit(void);
+
+extern error_t tcmu_bio_init(void);
+extern error_t tcmu_bio_exit(void);
 
 /* Begin shutdown processing --
  * Module _exit function should disengage from dependencies before returning.

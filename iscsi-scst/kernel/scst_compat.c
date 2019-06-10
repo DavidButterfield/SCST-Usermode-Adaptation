@@ -136,8 +136,8 @@ int
 SCST_nl_open(void)
 {
     int fd[2];
-    errno_t err = UMC_kernelize(socketpair(AF_LOCAL,
-			   SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC, 0, fd));
+    errno_t err = UMC_socketpair(AF_LOCAL,
+		       SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC, 0, fd);
     verify_rc(err, socketpair);
     assert(SCST_nl_fdwrite == -1);
     SCST_nl_fdwrite = fd[1];	    /* kernel code's end of the pipe */
@@ -152,7 +152,7 @@ unsigned long trace_flag;
 /* Called from kernel code to issue a notification to the daemon through the "nl" socket */
 // XXX Does the data need to be copied?  I don't think so, but should check
 errno_t
-event_send(uint32_t tid, uint64_t sid, uint32_t cid, uint32_t cookie,
+event_send(u32 tid, u64 sid, u32 cid, u32 cookie,
 	   enum iscsi_kern_event_code code, const char * param1, const char * param2)
 {
     struct nlmsghdr hdr = {

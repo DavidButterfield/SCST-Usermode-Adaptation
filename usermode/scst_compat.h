@@ -9,20 +9,19 @@
  */
 #ifndef SCST_COMPAT_H
 #define SCST_COMPAT_H
-#define __LINUX_CPUMASK_H	/* set so SCST's backport.h will give us a few more things */
+#define __LINUX_CPUMASK_H   /* set so SCST's backport.h will give us a few more things */
 
 #ifdef SCST_USERMODE_AIO
 #define USERMODE_AIO 1
 #endif
 
-#define SCST_USERMODE_NOT() \
-	    BUG_ON("SCST_USERMODE should never reach here -- ", "%s()", __func__)
-
 #define KBUILD_MODNAME			"SCST"
 
-#include "UMC_kernel.h"
 #define LINUX_VERSION_CODE		KERNEL_VERSION(2, 6, 24)
 #include "usermode_lib.h"
+
+#define SCST_USERMODE_NOT() \
+	    sys_panic("SCST_USERMODE should never reach here -- ", "%s()", __func__)
 
 extern void SCST_init(void);
 extern void SCST_exit(void);
@@ -44,6 +43,8 @@ extern int SCST_nl_open(void);
 /* iSCSI "between" includes the endpoints */
 #define between(seq1, seq2, seq3)			((seq3) - (seq2) >= (seq1) - (seq2))
 #define before(seq1, seq2)				((int)((seq1) - (seq2)) < 0)
+
+#define BLK_MAX_CDB			16
 
 /*** UNUSED ***/
 
@@ -91,12 +92,5 @@ int scsi_reset_provider(struct scsi_device * sdev, int flags);
 #define SCSI_TRY_RESET_BUS		IGNORED
 #define SCSI_TRY_RESET_TARGET		IGNORED
 #define QUEUE_FLAG_BIDI			IGNORED
-
-#define BLK_MAX_CDB			16
-
-/* Include a few real kernel header files */
-#include "UMC/scsi/scsi.h"
-#include "UMC/scsi/scsi_cmnd.h"
-#include "UMC/scsi/scsi_eh.h"
 
 #endif /* SCST_COMPAT_H */

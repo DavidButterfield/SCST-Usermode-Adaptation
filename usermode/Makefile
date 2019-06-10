@@ -100,7 +100,7 @@ MY_CFLAGS += -O0
 
 # Enable assert/expect and some other checking and/or tracing
 MY_CFLAGS += -DDEBUG
-#XXX MY_CFLAGS += -fsanitize=undefined
+# MY_CFLAGS += -fsanitize=undefined
 # MY_CFLAGS += -DNDEBUG
 
 # MY_CFLAGS += -DTRACE_TRACE
@@ -139,11 +139,10 @@ DRBDU_CFLAGS += -I$(SYS_SERVICE_INCL)
 TCMU_CFLAGS  += -I$(SYS_SERVICE_INCL)
 
 # Fiddle around with #include searching to get some from kernel and some from /usr/include;
-# kinclude contains empty surrogate header files, and a few symlinks to real kernel headers;
-# kinclude is created by the Makefile in USERMODE_LIB_SRC
-SCSTU_CFLAGS += -isystem $(USERMODE_LIB_SRC)/kinclude
-SCSTU_CFLAGS += -isystem /usr/include	#XXX ?
-DRBDU_CFLAGS += -isystem $(USERMODE_LIB_SRC)/kinclude
+# include contains empty surrogate header files, and copies of a few real kernel headers;
+# include is created by the Makefile in USERMODE_LIB_SRC
+SCSTU_CFLAGS += -isystem $(USERMODE_LIB_SRC)/arch/x86/include -isystem $(USERMODE_LIB_SRC)/include
+DRBDU_CFLAGS += -isystem $(USERMODE_LIB_SRC)/arch/x86/include -isystem $(USERMODE_LIB_SRC)/include
 
 #######################  Enable most compiler warnings  ########################
 
@@ -283,7 +282,7 @@ COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst
 	      $(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o \
 	      $(DRBD_SRC)/drbd/drbd.o
 
-USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/UMC_fuse.o $(USERMODE_LIB_SRC)/UMC_genl.o
+USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/UMC_fuse.o
 
 scst.out:   $(TCMU_LIBS) UMC_app.o drbd_compat.o #XXX $(COMPONENTS) made by 'all' target
 	# Gather up all the objects we need from SCST kernel and daemon code;
@@ -304,8 +303,13 @@ drbd_compat.o:	drbd_compat.c
 
 # XXX Do dependencies right
 
+#XXX investigate include directives
+UMC_app.o: UMC_app.c
+	$(CC) -c -o $(@) $(TCMU_CFLAGS) -I$(USERMODE_LIB_SRC)/arch/x86/include -I$(USERMODE_LIB_SRC)/include $(<)
+
+#XXX investigate include directives
 bio_tcmu.o: bio_tcmu.c
-	$(CC) -c -o $(@) $(TCMU_CFLAGS) -I$(USERMODE_LIB_SRC)/kinclude $(<)
+	$(CC) -c -o $(@) $(TCMU_CFLAGS) -I$(USERMODE_LIB_SRC)/arch/x86/include -I$(USERMODE_LIB_SRC)/include $(<)
 
 ram.o:	scsi_defs.h bio_tcmu.h scstu_tcmu.h ram.c tcmu-runner.h libtcmu.h
 
