@@ -131,6 +131,8 @@ Limitations:
 
     Something I expect NOT to work is running the server executable off of a disk it implements.
 
+    Resync may run noticeably slower when observing resync network traffic with tcpdump.
+
 /******************************************************************************/
 
 resource r0 {
