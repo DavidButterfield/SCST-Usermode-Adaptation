@@ -7,19 +7,15 @@
 
 # XXX These usermode Makefiles are all hacked junk that need to be replaced.
 
-### Run DRBD utilities with these environment variables set:
-### PROC_DRBD=/fuse/proc/drbd
-### UMC_DRBD_PID=<pid of drbd process>
+### Run DRBD utilities with environment variable set:
+###	    PROC_PREFIX=/fuse/scst
 
 #############  Defines for using TCMU plugins  #############
 
-# Note: default if none of these is selected is to use aio(7) to file or bdev
-
-  # Define USERMODE_TCMU to build SCST usermode with BLOCKIO under a TCMU plugin
-  # USERMODE_TCMU = defined
+# Define BIO_USERMODE_TCMU to build SCST usermode with BLOCKIO using a TCMU plugin
 USERMODE_BIO_TCMU = defined
 
-  # Define one of these to select a TCMU plugin (use with USERMODE_TCMU)
+# Define one of these to select a TCMU plugin (use with USERMODE_BIO_TCMU)
   # USERMODE_TCMU_RBD = defined	    # Ceph RBD
 USERMODE_TCMU_RAM = defined	    # RAM disk
   # USERMODE_TCMU_QEMU = defined    # QEMU QCOW
@@ -311,13 +307,13 @@ UMC_app.o: UMC_app.c
 bio_tcmu.o: bio_tcmu.c
 	$(CC) -c -o $(@) $(TCMU_CFLAGS) -I$(USERMODE_LIB_SRC)/arch/x86/include -I$(USERMODE_LIB_SRC)/include $(<)
 
-ram.o:	scsi_defs.h bio_tcmu.h scstu_tcmu.h ram.c tcmu-runner.h libtcmu.h
+ram.o:	scsi_defs.h bio_tcmu.h ram.c tcmu-runner.h libtcmu.h
 
-rbd.o:	scsi_defs.h bio_tcmu.h scstu_tcmu.h rbd.c tcmu-runner.h libtcmu.h
+rbd.o:	scsi_defs.h bio_tcmu.h rbd.c tcmu-runner.h libtcmu.h
 
-glfs.o:	scsi_defs.h bio_tcmu.h scstu_tcmu.h darray.h glfs.c tcmu-runner.h libtcmu.h
+glfs.o:	scsi_defs.h bio_tcmu.h darray.h glfs.c tcmu-runner.h libtcmu.h
 
-qcow.o:	scsi_defs.h bio_tcmu.h scstu_tcmu.h qcow.c qcow.h qcow2.h tcmu-runner.h libtcmu.h
+qcow.o:	scsi_defs.h bio_tcmu.h qcow.c qcow.h qcow2.h tcmu-runner.h libtcmu.h
 
 spdk.o: spdk.c spdk/stdinc.h spdk/nvme.h spdk/env.h tcmu-runner.h libtcmu.h
 

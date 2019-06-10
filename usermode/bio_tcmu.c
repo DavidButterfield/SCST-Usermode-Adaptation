@@ -13,7 +13,6 @@
 #endif
 
 #include "usermode_lib.h"
-#include <asm/unaligned.h>	//XXX from reference kernel
 
 #include "bio_tcmu.h"
 

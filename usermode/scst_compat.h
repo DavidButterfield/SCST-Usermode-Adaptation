@@ -11,10 +11,6 @@
 #define SCST_COMPAT_H
 #define __LINUX_CPUMASK_H   /* set so SCST's backport.h will give us a few more things */
 
-#ifdef SCST_USERMODE_AIO
-#define USERMODE_AIO 1
-#endif
-
 #define KBUILD_MODNAME			"SCST"
 
 #define LINUX_VERSION_CODE		KERNEL_VERSION(2, 6, 24)

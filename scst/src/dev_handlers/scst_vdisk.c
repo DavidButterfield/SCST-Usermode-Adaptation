@@ -1152,8 +1152,6 @@ check:
 static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size);
 
-#ifndef SCST_USERMODE_TCMU  /* TCMU shim provides its own _get_file_size() */
-
 static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size)
 {
@@ -1212,8 +1210,6 @@ out:
 	TRACE_EXIT_RES(res);
 	return res;
 }
-
-#endif /* !SCST_USERMODE_TCMU */
 
 /* scst_vdisk_mutex supposed to be held */
 static struct scst_vdisk_dev *vdev_find(const char *name)
@@ -3716,8 +3712,7 @@ static int blockio_exec(struct scst_cmd *cmd)
 	if (unlikely(!vdisk_parse_offset(&p, cmd)))
 		goto err;
 
-	if (unlikely(virt_dev->fd == NULL))
-	{
+	if (unlikely(virt_dev->fd == NULL)) {
 		if (!vdisk_no_fd_allowed_commands(cmd)) {
 			/*
 			 * We should not get here, unless the user space
@@ -6788,7 +6783,6 @@ static void vdisk_blk_add_dif(struct bio *bio, gfp_t gfp_mask,
 }
 #endif /* defined(CONFIG_BLK_DEV_INTEGRITY) */
 
-/* Implement blockio for a real kernel build using bio */
 static void blockio_exec_rw(struct vdisk_cmd_params *p, bool write, bool fua)
 {
 	struct scst_cmd *cmd = p->cmd;
