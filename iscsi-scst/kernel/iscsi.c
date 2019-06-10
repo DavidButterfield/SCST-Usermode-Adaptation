@@ -2960,9 +2960,7 @@ void cmnd_tx_start(struct iscsi_cmnd *cmnd)
 
 	iscsi_extracheck_is_wr_thread(conn);
 
-#ifndef SCST_USERMODE
 	set_cork(conn->sock, 1);
-#endif
 
 	conn->write_iop = conn->write_iov;
 	conn->write_iop->iov_base = (void __force __user *)(&cmnd->pdu.bhs);
@@ -3070,9 +3068,7 @@ void cmnd_tx_end(struct iscsi_cmnd *cmnd)
 		}
 	}
 
-#ifndef SCST_USERMODE
 	set_cork(cmnd->conn->sock, 0);
-#endif
 	return;
 }
 

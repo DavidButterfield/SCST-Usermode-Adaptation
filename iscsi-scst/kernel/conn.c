@@ -603,12 +603,10 @@ static void iscsi_data_ready(struct sock *sk, int len)
 	conn_rd_unlock(conn);
 #endif
 
-#ifndef SCST_USERMODE			/* calls to old entry points unnecessary */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0))
 	conn->old_data_ready(sk);
 #else
 	conn->old_data_ready(sk, len);
-#endif
 #endif
 
 	TRACE_EXIT();

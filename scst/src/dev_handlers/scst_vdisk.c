@@ -205,9 +205,6 @@ struct scst_vdisk_dev {
 	struct file *fd;
 	struct file *dif_fd;
 	struct block_device *bdev;
-#ifdef SCST_USERMODE_AIO
-	void * aio_private;
-#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 	struct bio_set *vdisk_bioset;
 #endif
@@ -781,11 +778,6 @@ static struct scst_dev_type vdisk_file_devtype = {
 
 static struct kmem_cache *blockio_work_cachep;
 
-#ifdef SCST_USERMODE_AIO
-static int vdisk_aio_attach_tgt(struct scst_tgt_dev *tgt_dev);
-static void vdisk_aio_detach_tgt(struct scst_tgt_dev *tgt_dev);
-#endif
-
 static struct scst_dev_type vdisk_blk_devtype = {
 	.name =			"vdisk_blockio",
 	.type =			TYPE_DISK,
@@ -798,13 +790,8 @@ static struct scst_dev_type vdisk_blk_devtype = {
 	.auto_cm_assignment_possible = 1,
 	.attach =		vdisk_attach,
 	.detach =		vdisk_detach,
-#ifndef SCST_USERMODE_AIO
 	.attach_tgt =		vdisk_attach_tgt,
 	.detach_tgt =		vdisk_detach_tgt,
-#else
-	.attach_tgt =		vdisk_aio_attach_tgt,
-	.detach_tgt =		vdisk_aio_detach_tgt,
-#endif
 	.parse =		non_fileio_parse,
 	.exec =			blockio_exec,
 	.on_alua_state_change_start = blockio_on_alua_state_change_start,
@@ -1165,10 +1152,8 @@ check:
 static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size);
 
-/* SCST_USERMODE_TCMU: BLOCKIO configured with tcmu-runner backstore handler */
 #ifndef SCST_USERMODE_TCMU  /* TCMU shim provides its own _get_file_size() */
 
-/* Used in kernel-resident builds and preadv/pwritev/AIO usermode builds */
 static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size)
 {
@@ -1201,10 +1186,6 @@ static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
 
 	inode = file_inode(fd);
 
-#ifdef SCST_USERMODE_AIO
-	/* AIO works on both regular files and block devices */
-	if (!S_ISREG(inode->i_mode))
-#endif
 	if (virt_dev->blockio && !S_ISBLK(inode->i_mode)) {
 		PRINT_ERROR("File %s is NOT a block device", virt_dev->filename);
 		res = -EINVAL;
@@ -3735,11 +3716,7 @@ static int blockio_exec(struct scst_cmd *cmd)
 	if (unlikely(!vdisk_parse_offset(&p, cmd)))
 		goto err;
 
-#ifndef SCST_USERMODE_TCMU
 	if (unlikely(virt_dev->fd == NULL))
-#else
-	if (unlikely(virt_dev->aio_private == NULL))
-#endif
 	{
 		if (!vdisk_no_fd_allowed_commands(cmd)) {
 			/*
@@ -5736,12 +5713,6 @@ static int __vdisk_fsync_fileio(loff_t loff,
 	return res;
 }
 
-#ifdef SCST_USERMODE_AIO
-static int vdisk_fsync_blockio(loff_t loff,
-	loff_t len, struct scst_device *dev, gfp_t gfp_flags,
-	struct scst_cmd *cmd, bool async);
-
-#else
 static int vdisk_fsync_blockio(loff_t loff,
 	loff_t len, struct scst_device *dev, gfp_t gfp_flags,
 	struct scst_cmd *cmd, bool async)
@@ -5775,7 +5746,6 @@ out:
 	TRACE_EXIT_RES(res);
 	return res;
 }
-#endif
 
 static int vdisk_fsync_fileio(loff_t loff,
 	loff_t len, struct scst_device *dev, struct scst_cmd *cmd, bool async)
@@ -6585,12 +6555,6 @@ static void blockio_bio_destructor(struct bio *bio)
 }
 #endif
 
-#ifdef SCST_USERMODE_AIO
-    /* Implement blockio under SCST_USERMODE using aio */
-    #include "scst_vdisk_aio.c"
-
-#else /* Kernel-resident BLOCKIO */
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24)
 static int blockio_endio(struct bio *bio, unsigned int bytes_done, int error)
 {
@@ -7102,12 +7066,6 @@ out_put:
 	TRACE_EXIT();
 	return;
 }
-#endif
-
-#endif /* SCST_USERMODE_AIO */
-
-#ifdef SCST_USERMODE
-#define blkdev_issue_flush(bdev, xxx) (-EPERM)
 #endif
 
 static int vdisk_blockio_flush(struct block_device *bdev, gfp_t gfp_mask,
@@ -11118,10 +11076,6 @@ static int __init init_scst_vdisk_driver(void)
 	if (res != 0)
 		goto out_free_null;
 
-#ifdef SCST_USERMODE_AIO
-	init_scst_vdisk_aio();
-#endif
-
 out:
 	return res;
 
@@ -11148,9 +11102,6 @@ static void __exit exit_scst_vdisk_driver(void)
 	exit_scst_vdisk(&vdisk_blk_devtype);
 	exit_scst_vdisk(&vdisk_file_devtype);
 	exit_scst_vdisk(&vcdrom_devtype);
-#ifdef SCST_USERMODE_AIO
-	exit_scst_vdisk_aio();
-#endif
 
 	kmem_cache_destroy(blockio_work_cachep);
 	kmem_cache_destroy(vdisk_cmd_param_cachep);

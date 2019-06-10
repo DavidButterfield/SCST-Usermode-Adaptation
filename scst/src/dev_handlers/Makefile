@@ -104,9 +104,6 @@ SCST_INC_DIR := $(SUBDIRS)/../../include
 %.o: %.c
 	$(CC) -c -o $(@) $(CFLAGS) $(EXTRA_CFLAGS) $(<)
 
-# XXX At the moment the usermode AIO .c files get included from scst_vdisk.c
-scst_vdisk.o:    scst_vdisk.c scst_vdisk_aio.c scstu_tcmu.c
-
 endif	########## SCST_USERMODE ##########
 
 clean:
