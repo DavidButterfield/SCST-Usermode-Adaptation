@@ -137,8 +137,8 @@ TCMU_CFLAGS  += -I$(SYS_SERVICE_INCL)
 # Fiddle around with #include searching to get some from kernel and some from /usr/include;
 # include contains empty surrogate header files, and copies of a few real kernel headers;
 # include is created by the Makefile in USERMODE_LIB_SRC
-SCSTU_CFLAGS += -isystem $(USERMODE_LIB_SRC)/arch/x86/include -isystem $(USERMODE_LIB_SRC)/include
-DRBDU_CFLAGS += -isystem $(USERMODE_LIB_SRC)/arch/x86/include -isystem $(USERMODE_LIB_SRC)/include
+SCSTU_CFLAGS += -I$(USERMODE_LIB_SRC)/arch/x86/include -I$(USERMODE_LIB_SRC)/include
+DRBDU_CFLAGS += -I$(USERMODE_LIB_SRC)/arch/x86/include -I$(USERMODE_LIB_SRC)/include
 
 #######################  Enable most compiler warnings  ########################
 

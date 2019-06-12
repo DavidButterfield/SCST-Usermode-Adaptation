@@ -84,9 +84,6 @@ struct scsi_device {
 #endif
 
 int scsi_reset_provider(struct scsi_device * sdev, int flags);
-#define SCSI_TRY_RESET_DEVICE		IGNORED
-#define SCSI_TRY_RESET_BUS		IGNORED
-#define SCSI_TRY_RESET_TARGET		IGNORED
 #define QUEUE_FLAG_BIDI			IGNORED
 
 #endif /* SCST_COMPAT_H */
