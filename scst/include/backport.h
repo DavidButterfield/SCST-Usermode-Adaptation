@@ -516,6 +516,7 @@ int no_printk(const char *s, ...) { return 0; }
 
 /* <linux/ratelimit.h> */
 
+#ifndef DEFINE_RATELIMIT_STATE
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 27)
 /* See also commit 717115e1a585 */
 
@@ -534,6 +535,7 @@ static inline int __ratelimit(struct ratelimit_state *rs)
 {
 	return 1;
 }
+#endif
 #endif
 
 /* <linux/rcupdate.h> */
