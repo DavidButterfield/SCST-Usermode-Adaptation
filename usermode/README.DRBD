@@ -133,6 +133,10 @@ Limitations:
 
     Resync may run noticeably slower when observing resync network traffic with tcpdump.
 
+    At one point I had trouble that resync wouldn't start after reconnect after restarting the
+    usermode server.  That is no longer happening, but when it was, it always started the resync
+    OK when running tcpdump to observe the traffic.  Something to try if resync won't start.
+
 /******************************************************************************/
 
 resource r0 {

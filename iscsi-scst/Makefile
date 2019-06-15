@@ -203,8 +203,6 @@ clean:	xclean
 
 else	########## SCST_USERMODE ##########
 
-INCDIR := $(shell pwd)/include
-
 SCST_INC_DIR := $(shell pwd)/../scst/include
 
 all: include/iscsi_scst_itf_ver.h
@@ -229,6 +227,11 @@ uninstall:
 		# $(DESTDIR)$(SBINDIR)/iscsi-scstd \
 
 clean:	xclean
+
+# for enable/disable targets below
+INCDIR := $(shell pwd)/include
+KMOD := $(shell pwd)/kernel
+ISERTMOD := $(KMOD)/isert-scst
 
 endif	########## SCST_USERMODE ##########
 

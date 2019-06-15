@@ -1,1 +1,1 @@
-/* Dummy libtcmu_log.h for SCST_USERMODE_TCMU build */
+/* Dummy libtcmu_log.h for USERMODE_BIO_TCMU build */

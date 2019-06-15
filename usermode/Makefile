@@ -12,7 +12,7 @@
 
 #############  Defines for using TCMU plugins  #############
 
-# Define BIO_USERMODE_TCMU to build SCST usermode with BLOCKIO using a TCMU plugin
+# Define USERMODE_BIO_TCMU to build SCST usermode with BLOCKIO using a TCMU plugin
 USERMODE_BIO_TCMU = defined
 
 # Define one of these to select a TCMU plugin (use with USERMODE_BIO_TCMU)
@@ -96,7 +96,7 @@ MY_CFLAGS += -O0
 
 # Enable assert/expect and some other checking and/or tracing
 MY_CFLAGS += -DDEBUG
-# MY_CFLAGS += -fsanitize=undefined
+MY_CFLAGS += -fsanitize=undefined
 # MY_CFLAGS += -DNDEBUG
 
 # MY_CFLAGS += -DTRACE_TRACE
@@ -113,17 +113,16 @@ MY_CFLAGS += -DDEBUG
 ################################################################################
 
 SCSTU_CFLAGS += -DSCST_USERMODE			# Tell C source files to use SCST_USERMODE adaptations
-# SCSTU_CFLAGS += -DSCST_USERMODE_AIO		# Prototype implemention of blockio using AIO
 SCSTU_CFLAGS += -DCONFIG_SCST_TEST_IO_IN_SIRQ	# Allow I/O from soft-interrupt handlers
 SCSTU_CFLAGS += -DCONN_LOCAL_READ		# Attempt conn read from pp_done handler
 SCSTU_CFLAGS += -DCONN_SIRQ_READ		# Drive read directly off data_ready callback
+
 # SCSTU_CFLAGS += -DADAPTIVE_NAGLE		# Experimental Adaptive Nagle optimization
 						# (increase IOPS for CPU-bound workloads)
-ifdef USERMODE_TCMU
-SCSTU_CFLAGS += -DSCST_USERMODE_TCMU		# blockio using tcmu-runner backstore handlers
-endif
 
 DRBDU_CFLAGS += -DDRBD_USERMODE			# Tell C source files to use DRBD_USERMODE adaptations
+
+TCMU_CFLAGS += -I$(CURDIR)
 
 # Directory containing header files for usermode compatibility for kernel code
 SCSTU_CFLAGS += -I$(USERMODE_LIB_SRC)
@@ -200,8 +199,6 @@ SCSTU_CFLAGS += -include $(SCST_SRC)/usermode/scst_compat.h
 
 # Force drbd_compat.h to be #included at the start of every DRBD kernel.c file, for usermode shims
 DRBDU_CFLAGS += -include $(SCST_SRC)/usermode/drbd_compat.h	# XXX
-
-TCMU_CFLAGS += -I$(CURDIR)
 
 # LOCAL_CFLAGS appears to be used instead of EXTRA_CFLAGS in real usermode makefiles
 export LOCAL_CFLAGS += $(MY_CFLAGS) $(EXTRA_WFLAGS) -DSCST_USERMODE -DDRBD_USERMODE
