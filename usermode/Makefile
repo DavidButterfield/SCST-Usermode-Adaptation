@@ -75,7 +75,10 @@ endif
 
 ################################################################################
 
-BUILD_STATIC=1	    # for a better debugging experience
+# Target: x86_64-linux-gnu gcc version 8.3.0 (Ubuntu 8.3.0-6ubuntu1) 
+# Dynamic builds break addr2line stacktraces
+# Static builds break memory initialization for valgrind
+# BUILD_STATIC=1	    # XXX
 
 # LOCAL_CFLAGS are used when compiling linux usermode code -- it comprises other FLAGS below
 # EXTRA_CFLAGS are used when compiling linux kernel code for usermode -- similar
@@ -96,7 +99,7 @@ MY_CFLAGS += -O0
 
 # Enable assert/expect and some other checking and/or tracing
 MY_CFLAGS += -DDEBUG
-MY_CFLAGS += -fsanitize=undefined
+# MY_CFLAGS += -fsanitize=undefined
 # MY_CFLAGS += -DNDEBUG
 
 # MY_CFLAGS += -DTRACE_TRACE
@@ -258,7 +261,7 @@ LIBMTE := $(shell if [ -f /lib/libmte.$(LIB_SUFFIX) ] ; \
 		 fi)
 
 usermode all:	cscope check_mte
-	$(MAKE) -C $(USERMODE_LIB_SRC) all							    # UMC library
+	EXTRA_CFLAGS="$(MY_CFLAGS) $(EXTRA_WFLAGS)" $(MAKE) -C $(USERMODE_LIB_SRC) all		    # UMC library
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst all				    # SCST CORE
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o    # SCST-VDISK
 	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/iscsi-scst all			    # iSCSI-SCST
