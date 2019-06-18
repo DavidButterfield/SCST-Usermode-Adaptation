@@ -182,6 +182,15 @@ WFLAGS_WARN += -Wnested-externs
 # WFLAGS_WARN += -Wpointer-arith
 # WFLAGS_WARN += -Wredundant-decls
 
+# XXX XXX XXX These should be fixed -- off for now to avoid stress XXX XXX XXX
+WFLAGS_WARN += -Wno-attributes
+WFLAGS_WARN += -Wno-bad-function-cast
+WFLAGS_WARN += -Wno-missing-field-initializers
+WFLAGS_WARN += -Wno-shadow
+WFLAGS_WARN += -Wno-switch-default
+WFLAGS_WARN += -Wno-unused-function
+WFLAGS_WARN += -Wno-unused-variable
+
 export EXTRA_WFLAGS := $(WFLAGS_WARN) 
 
 ################################################################################
