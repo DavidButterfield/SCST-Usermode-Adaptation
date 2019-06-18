@@ -1,4 +1,4 @@
-Mon 03 Jun 2019 01:55:30 AM MDT
+Mon 17 Jun 2019 08:37:59 PM MDT
     This is a very early runnable version of usermode SCST/DRBD -- incomplete & probably buggy!
 
     The drbd source code is (nearly) unmodified, with its expected kernel environment simulated
@@ -133,9 +133,19 @@ Limitations:
 
     Resync may run noticeably slower when observing resync network traffic with tcpdump.
 
-    At one point I had trouble that resync wouldn't start after reconnect after restarting the
-    usermode server.  That is no longer happening, but when it was, it always started the resync
-    OK when running tcpdump to observe the traffic.  Something to try if resync won't start.
+BUGS:
+    Sometimes I have trouble that resync doesn't start upon reconnect after restarting the
+    usermode server.  It doesn't seem to happen as much when running tcpdump to observe the
+    inter-peer traffic.  If it doesn't start, killing the usermode server with ^\ and restarting
+    it has a good chance of starting the resync the second time.
+
+    Also I sometimes have trouble running mkfs.ext4 on a replicated device, where it hangs near
+    the end of the mkfs.  It always seems to work if I disconnect the secondary peer and do the
+    mkfs on the primary, then reconnect the secondary and let it resync.  After that the file-
+    system can be mounted and used, and seems to work well.
+
+    I've recently reworked the wait/wakeup/completion logic and apparently introduced a bug
+    related to that.
 
 /******************************************************************************/
 
@@ -250,6 +260,9 @@ replicated device implemented by DRBD running in usermode, and got a runnable bi
 I have only run the usermode server on machines without DRBD installed in the kernel.
 The description below assumes that there are no DRBD modules or utilities installed.
 (That would likely be very confusing, though it might work if assigned separate ports)
+
+    NOTE:  The script SCST-Usermode-Adaptation/usermode/BUILD.sh
+	   does much of the what is described below.
 
 Make a git directory and clone these repositories into it from github:
     mkdir ~/git
