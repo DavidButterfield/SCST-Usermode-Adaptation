@@ -479,7 +479,7 @@ bio_tcmu_create(int minor, const char * cfg)
     }
 
     if (strlen(cfg) >= sizeof(tcmu_dev->cfgstring)) {
-	tcmu_err("%s: cfg string too long (%u/%u): '%s'\n",
+	tcmu_err("%s: cfg string too long (%lu/%lu): '%s'\n",
 		 name, strlen(cfg), sizeof(tcmu_dev->cfgstring), cfg);
 	err = -EINVAL;
 	goto out;
@@ -528,7 +528,7 @@ bio_tcmu_create(int minor, const char * cfg)
 	if (!tcmu_dev->handler->check_config(cfg_str, &reason)) {
 	    if (reason) {
 		sys_warning(LOGID" handler %s failed check_config(%s) reason: %s",
-			    tcmu_dev->handler->name, cfg_str, *reason);
+			    tcmu_dev->handler->name, cfg_str, reason);
 		vfree(reason);
 	    } else {
 		sys_warning(LOGID" handler %s failed check_config(%s)",
@@ -555,7 +555,7 @@ bio_tcmu_create(int minor, const char * cfg)
     bdev->bd_block_size = tcmu_dev->block_size;
     bdev->bd_inode->i_blkbits = ilog2(bdev->bd_block_size);
 
-    if (bdev->bd_block_size != 1 << bdev->bd_inode->i_blkbits) {
+    if (bdev->bd_block_size != 1u << bdev->bd_inode->i_blkbits) {
 	tcmu_err("%s: bad block size=%d not a power of two [he says %d\n", name, bdev->bd_block_size, ilog2(bdev->bd_block_size));
 	err = -EINVAL;
 	goto fail_close;
@@ -596,7 +596,7 @@ bio_tcmu_create(int minor, const char * cfg)
 
     // tcmu_set_dev_max_xfer_len(tcmu_dev, 8*1024*1024);	//XXX
 
-    sys_notice(LOGID" handler %s attach target %s size %"PRIu64"/%"PRIu64" block_size %ld%s",
+    sys_notice(LOGID" handler %s attach target %s size %"PRIu64"/%"PRIu64" block_size %d%s",
 	       tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev),
 	       dev_size, size, bdev->bd_block_size, is_rdonly ? " READONLY" : "READ/WRITE");
 
@@ -694,7 +694,7 @@ tcmu_bio_init(void)
     }
 
     if (*cfgp)
-	sys_warning("minor table too small (%d) for %d configs",
+	sys_warning("minor table too small (%d) for %ld configs",
 		    BIO_TCMU_MAX_MINORS, sizeof(cfgs)/sizeof(cfgs[0]));
 
     sys_notice("tcmu_bio_init() created %d instances out of %d attempted", nminor, minor);

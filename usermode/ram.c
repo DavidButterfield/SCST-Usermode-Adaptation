@@ -118,7 +118,7 @@ static int tcmu_ram_flush(struct tcmu_device *td, struct tcmulib_cmd *op)
 
 	if (msync(s->ram, s->size, MS_SYNC) < 0) {
 		int err = errno;
-		tcmu_dev_err(td, "%s (%s): cannot msync (%d -- %s)\n",
+		tcmu_dev_err(td, "%s: cannot msync (%d -- %s)\n",
 			     tcmu_get_dev_cfgstring(td),
 			     err, strerror(-err));
 		sam_stat = tcmu_set_sense_data(op->sense_buf,
@@ -135,7 +135,7 @@ static void tcmu_ram_close(struct tcmu_device *td)
 
 	if (msync(s->ram, s->size, MS_SYNC) < 0) {
 		int err = errno;
-		tcmu_dev_warn(td, "%s (%s): close cannot msync (%d -- %s)\n",
+		tcmu_dev_warn(td, "%s: close cannot msync (%d -- %s)\n",
 			      tcmu_get_dev_cfgstring(td),
 			      err, strerror(-err));
 	}
@@ -189,28 +189,28 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	tcmu_set_dev_block_size(td, 4096);
 	sys_size = tcmu_get_device_size(td);
 
-	tcmu_dev_info(td, "%s sys_size=%lld file_size=%lld", config, sys_size, file_size);
+	tcmu_dev_info(td, "%s sys_size=%ld file_size=%ld", config, sys_size, file_size);
 
 	if (file_size == 0) {
 		if (sys_size == 0) {
 			file_size = 1*1024*1024*1024l;   //XXX Ugh -- default 1 GB RAMdisk
-			tcmu_dev_warn(td, "%s size unspecified, default size=%lld",
+			tcmu_dev_warn(td, "%s size unspecified, default size=%ld",
 					config, file_size);
 		} else {
 			file_size = sys_size;
 		}
-		tcmu_dev_warn(td, "%s file is empty, using size=%lld", config, file_size);
+		tcmu_dev_warn(td, "%s file is empty, using size=%ld", config, file_size);
 	}
 
 	if (sys_size > file_size) {
 		/* XXX or fail instead? */
-		tcmu_dev_info(td, "%s extending backing file size %lld to sys_size %lld",
+		tcmu_dev_info(td, "%s extending backing file size %ld to sys_size %ld",
 				  config, file_size, sys_size);
 		file_size = sys_size;
 		lseek(mmap_fd, file_size, SEEK_SET);
 		err = write(mmap_fd, "X", 1);
 	} else if (sys_size < file_size) {
-		tcmu_dev_warn(td, "%s space unused: sys_size %lld < file_size %lld",
+		tcmu_dev_warn(td, "%s space unused: sys_size %ld < file_size %ld",
 				  config, sys_size, file_size);
 	}
 
@@ -235,7 +235,7 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	ram = mmap(NULL, file_size, PROT_READ|PROT_WRITE, mmap_flags, mmap_fd, 0);
 	if (ram == MAP_FAILED) {
 		err = -errno;
-		tcmu_dev_err(td, "%s: cannot mmap size=%lld (fd=%d) (%d -- %s)\n",
+		tcmu_dev_err(td, "%s: cannot mmap size=%ld (fd=%d) (%d -- %s)\n",
 				 config, file_size, mmap_fd, err, strerror(-err));
 		goto out_close;
 	}
@@ -260,7 +260,7 @@ static int tcmu_ram_open(struct tcmu_device * td)
 	s->fd = mmap_fd;
 	tcmu_set_dev_private(td, s);
 	
-	tcmu_dev_dbg(td, "config %s, size %lld\n", config, s->size);
+	tcmu_dev_dbg(td, "config %s, size %ld\n", config, s->size);
 	return 0;
 
 out_unmap:

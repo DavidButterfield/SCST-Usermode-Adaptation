@@ -1,4 +1,4 @@
-Mon 17 Jun 2019 08:37:59 PM MDT
+Wed 19 Jun 2019 05:06:22 PM MDT
     This is a very early runnable version of usermode SCST/DRBD -- incomplete & probably buggy!
 
     The drbd source code is (nearly) unmodified, with its expected kernel environment simulated
@@ -332,15 +332,20 @@ clean make:
     make
 
 That should produce the SCST/DRBD usermode server as scst.out.  There should be no compile
-errors, but there will be a few warnings; these can be ignored:
-    a few unused variable / unused function
-    "arch_wb_cache_pmem" redefined
-    #warning In the PROCFS build EXTENDED COPY not supported
+errors, but there will be a few warnings; these can be ignored for now:
     #warning "BDI_CAP_STABLE_WRITES not available"
+    #warning In the PROCFS build EXTENDED COPY not supported
     Using 'getaddrinfo' in statically linked apps requires at runtime the shared libraries...
-    Using 'dlopen' in statically linked apps requires at runtime the shared libraries
+    Using 'dlopen' in statically linked apps requires at runtime the shared libraries...
+    "pr_fmt" redefined
+    comparison of distinct pointer types lacks a cast
+	[because parts of the code think uint64_t is long and other parts long long]
 
-The binary is built statically so that addr2line works right for stacktraces.
+By default the binary is built statically so that addr2line works right for stacktraces.
+
+But for some reason the static binary from gcc (version 8.3.0) makes valgrind think a
+lot of memory is uninitialized, so to run under valgrind I change usermode/Makefile in
+SCST-Usermode-Adaptation to build non-statically, in addition to enabling -DVALGRIND.
 
 Configuration files:
     The example SCST config files shown above are from Node (U) in my setup.  They will

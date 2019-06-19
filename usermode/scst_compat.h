@@ -17,7 +17,7 @@
 #include "usermode_lib.h"
 
 #define SCST_USERMODE_NOT() \
-	    sys_panic("SCST_USERMODE should never reach here -- ", "%s()", __func__)
+	    sys_panic("SCST_USERMODE should never reach here -- %s()", __func__)
 
 extern void SCST_init(void);
 extern void SCST_exit(void);
@@ -83,7 +83,6 @@ struct scsi_device {
 #define scsi_execute(dev, cdb, direction, buf, bufsize, sense, timeout, x, y) UMC_STUB(scsi_execute, 0)
 #endif
 
-int scsi_reset_provider(struct scsi_device * sdev, int flags);
 #define QUEUE_FLAG_BIDI			IGNORED
 
 #endif /* SCST_COMPAT_H */

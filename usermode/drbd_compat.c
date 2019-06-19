@@ -11,6 +11,7 @@
 #include <sys_service.h>
 #include <sys_debug.h>
 
+/* Here we must know the names of all the DRBD params and init/fini functions */
 extern void UMC_param_create_enable_faults(void);
 extern void UMC_param_create_fault_rate(void);
 extern void UMC_param_create_fault_count(void);
