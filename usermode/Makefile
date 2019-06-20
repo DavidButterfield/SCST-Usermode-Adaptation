@@ -10,7 +10,7 @@
 ### Run DRBD utilities with environment variable set:
 ###	    PROC_PREFIX=/fuse/scst
 
-#############  Defines for using TCMU plugins  #############
+#############  Defines for building with TCMU plugins  #############
 
 # Define USERMODE_BIO_TCMU to build SCST usermode with BLOCKIO using a TCMU plugin
 USERMODE_BIO_TCMU = defined
@@ -76,9 +76,33 @@ endif
 ################################################################################
 
 # Target: x86_64-linux-gnu gcc version 8.3.0 (Ubuntu 8.3.0-6ubuntu1) 
-# Dynamic builds break addr2line stacktraces
-# Static builds break memory initialization for valgrind
-# BUILD_STATIC=1	    # XXX
+# XXX Dynamic builds break addr2line stacktraces
+# XXX Static builds break memory initialization for valgrind
+# BUILD_STATIC=defined	    # XXX
+
+# Enable assert/expect and some other checking and/or tracing
+MY_CFLAGS += -DDEBUG
+# MY_CFLAGS += -fsanitize=undefined
+# MY_CFLAGS += -DNDEBUG
+
+# MY_CFLAGS += -DTRACE_TRACE
+# MY_CFLAGS += -DTRACE_VERBOSE
+# MY_CFLAGS += -fprofile-arcs
+
+# MY_CFLAGS += -O0
+MY_CFLAGS += -Og
+# MY_CFLAGS += -O1
+# MY_CFLAGS += -O2 -fno-strict-aliasing
+# MY_CFLAGS += -O3 -fno-strict-aliasing
+
+# Disable most of the memory checks remaining when !DEBUG
+# MY_CFLAGS += -DOPTIMIZED
+
+# VALGRIND enables zeroing of allocated buffers; NVALGRIND elides all valgrind hooks
+# MY_CFLAGS += -DVALGRIND -DARENA_DISABLE=1
+# MY_CFLAGS += -DNVALGRIND
+
+################################################################################
 
 # LOCAL_CFLAGS are used when compiling linux usermode code -- it comprises other FLAGS below
 # EXTRA_CFLAGS are used when compiling linux kernel code for usermode -- similar
@@ -90,31 +114,6 @@ endif
 # DRBDU_CFLAGS passed as EXTRA_CFLAGS to Makefiles when compiling DRBD kernel code for usermode
 # TCMU_CFLAGS used when compiling TCMU usermode code
 
-# Explicit -O0 overrides other -O settings in subordinate Makefiles
-MY_CFLAGS += -O0
-# MY_CFLAGS += -Og  # interferes with GDB: locals "optimized out"
-# MY_CFLAGS += -O1
-# MY_CFLAGS += -O2 -fno-strict-aliasing
-# MY_CFLAGS += -O3 -fno-strict-aliasing
-
-# Enable assert/expect and some other checking and/or tracing
-MY_CFLAGS += -DDEBUG
-# MY_CFLAGS += -fsanitize=undefined
-# MY_CFLAGS += -DNDEBUG
-
-# MY_CFLAGS += -DTRACE_TRACE
-# MY_CFLAGS += -DTRACE_VERBOSE
-# MY_CFLAGS += -fprofile-arcs
-
-# Disable most of the memory checks remaining when !DEBUG
-# MY_CFLAGS += -DOPTIMIZED
-
-# VALGRIND enables zeroing of allocated buffers; NVALGRIND elides all valgrind hooks
-# MY_CFLAGS += -DVALGRIND
-# MY_CFLAGS += -DNVALGRIND
-
-################################################################################
-
 SCSTU_CFLAGS += -DSCST_USERMODE			# Tell C source files to use SCST_USERMODE adaptations
 SCSTU_CFLAGS += -DCONFIG_SCST_TEST_IO_IN_SIRQ	# Allow I/O from soft-interrupt handlers
 SCSTU_CFLAGS += -DCONN_LOCAL_READ		# Attempt conn read from pp_done handler
@@ -124,8 +123,6 @@ SCSTU_CFLAGS += -DCONN_SIRQ_READ		# Drive read directly off data_ready callback
 						# (increase IOPS for CPU-bound workloads)
 
 DRBDU_CFLAGS += -DDRBD_USERMODE			# Tell C source files to use DRBD_USERMODE adaptations
-
-TCMU_CFLAGS += -I$(CURDIR)
 
 # Directory containing header files for usermode compatibility for kernel code
 SCSTU_CFLAGS += -I$(USERMODE_LIB_SRC)
@@ -142,58 +139,64 @@ TCMU_CFLAGS  += -I$(SYS_SERVICE_INCL)
 SCSTU_CFLAGS += -I$(USERMODE_LIB_SRC)/arch/x86/include -I$(USERMODE_LIB_SRC)/include
 DRBDU_CFLAGS += -I$(USERMODE_LIB_SRC)/arch/x86/include -I$(USERMODE_LIB_SRC)/include
 
-#######################  Enable most compiler warnings  ########################
+TCMU_CFLAGS += -I$(CURDIR)
 
-# NOTE: "-Wno-*" options negate noisy subsets of the first "-W" option seen on the same line.
+#######################  Enable most compiler warnings  #######################
 
-# "-Wformat" warnings in SCST are entirely due to conflation of "long" and "long long" in format specifiers XXX
-
-WFLAGS_WARN += -Wall	    -Wno-pointer-sign -Wno-format
-WFLAGS_WARN += -Wextra	    -Wno-sign-compare -Wno-unused-parameter -Wimplicit-fallthrough=0
-WFLAGS_WARN += -Wundef
+# Warnings enabled by a real kernel build
+WFLAGS_WARN += -Wall
+WFLAGS_WARN += -Wmissing-prototypes
 WFLAGS_WARN += -Wstrict-prototypes
+WFLAGS_WARN += -Wundef
+WFLAGS_INHIBIT += -Wno-pointer-sign			# in SCST and DRBD
+
+# Warnings passed by all components
+WFLAGS_WARN += -Wextra
 WFLAGS_WARN += -Wjump-misses-init
 WFLAGS_WARN += -Wlogical-op
 WFLAGS_WARN += -Wcast-align
-WFLAGS_WARN += -Wold-style-definition
+WFLAGS_WARN += -Wold-style-definition 
 WFLAGS_WARN += -Wmissing-include-dirs
 WFLAGS_WARN += -Wfloat-conversion
-WFLAGS_WARN += -Wbad-function-cast
+WFLAGS_WARN += -Wmissing-declarations
 WFLAGS_WARN += -Wnested-externs
+WFLAGS_WARN += -Wunsafe-loop-optimizations
 
-# WFLAGS_WARN += -Wmissing-declarations	    # 3 in DRBD
-# WFLAGS_WARN += -Wmissing-prototypes	    # same 3
+### Some of each of these in DRBD and/or SCST code (at least when compiled for usermode)
+# WFLAGS_WARN += -Winit-self				# DRBD
+# WFLAGS_WARN += -Wswitch-enum
+# WFLAGS_WARN += -Wredundant-decls			# SCST and DRBD
 
-# WFLAGS_WARN += -Winit-self		    # 4 in DRBD to avoid uninitialized warnings  XXX
-# WFLAGS_WARN += -Wcast-qual		    # 2 In genetlink.h kernel header file!
+WFLAGS_INHIBIT += -Wno-format		# kernel conflation of "long" and "long long" in format specifiers
 
-# WFLAGS_WARN += -Wswitch-enum		    # 18 switches in DRBD, 6 in SCST
-# WFLAGS_WARN += -Wswitch-default	    # dozens in SCST and DRBD
+# This only warns if -fstrict-aliasing is enabled (e.g. by -O2), in which case the warning is important
+WFLAGS_WARN += -Wstrict-aliasing			# DRBD
 
-### No one will ever fix these
-# WFLAGS_WARN += -fstrict-aliasing -Wstrict-aliasing
-# WFLAGS_WARN += -Wunsafe-loop-optimizations
+WFLAGS_INHIBIT += -Wno-unused-function			#XXX artifact of usermode port
+WFLAGS_INHIBIT += -Wno-unused-variable			#XXX artifact of usermode port
 
-### These give plenty of warnings, probably not worth any effort
-# WFLAGS_WARN += -Wformat=2
-# WFLAGS_WARN += -Wshadow
-# WFLAGS_WARN += -Wconversion  -Wno-sign-conversion
-# WFLAGS_WARN += -Wwrite-strings
+### Some of each of these in MTE or UMC code
+# WFLAGS_WARN += -Wconversion
+# WFLAGS_WARN += -Wsign-conversion
 # WFLAGS_WARN += -Wpointer-arith
-# WFLAGS_WARN += -Wredundant-decls
+# WFLAGS_WARN += -Wwrite-strings
 
-# XXX XXX XXX These should be fixed -- off for now to avoid stress XXX XXX XXX
-WFLAGS_WARN += -Wno-attributes
-WFLAGS_WARN += -Wno-bad-function-cast
-WFLAGS_WARN += -Wno-missing-field-initializers
-WFLAGS_WARN += -Wno-shadow
-WFLAGS_WARN += -Wno-switch-default
-WFLAGS_WARN += -Wno-unused-function
-WFLAGS_WARN += -Wno-unused-variable
+### Some of each of these in code included from reference kernel 2.6.32
+# WFLAGS_WARN += -Wswitch-default			# 1 in lib/bitmap.c
+# WFLAGS_WARN += -Wcast-qual				# several in reference kernel files
+# WFLAGS_WARN += -Wbad-function-cast			# 1 in linux/kernel.h
+# WFLAGS_WARN += -Wshadow				# kernel.h, bitops.h
+WFLAGS_INHIBIT += -Wno-sign-compare			# 3 in net/netlink.h, 1 in linux/skbuff.h
+WFLAGS_INHIBIT += -Wno-implicit-fallthrough		# 1 in lib/nlattr.c
+WFLAGS_INHIBIT += -Wno-missing-field-initializers	# 1 in linux/ratelimit.h
+WFLAGS_INHIBIT += -Wno-attributes			# 1 in linux/log2.h
 
-export EXTRA_WFLAGS := $(WFLAGS_WARN) 
+### silly
+WFLAGS_INHIBIT += -Wno-unused-parameter
 
-################################################################################
+export EXTRA_WFLAGS := $(WFLAGS_WARN) $(WFLAGS_INHIBIT)
+
+###############################################################################
 
 SHELL=/bin/bash
 
@@ -289,7 +292,7 @@ COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst
 
 USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/UMC_fuse.o
 
-scst.out:   $(TCMU_LIBS) UMC_app.o drbd_compat.o #XXX $(COMPONENTS) made by 'all' target
+scst.out:   $(TCMU_LIBS) UMC_app.o drbd_compat.o $(COMPONENTS)
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
 	$(CC) -o scst.out $(GCCLDFLAGS) \
