@@ -78,7 +78,7 @@ endif
 # Target: x86_64-linux-gnu gcc version 8.3.0 (Ubuntu 8.3.0-6ubuntu1) 
 # XXX Dynamic builds break addr2line stacktraces
 # XXX Static builds break memory initialization for valgrind
-# BUILD_STATIC=defined	    # XXX
+BUILD_STATIC=defined	    # XXX
 
 # Enable assert/expect and some other checking and/or tracing
 MY_CFLAGS += -DDEBUG
@@ -89,8 +89,8 @@ MY_CFLAGS += -DDEBUG
 # MY_CFLAGS += -DTRACE_VERBOSE
 # MY_CFLAGS += -fprofile-arcs
 
-# MY_CFLAGS += -O0
-MY_CFLAGS += -Og
+MY_CFLAGS += -O0
+# MY_CFLAGS += -Og	# <optimized out> interferes with debugging
 # MY_CFLAGS += -O1
 # MY_CFLAGS += -O2 -fno-strict-aliasing
 # MY_CFLAGS += -O3 -fno-strict-aliasing
