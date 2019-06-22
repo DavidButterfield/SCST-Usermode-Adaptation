@@ -1,5 +1,5 @@
-Wed 19 Jun 2019 05:06:22 PM MDT
-    This is a very early runnable version of usermode SCST/DRBD -- incomplete & probably buggy!
+Sat 22 Jun 2019 12:37:12 PM MDT
+    This is an early runnable version of usermode SCST/DRBD.
 
     The drbd source code is (nearly) unmodified, with its expected kernel environment simulated
     around it.  For more information about how that was done, see the README.md shown at
@@ -17,13 +17,13 @@ Demo config:
     One Node (U) running DRBD 9.0 in USERMODE in a process with SCST (dev_t internal only)
 	DRBD's backing device is a block device implemented as a 1 GB ramdisk
 	The ramdisk is an mmap(2) backed by a 1 GB file /tmp/cfg2
-	Replicated device is plumbed underneath SCST as an SCST vdisk backing bdev
+	Replicated DRBD device is plumbed underneath SCST as an SCST vdisk backing bdev
 	SCST exposes the volume as a SCSI device through iSCSI
 
     An iSCSI initiator with a session to Node (U)
 	When Node U is primary, iSCSI initiator can mount the replicated filesystem
 	Exposes the SCSI device as a block device, mountable as /dev/sdj (on my initiator).
-	(I happened to use Node (U) also as the iSCSI initiator)
+	(For most testing I happened to use Node (U) also as the iSCSI initiator)
 
     I've written bio_tcmu to connect a bio request to a tcmu-runner storage backend handler.
     TCMU itself is not involved -- I'm just repurposing their backend handlers by translating
@@ -31,7 +31,7 @@ Demo config:
 
     There are several TCMU handlers for different usermode storage providers such as ceph, qemu,
     and gluster; I've written a simple one for an mmap(2) ramdisk, used here.  I also have
-    started a prototype of a handler for SPDK, which interfaces into bio_tcmu from the same
+    started a prototype of a handler for SPDK, which interfaces through bio_tcmu from the same
     place occupied by tcmu_ram in this diagram.
 
                             iSCSI
@@ -62,28 +62,50 @@ Demo config:
     The /tmp/cfg names are currently hardcoded in bio_tcmu.c.
 
 Demo capabilities -- with this config I was able to do the following:
-    Monitor network connection between Nodes (U) and (K) using tcpdump
+
+    Monitor network traffic between Nodes (U) and (K) using tcpdump
     Establish DRBD replication connection between Nodes (U) and (K)
-    Use Node K to create an ext4 filesystem on the replicated device
-    Change primary to Node (U) and mount the replicated device on /mnt/j
-    mkdir /mnt/j/git ; cd /mnt/j/git 
-    Download the source repositories from github directly onto the replicated device
-    Run "make" and successfully build the usermode binary on Node (U)
-	while observing replication traffic in tcpdump during the build
-    Lacking a mechanism to get SCST to close the DRBD device, for now I substitute this:
-	Unmount /mnt/j, then kill SCST/DRBD usermode process with ^\ (SIGQUIT)
-	Restart SCST/DRBD usermode process [See Limitations below]
-	Re-establish network replication, but do not make Node (U) primary
-    Set Node (K) as primary and mount /dev/drbd1 as /mnt/j
-    Observe the built binaries from the make done on Node (U)
-    Save a copy of the binary built on Node (U)
-    Run "make clean" and "make all" to do the successful build again on Node (K)
-	while observing replication traffic in tcpdump during the build
-    Strip the two binaries and they compare equal except 20 bytes probably timestamp
-    Make Node (U) primary and use scstadmin again to configure SCST
-    mount /dev/sdj /mnt/j
-    Copy the binary built on Node (U) onto the local disk
-    Restart the server on Node (U), running the executable built on the replicated device.
+
+    On Node (U):
+	drbdsetup primary r0
+	scstadmin -config /etc/scst.conf    # configure SCST
+
+    On iSCSI initiator machine:
+	iSCSI login to node (U) (exposes /dev/sdj on my initiator)
+	mkfs.ext4 /dev/sdj
+	mount /dev/sdj /mnt/j ; mkdir /mnt/j/git ; cd /mnt/j/git 
+	Download source repositories from github directly onto the replicated device
+	Run "make" and successfully build the usermode binary with Node (U) primary
+	    while observing replication traffic in tcpdump during the build
+	cd / ; umount /mnt/j
+	iSCSI logout from Node (U)
+
+    Set node (U) as secondary:
+	Lacking ability to get SCST to close the DRBD device, for now I substitute this:
+	    Unmount /mnt/j, then kill SCST/DRBD usermode process with SIGQUIT (CTRL-\)
+	    Restart SCST/DRBD usermode process [See Limitations below]
+	    Re-establish network replication, but do not make Node (U) primary
+
+    On Node (K):
+	drbdsetup primary r0
+	mount /dev/drbd1 /mnt/j
+	Observe the built binary from the make done on Node (U)
+	Save a copy of the binary built on Node (U)
+	Run "make clean" and "make" to do the successful build again on Node (K)
+	    while observing replication traffic in tcpdump during the build
+	Strip the two binaries and they compare equal except 20 bytes probably timestamp
+	cd / ; umount /mnt/j
+	drbdsetup secondary r0
+
+    On Node (U):
+	drbdsetup primary r0
+	scstadmin -config /etc/scst.conf    # configure SCST
+
+    On iSCSI initiator machine:
+	iSCSI login to node (U)
+	mount /dev/sdj /mnt/j
+	Copy the binary built on Node (U) onto a local disk of node (U)
+	Restart the server on Node (U), running the executable built on the replicated device
 
     In a separate configuration I ran two usermode SCST/DRBD servers on two machines
     doing the same sort of replication as above (but not using any kernel-based DRBD).
@@ -134,18 +156,23 @@ Limitations:
     Resync may run noticeably slower when observing resync network traffic with tcpdump.
 
 BUGS:
+    Clean shutdown via SIGINT (CTRL-C) doesn't work.  Just use SIGQUIT (CTRL-\).
+
+    scstadmin -clearconfig tries to close the DRBD device, but DRBD thinks it is still open.
+
     Sometimes I have trouble that resync doesn't start upon reconnect after restarting the
     usermode server.  It doesn't seem to happen as much when running tcpdump to observe the
-    inter-peer traffic.  If it doesn't start, killing the usermode server with ^\ and restarting
-    it has a good chance of starting the resync the second time.
+    inter-peer traffic.  If it doesn't start, disconnecting and then reconnecting to the peer
+    has a good chance of getting the resync started.
 
     Also I sometimes have trouble running mkfs.ext4 on a replicated device, where it hangs near
-    the end of the mkfs.  It always seems to work if I disconnect the secondary peer and do the
-    mkfs on the primary, then reconnect the secondary and let it resync.  After that the file-
-    system can be mounted and used, and seems to work well.
+    the end of the mkfs.  I've seen something similar with fsck.ext4 in cases when it needs to
+    update the filesystem.  These always seems to work if I disconnect the secondary peer and do
+    the mkfs or fsck on the primary, then reconnect the secondary and let it resync.  After that
+    the filesystem can be mounted and used, and seems to work properly.
 
-    I've recently reworked the wait/wakeup/completion logic and apparently introduced a bug
-    related to that.
+    memory leak: netlink skb structures don't get freed
+    memory leak: results of bdget never get freed
 
 /******************************************************************************/
 
@@ -280,7 +307,7 @@ Checkout the right branches:
     drbd-9.0			usermode	# should be default
     drbd-utils			usermode	# should be default
 
-Also get linux-2.6.32.27 (only need the kernel headers) into the same "git" directory.
+Also get linux-2.6.32.27 into the same "git" directory.
     wget https://cdn.kernel.org/pub/linux/kernel/v2.6/linux-2.6.32.27.tar.gz
     gunzip linux-2.6.32.27.tar.gz
     tar xvf linux-2.6.32.27.tar
@@ -297,7 +324,7 @@ In the drbd-utils source directory:
     sudo make install
 
 In the drbd-9.0 source directory:
-    ## NOTE: if you do a "make" in drbd-9,0, it may create a file drbd/compat.h which
+    ## NOTE: if you do a "make" in drbd-9.0, it may create a file drbd/compat.h which
     ##	     ***MUST BE DELETED*** before the usermode compile will succeed.
     ##
     ## You should not need to "make" in the drbd-9.0 directory (that might try to make a
