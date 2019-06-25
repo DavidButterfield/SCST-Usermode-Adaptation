@@ -487,7 +487,7 @@ bio_tcmu_create(int minor, const char * cfg)
 
     tcmu_bdev = record_alloc(tcmu_bdev);
 
-    disk = alloc_disk(0/*IGNORED*/);
+    disk = alloc_disk(1);
     disk->fops = &bio_tcmu_fops;
     disk->major = bio_tcmu_major;
     disk->first_minor = minor;

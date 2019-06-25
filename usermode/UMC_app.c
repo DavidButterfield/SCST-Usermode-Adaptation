@@ -2,7 +2,8 @@
  * Copyright 2019 David A. Butterfield
  *
  * Usermode Compatibility startup and shutdown --
- * Establishes "kernel" environment before starting the "application" module(s)
+ * This is the file that knows about all the various pieces being brought together.
+ * Establishes "kernel" environment before starting the "application" module(s).
  */
 #include <mtelib.h>
 #include <sys_debug.h>
@@ -15,61 +16,68 @@
 struct module { char name[MODULE_NAME_LEN]; int arch; string_t version; };
 struct module __this_module = { .name = "SCST/DRBD", .arch = MODULE_ARCH_INIT, .version = "ZERO" };
 
+/* Usermode compatibility for kernel code */
 extern error_t UMC_init(char * procname);
 extern error_t UMC_exit(void);
 
+/* SCST iSCSI storage server */
 extern error_t SCST_init(void);
 extern error_t SCST_exit(void);
 
+/* Distributed Replicated Block Device */
 extern error_t DRBD_init(void);
 extern error_t DRBD_exit(void);
 
+/* bio interface to TCMU backstore handlers */
 extern error_t tcmu_bio_init(void);
 extern error_t tcmu_bio_exit(void);
 
-/* Begin shutdown processing --
- * Module _exit function should disengage from dependencies before returning.
- * Shutdown ends when the last thread exits -- modules should initiate
- * shutdown of all their threads when their _exit() functions are called.
- */
-static void
-APP_shutdown(void)
+/* Don't want to #include usermode_lib.h here */
+extern void __attribute__((__noreturn__)) do_exit(long);
+extern struct task_struct * kthread_run_shutdown(error_t (*fn)(void * env), void * env);
+
+/* Final shutdown on a thread that does not depend on UMC services */
+static void *
+MTE_shutdown(void * not_used)
+{
+    trace("Shutdown finishing");
+    sys_service_fini();	    /* frees memory allocator */
+    MTE_sys_service_put(SYS_SERVICE);
+    sys_service_set(NULL);
+    pthread_exit(NULL);
+}
+
+/* Begin shutdown processing on shutdown thread */
+static error_t
+APP_shutdown(void * not_used)
 {
     /* Order matters here -- earlier items depend on later items */
     trace("APP_shutdown calls SCST_exit()");
     SCST_exit();
-
-    trace("XXX sleep(2)");
-    sleep(2);
+    trace("XXX sleep(2)"); sleep(2);
 
     trace("APP_shutdown calls DRBD_exit()");
     DRBD_exit();
-
-    trace("XXX sleep(4)");
-    sleep(2);
+    trace("XXX sleep(2)"); sleep(2);
 
     trace("APP_shutdown calls tcmu_bio_exit()");
     tcmu_bio_exit();
-
-    trace("XXX sleep(1)");
-    sleep(2);
+    trace("XXX sleep(2)"); sleep(2);
 
     trace("APP_shutdown calls UMC_exit()");
     UMC_exit();
+    trace("XXX sleep(2)"); sleep(2);
 
-    trace("XXX sleep(2)");
-    sleep(2);
+    /* Start the SYS shutdown thread */
+    pthread_t pthr;
+    pthread_create(&pthr, NULL, MTE_shutdown, NULL);
 
-    trace("APP_shutdown finishing");
-    sys_service_fini();	    /* frees memory allocator */
-    MTE_sys_service_put(SYS_SERVICE);
-    sys_service_set(NULL);
-
-    pthread_exit(NULL);
+    /* Exit the APP shutdown thread */
+    do_exit(0);
 }
 
 /* Start a clean shutdown --
- * sigint_handler is invoked from the itqthread event loop,
+ * sigint_handler is invoked from the irqthread event loop,
  * not an asynchronous signal delivery.
  */
 static void
@@ -83,7 +91,9 @@ sigint_handler(uint32_t signum)
     } else {
 	shutdown_started = true;
 	sys_notice("Shutdown initiated by SIGINT");
-	APP_shutdown();
+
+	/* Drive the shutdown from an independent kthread */
+	kthread_run_shutdown(APP_shutdown, NULL);
     }
 }
 
