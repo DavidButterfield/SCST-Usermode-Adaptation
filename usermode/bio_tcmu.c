@@ -487,7 +487,7 @@ bio_tcmu_create(int minor, const char * cfg)
 
     tcmu_bdev = record_alloc(tcmu_bdev);
 
-    disk = alloc_disk(1);
+    disk = alloc_disk(1);	/* allocates gendisk and dev */
     disk->fops = &bio_tcmu_fops;
     disk->major = bio_tcmu_major;
     disk->first_minor = minor;
@@ -501,26 +501,26 @@ bio_tcmu_create(int minor, const char * cfg)
     add_disk(disk);		/* sets dev->devt */
 
     dev = disk_to_dev(disk);
-    bdev = bdget(dev->devt);	/* must be after add_disk */
+    bdev = bdget(dev->devt);	/* creates bdev and inode */
     bdev->bd_contains = bdev;
-    bdev->bd_disk = disk;
+    bdev->bd_disk = disk;	/* link from bdev to gendisk */
 
-    dev->this_bdev = bdev;
+    disk->bdev = bdev;	//XXX
 
     /* Create tcmu device */
     tcmu_dev = record_alloc(tcmu_dev);
+    tcmu_dev->bdev_tcmu = tcmu_bdev;
+
+    tcmu_bdev->disk = disk;
+    tcmu_bdev->bdev = bdev;
+    tcmu_bdev->tcmu_dev = tcmu_dev;
+
     tcmu_dev->handler = bio_tcmu_handler;
     strlcpy(tcmu_dev->dev_name, disk->disk_name, sizeof(tcmu_dev->dev_name));
 
     strlcpy(tcmu_dev->cfgstring_orig, cfg,
 	    sizeof(tcmu_dev->cfgstring_orig));
     memcpy(tcmu_dev->cfgstring, tcmu_dev->cfgstring_orig, sizeof(tcmu_dev->cfgstring));
-
-    tcmu_dev->bdev_tcmu = tcmu_bdev;
-
-    tcmu_bdev->disk = disk;
-    tcmu_bdev->bdev = bdev;
-    tcmu_bdev->tcmu_dev = tcmu_dev;
 
     if (tcmu_dev->handler->check_config) {
 	char * reason = NULL;
@@ -632,15 +632,18 @@ bio_tcmu_destroy(unsigned int minor)
     bio_tcmu_device_stat_dump(tcmu_dev);
 
     tcmu_dev->handler->close(tcmu_dev);
-
     bio_tcmu_minors[minor] = NULL;
 
     struct bdev_tcmu * tcmu_bdev = tcmu_dev->bdev_tcmu;
-    record_free(tcmu_dev);
-    blk_put_queue(tcmu_bdev->disk->queue);
-    del_gendisk(tcmu_bdev->disk);
-    bdput(tcmu_bdev->bdev);
+
+    del_gendisk(tcmu_bdev->disk);	    /* remove disk from list */
+    bdput(tcmu_bdev->bdev);		    /* drop bdev and inode */
+    blk_put_queue(tcmu_bdev->disk->queue);  /* drop request queue */
+    put_disk(tcmu_bdev->disk);		    /* drop disk and dev */
+
     record_free(tcmu_bdev);
+    record_free(tcmu_dev);
+
     TRACE_EXIT();
     return E_OK;
 }

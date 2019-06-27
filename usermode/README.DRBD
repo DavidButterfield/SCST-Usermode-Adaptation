@@ -1,4 +1,4 @@
-Sat 22 Jun 2019 12:37:12 PM MDT
+Thu 27 Jun 2019 12:16:42 PM MDT
     This is an early runnable version of usermode SCST/DRBD.
 
     The drbd source code is (nearly) unmodified, with its expected kernel environment simulated
@@ -81,10 +81,7 @@ Demo capabilities -- with this config I was able to do the following:
 	iSCSI logout from Node (U)
 
     Set node (U) as secondary:
-	Lacking ability to get SCST to close the DRBD device, for now I substitute this:
-	    Unmount /mnt/j, then kill SCST/DRBD usermode process with SIGQUIT (CTRL-\)
-	    Restart SCST/DRBD usermode process [See Limitations below]
-	    Re-establish network replication, but do not make Node (U) primary
+	drbdsetup secondary r0	    # should succeed after iSCSI logout
 
     On Node (K):
 	drbdsetup primary r0
@@ -163,7 +160,7 @@ BUGS:
     Sometimes I have trouble that resync doesn't start upon reconnect after restarting the
     usermode server.  It doesn't seem to happen as much when running tcpdump to observe the
     inter-peer traffic.  If it doesn't start, disconnecting and then reconnecting to the peer
-    has a good chance of getting the resync started.
+    usually gets it started.
 
     Also I sometimes have trouble running mkfs.ext4 on a replicated device, where it hangs near
     the end of the mkfs.  I've seen something similar with fsck.ext4 in cases when it needs to
@@ -171,8 +168,7 @@ BUGS:
     the mkfs or fsck on the primary, then reconnect the secondary and let it resync.  After that
     the filesystem can be mounted and used, and seems to work properly.
 
-    memory leak: netlink skb structures don't get freed
-    memory leak: results of bdget never get freed
+    memory leak: some netlink skb structures don't get freed
 
 /******************************************************************************/
 
