@@ -669,6 +669,11 @@ static void event_loop(void)
 {
 	int res, i;
 
+	for (i = 0; i < LISTEN_MAX; i++) {
+		poll_array[POLL_LISTEN + i].fd = -1;
+		poll_array[POLL_LISTEN + i].events = 0;
+	}
+
 	create_listen_socket(poll_array + POLL_LISTEN);
 	create_iser_listen_socket(poll_array);
 
@@ -676,11 +681,6 @@ static void event_loop(void)
 	poll_array[POLL_IPC].events = POLLIN;
 	poll_array[POLL_NL].fd = nl_fd;
 	poll_array[POLL_NL].events = POLLIN;
-
-	for (i = 0; i < LISTEN_MAX; i++) {
-		poll_array[POLL_INCOMING + i].fd = -1;
-		poll_array[POLL_INCOMING + i].events = 0;
-	}
 
 	for (i = 0; i < INCOMING_MAX; i++) {
 		poll_array[POLL_INCOMING + i].fd = -1;

@@ -40,6 +40,7 @@ extern struct task_struct * kthread_run_shutdown(error_t (*fn)(void * env), void
 static void *
 MTE_shutdown(void * not_used)
 {
+    sleep(1);
     trace("Shutdown finishing");
     sys_service_fini();	    /* frees memory allocator */
     MTE_sys_service_put(SYS_SERVICE);

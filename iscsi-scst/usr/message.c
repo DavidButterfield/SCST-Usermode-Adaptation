@@ -169,6 +169,12 @@ int iscsi_adm_request_handle(int accept_fd)
 		goto out;
 	}
 
+	if ((err = read(fd, &req, sizeof(req))) != sizeof(req)) {
+		if (err >= 0)
+			err = -EIO;
+		goto out;
+	}
+
 	len = sizeof(cred);
 	if ((err = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, (void *) &cred, &len)) < 0) {
 		rsp.err = -EPERM;
@@ -178,12 +184,6 @@ int iscsi_adm_request_handle(int accept_fd)
 	if (cred.uid || cred.gid) {
 		rsp.err = -EPERM;
 		goto send;
-	}
-
-	if ((err = read(fd, &req, sizeof(req))) != sizeof(req)) {
-		if (err >= 0)
-			err = -EIO;
-		goto out;
 	}
 
 	iscsi_adm_request_exec(&req, &rsp, &rsp_data, &rsp_data_sz);

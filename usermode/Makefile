@@ -169,6 +169,9 @@ WFLAGS_WARN += -Wunsafe-loop-optimizations
 
 WFLAGS_INHIBIT += -Wno-format		# kernel conflation of "long" and "long long" in format specifiers
 
+WFLAGS_INHIBIT += -Wno-shift-negative-value		# one in drbd_main.c
+WFLAGS_INHIBIT += -Wno-logical-op			# one in drbd_receiver.c
+
 # This only warns if -fstrict-aliasing is enabled (e.g. by -O2), in which case the warning is important
 WFLAGS_WARN += -Wstrict-aliasing			# DRBD
 
@@ -335,7 +338,10 @@ spdk.o: spdk.c spdk/stdinc.h spdk/nvme.h spdk/env.h tcmu-runner.h libtcmu.h
 
 VALGRIND_OPTS = --leak-check=full --show-leak-kinds=all --num-callers=30 --track-fds=yes --sim-hints=no-nptl-pthread-stackcache --track-origins=yes
 valgrind:
-	PROC_PREFIX=/fuse/scst valgrind $(VALGRIND_OPTS) ./scst.out -f
+	valgrind $(VALGRIND_OPTS) ./scst.out -f
+
+valgdb:
+	valgrind $(VALGRIND_OPTS) --vgdb=full --vgdb-error=0 ./scst.out -f
 
 clean:
 	rm -rf *.o scst.out
