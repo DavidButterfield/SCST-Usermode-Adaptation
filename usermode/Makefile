@@ -338,7 +338,7 @@ spdk.o: spdk.c spdk/stdinc.h spdk/nvme.h spdk/env.h tcmu-runner.h libtcmu.h
 
 VALGRIND_OPTS = --leak-check=full --show-leak-kinds=all --num-callers=30 --track-fds=yes --sim-hints=no-nptl-pthread-stackcache --track-origins=yes
 valgrind:
-	valgrind $(VALGRIND_OPTS) ./scst.out -f
+	valgrind $(VALGRIND_OPTS) --vgdb=yes ./scst.out -f
 
 valgdb:
 	valgrind $(VALGRIND_OPTS) --vgdb=full --vgdb-error=0 ./scst.out -f
