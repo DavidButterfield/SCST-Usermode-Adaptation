@@ -34,7 +34,7 @@ extern error_t tcmu_bio_exit(void);
 
 /* Don't want to #include usermode_lib.h here */
 extern void __attribute__((__noreturn__)) do_exit(long);
-extern struct task_struct * kthread_run_shutdown(error_t (*fn)(void * env), void * env);
+extern struct task_struct * UMC_run_shutdown(error_t (*fn)(void * env), void * env);
 
 /* Final shutdown on a thread that does not depend on UMC services */
 static void *
@@ -94,7 +94,7 @@ sigint_handler(uint32_t signum)
 	sys_notice("Shutdown initiated by SIGINT");
 
 	/* Drive the shutdown from an independent kthread */
-	kthread_run_shutdown(APP_shutdown, NULL);
+	UMC_run_shutdown(APP_shutdown, NULL);
     }
 }
 

@@ -165,8 +165,8 @@ BUGS:
     the end of the mkfs.  I've seen something similar with fsck.ext4 in cases when it needs to
     update the filesystem.  Disconnecting + reconnecting the peer allows the mkfs to finish.
 
-    Nested spinlocks aren't implemented, so that occasional lock point locks only the mutex,
-    but does not loop through and acquire all the spinlocks like it is supposed to.
+    Nested spinlocks aren't implemented, so that occasional lock point locks only the
+    resources_mutex, but does not loop through and acquire all the spinlocks like it should.
 
 /******************************************************************************/
 
