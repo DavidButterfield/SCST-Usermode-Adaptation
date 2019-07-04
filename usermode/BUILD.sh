@@ -43,7 +43,7 @@ echo "        dd if=/dev/zero of=/tmp/cfg2 bs=4096 count=262144"
 echo ""
 echo "Install configuration files in /etc/scst.conf, /etc/iscsi-scstd.conf, /etc/drbd.d/xxx.res"
 
-if [ -z "$PROC_PREFIX" ]; then
+if [ -z "$UMC_FS_ROOT" ]; then
     echo ""
-    echo "To run drbd utilities, be sure to export PROC_PREFIX=/fuse/scst"
+    echo "To run drbd utilities, be sure to export UMC_FS_ROOT=/UMCfuse"
 fi

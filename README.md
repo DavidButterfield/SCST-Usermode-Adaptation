@@ -86,7 +86,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       $ popd
 
       $ cd SCST/trunk
-      $ sudo make scstadm_install           # patched to know where /fuse/scst/proc is
+      $ sudo make scstadm_install           # patched to know where /UMCfuse is
       $ make enable_proc                    # configure so it can compile for usermode
 
       $ cd usermode
@@ -98,7 +98,7 @@ supporting the iSCSI transport type (via socket calls), and SCSI Block Commands
       # mkdir -p  /var/lib/scst/vdev_mode_pages /var/lib/scst/pr
       # chmod 777 /var/lib/scst/vdev_mode_pages /var/lib/scst/pr   # or writable by SCST's UID
 
-      # mkdir -p /fuse/scst/proc ; chmod 777 /fuse/scst/proc       # mount point for SCST's /proc
+      # mkdir -p /UMCfuse/ ; chmod 777 /UMCfuse	    # mount point for SCST's /proc
       ### Edit /etc/fuse.conf and uncomment the line with "user_allow_other"
 
       $ [ gdb | valgrind ] ./scst.out -f    # run as normal user, with or without accessories

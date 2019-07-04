@@ -140,7 +140,7 @@ Limitations:
 	drbdsetup connect r0 1
 	drbdsetup peer-device-options --resync-rate=40000 --c-plan-ahead=0 --c-min-rate=0 r0 1 0
 
-	<wait for sync to finish>
+	<wait for sync to finish (or not)>
 
 	drbdsetup primary r0
 	scstadmin -config /etc/scst.conf	    # configure SCST
@@ -269,7 +269,8 @@ Target iqn.2001-04.com.example.blackbox:1
 /******************************************************************************/
 
 Need some build instructions here.  The process is rather a mess at the moment.  It isn't as
-automatic as it ought to be, so you'll likely have to actually read what's below.
+automatic as it ought to be, so you'll likely have to actually read what's below.  Especially
+the last line.
 
 Also, some Makefiles require various build tools which I installed one by one as it complained
 about not having them.  These are some of them:
@@ -382,4 +383,4 @@ Create the ramdisk backing files (names currently hardcoded in bio_tcmu.c):
 
 To RUN the DRBD utilities so that the scripts refer to the simulated /proc that talks to the
 usermode server process (rather than the real /proc that talks to kernel), ***SET ENVIRONMENT***
-    export PROC_PREFIX=/fuse/scst
+    export UMC_FS_ROOT=/UMCfuse

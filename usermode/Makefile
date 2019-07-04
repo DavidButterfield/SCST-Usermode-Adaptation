@@ -8,7 +8,7 @@
 # XXX These usermode Makefiles are all hacked junk that need to be replaced.
 
 ### Run DRBD utilities with environment variable set:
-###	    PROC_PREFIX=/fuse/scst
+###	    export UMC_FS_ROOT=/UMCfuse
 
 #############  Defines for building with TCMU plugins  #############
 

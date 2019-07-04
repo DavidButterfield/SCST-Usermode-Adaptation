@@ -11,13 +11,11 @@
 
 #define NAME UMC_APP
 
-#define MODULE_NAME_LEN                 56  //XXX
-#define MODULE_ARCH_INIT                0xED0CBAD0  /*  DAB's "usermode arch" */    //XXX
-struct module { char name[MODULE_NAME_LEN]; int arch; string_t version; };
-struct module __this_module = { .name = "SCST/DRBD", .arch = MODULE_ARCH_INIT, .version = "ZERO" };
+#define UMC_FUSE_MOUNT_POINT_DEFAULT	"/UMCfuse"
+#define UMC_FUSE_MOUNT_POINT_ENV	"UMC_FS_ROOT"
 
 /* Usermode compatibility for kernel code */
-extern error_t UMC_init(char * procname);
+extern error_t UMC_init(const char * procname);
 extern error_t UMC_exit(void);
 
 /* SCST iSCSI storage server */
@@ -118,9 +116,14 @@ UMC_constructor(void)
     /* Direct these signals from signalfd to our handlers */
     mte_signal_handler_set(SIGINT, sigint_handler);
 
+    /* Compute the mount point for the fuse fs */
+    const char * mount_point = getenv(UMC_FUSE_MOUNT_POINT_ENV);
+    if (!mount_point)
+	mount_point = UMC_FUSE_MOUNT_POINT_DEFAULT;
+
     /* Order matters here -- later items depend on earlier items */
     trace("UMC_constructor calls UMC_init()");
-    err = UMC_init("/fuse/scst/proc");	//XXXX need a separate dir for DRBD
+    err = UMC_init(mount_point);
     verify_noerr(err, "UMC_init");
 
     trace("UMC_constructor calls tcmu_bio_init()");

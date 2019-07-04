@@ -10,6 +10,9 @@
 #ifndef DRBD_COMPAT_H
 #define DRBD_COMPAT_H
 
+extern struct module UMC_DRBD_module;
+#define THIS_MODULE (&UMC_DRBD_module)
+
 #define KBUILD_MODNAME			"DRBD"
 #include "usermode_lib.h"		/* kernel emulated interfaces */
 

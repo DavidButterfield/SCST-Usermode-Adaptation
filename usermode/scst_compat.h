@@ -11,6 +11,9 @@
 #define SCST_COMPAT_H
 #define __LINUX_CPUMASK_H   /* set so SCST's backport.h will give us a few more things */
 
+extern struct module UMC_SCST_module;
+#define THIS_MODULE (&UMC_SCST_module)
+
 #define KBUILD_MODNAME			"SCST"
 
 #define LINUX_VERSION_CODE		KERNEL_VERSION(2, 6, 24)

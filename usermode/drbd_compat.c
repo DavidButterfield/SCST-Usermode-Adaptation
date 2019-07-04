@@ -11,6 +11,8 @@
 #include <sys_service.h>
 #include <sys_debug.h>
 
+struct module UMC_DRBD_module = { .name = "drbd", .version = "UMC" };
+
 /* Here we must know the names of all the DRBD params and init/fini functions */
 extern void UMC_param_create_enable_faults(void);
 extern void UMC_param_create_fault_rate(void);
@@ -28,6 +30,8 @@ void
 DRBD_init(void)
 {
     errno_t err;
+
+    UMC_fuse_module_mkdir(THIS_MODULE->name);
 
     /* Set up the /proc entries for these parameters */
     UMC_param_create_disable_sendpage();
@@ -79,4 +83,6 @@ DRBD_exit(void)
     UMC_param_remove_allow_oos();
     UMC_param_remove_minor_count();
     UMC_param_remove_protocol_version_min();
+
+    UMC_fuse_module_rmdir(THIS_MODULE->name);
 }

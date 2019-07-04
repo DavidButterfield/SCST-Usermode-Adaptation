@@ -31,6 +31,8 @@
 #include <sys_service.h>
 #include <sys_debug.h>
 
+struct module UMC_SCST_module = { .name = "scsi_tgt", .version = "UMC" };
+
 extern const struct file_operations ctr_fops;
 
 extern void UMC_param_create_num_threads(void);
@@ -50,7 +52,8 @@ SCST_init(void)
 {
     errno_t err;
 
-    /* Establish /proc entries */
+    UMC_fuse_module_mkdir(THIS_MODULE->name);
+
     UMC_param_create_num_threads();
     UMC_param_create_scst_vdisk_ID();
     UMC_param_create_scst_threads();
@@ -107,6 +110,8 @@ SCST_exit(void)
     UMC_param_remove_scst_max_cmd_mem();
     UMC_param_remove_scst_max_dev_cmd_mem();
     UMC_param_remove_forcibly_close_sessions();
+
+    UMC_fuse_module_rmdir(THIS_MODULE->name);
 }
 
 /******************************************************************************/
