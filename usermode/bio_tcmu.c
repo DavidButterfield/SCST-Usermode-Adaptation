@@ -337,6 +337,10 @@ tcmu_make_request(struct request_queue *rq_unused, struct bio * bio)
     struct bdev_tcmu * tcmu_bdev = disk->private_data;
     struct tcmu_device * tcmu_dev = tcmu_bdev->tcmu_dev;
 
+    uint32_t niov = bio->bi_vcnt;
+    uint32_t iovn = 0;
+    size_t aio_op_len = 0;
+
     TRACE_ENTRY();
     assert(tcmu_dev);
     assert(tcmu_dev->handler);
@@ -344,18 +348,21 @@ tcmu_make_request(struct request_queue *rq_unused, struct bio * bio)
 
     uint64_t seekpos = bio->bi_sector << 9;
 
+    if (seekpos >= tcmu_dev->num_lbas * tcmu_dev->block_size) {
+	bio_set_flag(bio, BIO_EOF);
+	sys_warning("attempt to seek %s to %lu outside bound %lu", tcmu_dev->handler->name,
+		    seekpos, tcmu_dev->num_lbas * tcmu_dev->block_size);
+	goto out_finish;
+    }
+
     op = kmem_cache_zalloc(op_cache, IGNORED);
     assert(op);
     op->bio = bio;
 
-    uint32_t niov = bio->bi_vcnt;
     if (niov <= ARRAY_SIZE(op->iov_space))
 	op->iovec = op->iov_space;
     else
 	op->iovec = vzalloc(niov * sizeof(struct iovec));
-
-    uint32_t iovn = 0;
-    size_t aio_op_len = 0;
 
     /* Translate the segments of the (scattered) I/O buffer into iovec entries,
      * coalescing adjacent buffer segments.  (It is OK that coalescing means we
