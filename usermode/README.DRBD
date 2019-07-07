@@ -1,4 +1,4 @@
-Sat 29 Jun 2019 11:47:12 PM MDT
+Sun 07 Jul 2019 03:26:27 PM MDT
     This is an early runnable version of usermode SCST/DRBD.
 
     The drbd source code is (nearly) unmodified, with its expected kernel environment simulated
@@ -49,17 +49,22 @@ Demo config:
                                        /dev/drbd1 ---> DRBD <=====> sda1        [Node K]
 
     It is also possible to plumb SCST-vdisk directly to bio_tcmu through the bio interface,
-    bypassing DRBD (in that case the exposed device is unreplicated, of course).
+    bypassing DRBD (in that case the exposed LUN is unreplicated, of course).
 
     A sample scst.conf file below defines the following two SCST device instances, one connected
     as shown above, the other a direct connection SCST to the TCMU ram module as just mentioned.
 
-		    initiator	SCST	        program-internal	backing file
-		    ----------	-----	-------------------------------	------------
-    (unreplicated)  /dev/sdi	LUN 0			/UMCdev/tcmu000	  /tmp/cfg1
-    (replicated)    /dev/sdj	LUN 1	/UMCdev/drbd1	/UMCdev/tcmu001	  /tmp/cfg2
+                    initiator   SCST    Replicated device   Unreplicated device     backing file
+                    ----------  -----   ----------------------------------------    ------------
+    (unreplicated)  /dev/sdi    LUN 0                       /UMCfuse/dev/tcmu000    /tmp/cfg1
+    (replicated)    /dev/sdj    LUN 1   /UMCfuse/dev/drbd1  /UMCfuse/dev/tcmu001    /tmp/cfg2
+					(The /tmp/cfg names are currently hardcoded in bio_tcmu.c)
 
-    The /tmp/cfg names are currently hardcoded in bio_tcmu.c.
+    Finally, it is also now possible to access and mount a DRBD or tcmu_runner block device
+    through a fuse node that issues bio requests (not shown in diagram).  (This does not make
+    use of the iSCSI initiator or SCST)
+	sudo mount /UMCfuse/dev/drbd1	/mnt/i		# replicated device
+	sudo mount /UMCfuse/dev/tcmu000 /mnt/j		# unreplicated device
 
 Demo capabilities -- with this config I was able to do the following:
 
@@ -107,52 +112,29 @@ Demo capabilities -- with this config I was able to do the following:
     In a separate configuration I ran two usermode SCST/DRBD servers on two machines
     doing the same sort of replication as above (but not using any kernel-based DRBD).
 
-Limitations:
-    Many things are hacked just enough to get it to work, and neglecting performance.
-    The Makefiles have optimizations turned off and debugs turned on.  But not taking any
-    measurements, the performance seemed pretty much like normal, watching my makes run.
+    I've also carried out the full download/build process on a locally-mounted DRBD device
+    through fuse.
 
+Limitations:
     Netlink multicast emulation not yet implemented, so anything like "drbdsetup wait*" hangs.
 
-    drbdmeta assumes it can access the device through /dev/drbd*, but this is not the case on
-    Node (U).  This is a problem because after a server restart drbdmeta needs to apply the
-    activity log before DRBD will attach the device.
+    Many things are hacked just enough to get it to work, and neglecting performance.
+    The makefiles have optimizations turned off and debugs turned on.  But not taking any
+    measurements, the performance of a DRBD replicated device through iSCSI and SCST feels
+    more-or-less like normal, watching my makes run.  (They do have the significant advantage
+    of running on a ramdisk).
 
-    At the moment my workaround is to destroy the metadata on Node U every time the server
-    process (containing SCST and DRBD) is restarted, and let it resync from Node (K).  With my
-    1 GB filesystem this takes around 25 seconds.  Before starting the server process, I tell
-    drbdmeta to operate directly on the backing file for the ramdisk:
-
-	sudo drbdmeta 1 v09 /tmp/cfg2 internal create-md 1 --force 
-
-    Then start the usermode SCST/DRBD server:
-
-	sudo ./scst.out -f
-
-    On Node (U) I use drbdsetup rather than drbdadm because the latter also assumes access via
-    /dev/drbd* (if nothing else at least by invoking drbdmeta):
-
-	drbdsetup new-resource r0 0
-	drbdsetup new-minor r0 1 0
-	drbdsetup new-peer r0 1 --_name=bottom
-	drbdsetup new-path r0 1 ipv4:192.168.1.9:7788 ipv4:192.168.1.37:7788
-	drbdsetup attach 1 /UMCdev/tcmu001 /UMCdev/tcmu001 internal
-	drbdsetup connect r0 1
-	drbdsetup peer-device-options --resync-rate=40000 --c-plan-ahead=0 --c-min-rate=0 r0 1 0
-
-	<wait for sync to finish (or not)>
-
-	drbdsetup primary r0
-	scstadmin -config /etc/scst.conf	    # configure SCST
-	drbdsetup status --statistics --verbose
-
-    (The "/UMCdev" names are the magic device names used internally in the usermode process)
-
-    Something I expect NOT to work is running the server executable off of a disk it implements.
+    The server-internal block device nodes are exposed through the fuse filesystem mount.  The
+    fuse-tree node that represents a drbd or tcmu block device appears as a regular file rather
+    than as a block device (because otherwise fuse directs I/O for that dev_t to the kernel
+    instead of the fuse filesystem server).  So when communicating with a usermode server, the
+    DRBD utilities omit the check that their device is S_IFBLK() rather than S_IFREG().
 
     Resync may run noticeably slower when observing resync network traffic with tcpdump.
 
-BUGS:
+    Something I expect NOT to work is running the server executable off of a disk it implements.
+
+Bugs:
     Clean shutdown via SIGINT (CTRL-C) still has a couple of unfreed memory allocations:
 	"fifo" leak at drbd_sender.c:552    (DRBD)
 	"iSCSI AEN" leak at iscsi.c:1048    (UMC)
@@ -161,78 +143,78 @@ BUGS:
     It doesn't seem to happen as much when running tcpdump to observe the inter-peer traffic.
     If it doesn't start, disconnecting + reconnecting to the peer usually gets it going.
 
-    Also I sometimes have trouble running mkfs.ext4 on a replicated device, where it hangs near
-    the end of the mkfs.  I've seen something similar with fsck.ext4 in cases when it needs to
-    update the filesystem.  Disconnecting + reconnecting the peer allows the mkfs to finish.
+    Also sometimes mkfs.ext4 on a replicated device hangs near the end of the mkfs.  I've
+    seen something similar with fsck.ext4 in cases when it needs to update the filesystem.
+    Disconnecting + reconnecting the peer allows the mkfs to finish.
 
     Nested spinlocks aren't implemented, so that occasional lock point locks only the
     resources_mutex, but does not loop through and acquire all the spinlocks like it should.
 
-/******************************************************************************/
+    "Exclusive" opens aren't really exclusive, so be careful not to mount the same storage
+    twice; for example /UMCfuse/dev/tcmu001 and /UMCfuse/dev/drbd1 are the same storage.
+
+Sample configuration files
+################################################################################
+# /etc/drbd.d/r0.res
 
 resource r0 {
-    on bottom {
-	device	    drbd1;
-	disk	    /dev/sda1;
-	address	    192.168.1.37:7788;
-	meta-disk   internal;
-    }
     on blackbox {
-	device	    drbd1;
-	disk	    /UMCdev/tcmu001;
-	address	    192.168.1.9:7788;
-	meta-disk   internal;
+	node-id			0;
+	address			172.28.128.1:7788;
+	volume 0 {
+	    device		drbd1 minor 1;
+	    disk		"/UMCfuse/dev/tcmu001";
+	    meta-disk		internal;
+	}
+    }
+
+    on vagrant {
+	node-id			1;
+	address			172.28.128.3:7788;
+	volume 0 {
+	    device		drbd1 minor 1;
+            disk		"/UMCfuse/dev/tcmu001";
+	    meta-disk		internal;
+	 }
+    }
+
+    disk {
+	# Put the "c-plan-ahead 0" line first or the others will be silently ignored
+	c-plan-ahead		0;			# do not use plan-ahead algorithm
+	resync-rate		40000K;			# max bytes/second for resync
+	c-min-rate		0k;			# min bytes/second for app
     }
 }
 
-/******************************************************************************/
-
+################################################################################
 # /etc/scst.conf
 # Comments must start a line (no comments at end of line after commands)
 # (This is the ancient format of the SCST config file used with /proc in version 2.6.24)
 
 [OPTIONS]
-# Copy configuration options during a -writeconfig
 KEEP_CONFIG TRUE
-# For FC targets, issue a LIP after every assignment change
 ISSUE_LIP FALSE
 
 [HANDLER vdisk]
 #DEVICE <vdisk name>,<device path>,<options>,<block size>,<t10 device id>
-### DEVICE null_NULLIO,/dev/zero,NULLIO,512,N000
-### DEVICE zero_ZERO,/dev/zero,NV_CACHE,512,Z000
-### DEVICE zero_BZERO,/dev/zero,BLOCKIO,512,BZ000
 
-######### TCMU DEVICE (unreplicated) #########
 # Connection from SCST VDISK through bio_tcmu to a TCMU handler storage backend
-#
-DEVICE disk_ram000,/UMCdev/tcmu000,BLOCKIO,4096,tcmu000
+DEVICE disk_ram000,/UMCfuse/dev/tcmu000,BLOCKIO,4096,tcmu000
 
-######### DRBD device (replicated) #########
 # Connection from SCST VDISK through bio_tcmu to a DRBD block device
-# (The DRBD block device backed (locally) via bio_tcmu to a TCMU handler)
-#
-# DEVICE disk_drbd1,/UMCdev/drbd1,BLOCKIO|READ_ONLY,4096,drbd1
-DEVICE disk_drbd1,/UMCdev/drbd1,BLOCKIO,4096,drbd1
+DEVICE disk_drbd1,/UMCfuse/dev/drbd1,BLOCKIO,4096,drbd1
 
 [GROUP Default]
+
+### The appearance of blackbox in the initiator assignments is due to using blackbox both
+### as Node (U) and as an initiator to itself (iSCSI login from blackbox to blackbox).
 
 [GROUP blackbox]
 USER iqn.1993-08.org.debian:01:42f44c781338
 
-### The "ASSIGNMENT blackbox" statement is giving initiator permissions to blackbox
-### itself, because in testing I used blackbox as both Node (U) and as the initiator
-
 [ASSIGNMENT blackbox]
-### DEVICE null_NULLIO,0
-### DEVICE zero_ZERO,1
-### DEVICE zero_BZERO,2
 DEVICE disk_ram000,0
 DEVICE disk_drbd1,1
-
-### [ASSIGNMENT Default]
-### DEVICE disk_sda5,/dev/sda5,,4096,sda5
-### DEVICE file_b1,/tmp/disk_b1,NV_CACHE,512,F_b1
 
 [TARGETS enable]
 #HOST <wwn identifier>
@@ -240,8 +222,7 @@ DEVICE disk_drbd1,1
 [TARGETS disable]
 #HOST <wwn identifier>
 
-/******************************************************************************/
-
+################################################################################
 # /etc/iscsi-scstd.conf
 
 Target iqn.2001-04.com.example.blackbox:1
@@ -266,11 +247,11 @@ Target iqn.2001-04.com.example.blackbox:1
 	HeaderDigest None
 	DataDigest None
 
-/******************************************************************************/
+################################################################################
 
 Need some build instructions here.  The process is rather a mess at the moment.  It isn't as
 automatic as it ought to be, so you'll likely have to actually read what's below.  Especially
-the last line.
+the last three paragraphs.
 
 Also, some Makefiles require various build tools which I installed one by one as it complained
 about not having them.  These are some of them:
@@ -283,9 +264,9 @@ The description below assumes that there are no DRBD modules or utilities instal
     NOTE:  The script SCST-Usermode-Adaptation/usermode/BUILD.sh
 	   does much of the what is described below.
 
-Make a git directory and clone these repositories into it from github:
-    mkdir ~/git
-    cd ~/git
+Make a git directory and clone these repositories into it:
+    mkdir git
+    cd git
     git clone https://github.com/DavidButterfield/MTE.git
     git clone https://github.com/DavidButterfield/usermode_compat.git
     git clone https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git
@@ -308,10 +289,8 @@ Also get linux-2.6.32.27 into the same "git" directory.
 In the drbd-utils source directory:
     ./autogen.sh
 
-    ## Build the drbd utilities "--with-build-usermode" to control a usermode DRBD server.
     ## If you omit --without-manual, it will take a long time for the make to complete.
-    ./configure --prefix=/usr --localstatedir=/var --sysconfdir=/etc \
-					    --with-build-usermode --without-manual
+    ./configure --prefix=/usr --localstatedir=/var --sysconfdir=/etc --without-manual
     make
     sudo make install
 
@@ -319,10 +298,9 @@ In the drbd-9.0 source directory:
     ## NOTE: if you do a "make" in drbd-9.0, it may create a file drbd/compat.h which
     ##	     ***MUST BE DELETED*** before the usermode compile will succeed.
     ##
-    ## You should not need to "make" in the drbd-9.0 directory (that might try to make a
-    ## version that expects to interact with the kernel).  The make for usermode DRBD is
-    ## done from SCST-Usermode-Adaptation/usermode/Makefile passing in the appropriate
-    ## flags to drbd-9.0/drbd/Makefile.usermode
+    ## You should not need to "make" in the drbd-9.0 directory.  The make for usermode DRBD is
+    ## done from SCST-Usermode-Adaptation/usermode/Makefile passing in the appropriate flags
+    ## to drbd-9.0/drbd/Makefile.usermode
     ## 
     ## However, it is necessary to download some headers and compatibility code external
     ## to the drbd-9.0 repository:
@@ -367,20 +345,37 @@ lot of memory is uninitialized, so to run under valgrind I change usermode/Makef
 SCST-Usermode-Adaptation to build non-statically, in addition to enabling -DVALGRIND.
 
 Configuration files:
-    The example SCST config files shown above are from Node (U) in my setup.  They will
-    have to be modified to suit your configuration, and put into /etc/iscsi-scstd.conf
-    and /etc/scst.conf.  The DRBD config for the resource is also shown above and goes
-    somewhere in /etc/drbd.d such as /etc/drbd.d/r0.res
+    The example config files shown above are from Node (U) in my setup.  They will have to be
+    modified to suit your network configuration, and put into /etc/iscsi-scstd.conf,
+    /etc/scst.conf, and somewhere in /etc/drbd.d such as /etc/drbd.d/r0.res
 
 SCST needs these directories created:
     sudo mkdir -p /var/lib/scst/pr
     sudo mkdir -p /var/lib/scst/vdev_mode_pages
 
 Create the ramdisk backing files (names currently hardcoded in bio_tcmu.c):
-    ## You can make them bigger, but remember the full resync every server restart
+    ## You can make them bigger if you want -- 1 GiB can download and build the server
     dd if=/dev/zero of=/tmp/cfg1 bs=4096 count=262144	# 1 GiB (unreplicated)
     dd if=/dev/zero of=/tmp/cfg2 bs=4096 count=262144	# 1 GiB (replicated)
 
 To RUN the DRBD utilities so that the scripts refer to the simulated /proc that talks to the
 usermode server process (rather than the real /proc that talks to kernel), ***SET ENVIRONMENT***
     export UMC_FS_ROOT=/UMCfuse
+
+The utilities need the UMC_FS_ROOT environment variable set to control the usermode DRBD server
+instead of a kernel-based server.  But they also need to run superuser.  Keep in mind that the
+sudo program does not pass your shell environment through to the program given on its command
+line, unless you specify "sudo -E".  
+
+Start the usermode SCST/DRBD server:
+    export UMC_FS_ROOT=/UMCfuse
+    sudo ./scst.out -f
+    sudo -E drbdadm up r0
+    sudo -E drbdsetup primary r0
+
+Either export the replicated device as a LUN through SCST:
+    scstadmin -config /etc/scst.conf
+
+Or use the replicated device through its fuse node, e.g.
+    sudo mkfs.ext4 /UMCfuse/dev/drbd1
+    sudo mount /UMCfuse/dev/drbd1 /mnt/i
