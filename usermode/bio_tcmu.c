@@ -81,7 +81,7 @@ tcmu_get_device_size(struct tcmu_device * tcmu_dev)
     return bdev_size(bdev_tcmu->bdev);
 }
 
-errno_t
+error_t
 tcmur_register_handler(struct tcmur_handler * handler)
 {
     TRACE_ENTRY();
@@ -291,8 +291,6 @@ tcmu_bio_endio(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam_stat_
 
     if (unlikely(sam_stat != SAM_STAT_GOOD))
 	bio->bi_error = -EIO;
-    else
-	bio->bi_flags |= 1<<BIO_UPTODATE;
 
     bio_endio(bio, bio->bi_error);
 
@@ -327,7 +325,7 @@ tcmu_bio_writev_done(struct tcmu_device * tcmu_dev, struct tcmulib_cmd * op, sam
     TRACE_EXIT();
 }
 
-static errno_t
+static error_t
 tcmu_make_request(struct request_queue *rq_unused, struct bio * bio)
 {
     int ret = E_OK;
@@ -446,10 +444,10 @@ struct block_device_operations bio_tcmu_fops = {
 
 /* Create a block disk device using TCMU backing storage */
 /* cfg is a config string for the underlying tcmu handler */
-static errno_t
+static error_t
 bio_tcmu_create(int minor, const char * cfg)
 {
-    errno_t err;
+    error_t err;
     size_t dev_size;
 
     struct bdev_tcmu * tcmu_bdev;
@@ -503,9 +501,11 @@ bio_tcmu_create(int minor, const char * cfg)
     dev = disk_to_dev(disk);
     bdev = bdget(dev->devt);	/* creates bdev and inode */
     bdev->bd_contains = bdev;
-    bdev->bd_disk = disk;	/* link from bdev to gendisk */
 
-    disk->bdev = bdev;	//XXX
+#if 1	//XXXX How does this work in a real kernel?
+    disk_to_bdev(disk) = bdev;
+    disk_to_bdev(disk)->bd_disk = disk;
+#endif
 
     /* Create tcmu device */
     tcmu_dev = record_alloc(tcmu_dev);
@@ -588,11 +588,11 @@ bio_tcmu_create(int minor, const char * cfg)
 	goto fail_close;
     }
 
+    bdev->bd_inode->i_mode = S_IFBLK | (is_rdonly ? 0440 : 0660);
     bdev->bd_inode->i_size = size;
     set_capacity(disk, size>>9);
 
     set_disk_ro(disk, is_rdonly);
-    bdev->bd_inode->i_mode = S_IFBLK | (is_rdonly ? 0444 : 0666);
 
     // tcmu_set_dev_max_xfer_len(tcmu_dev, 8*1024*1024);	//XXX
 
@@ -601,6 +601,9 @@ bio_tcmu_create(int minor, const char * cfg)
 	       dev_size, size, bdev->bd_block_size, is_rdonly ? " READONLY" : "READ/WRITE");
 
     bio_tcmu_minors[minor] = tcmu_dev;
+
+    /* Create the device node in the fuse tree */   //XXX do somewhere in usermode_lib.h ?
+    UMC_fuse_bdev_add(disk->disk_name, disk_to_bdev(disk)->bd_inode);
 
 out:
     TRACE_EXIT_RES(err);
@@ -618,7 +621,7 @@ fail_free:
     goto out;
 }
 
-static errno_t
+static error_t
 bio_tcmu_destroy(unsigned int minor)
 {
     struct tcmu_device * tcmu_dev = bio_tcmu_minors[minor];
@@ -656,13 +659,13 @@ char * cfgs[] = {
     NULL
 };
 
-errno_t
+error_t
 tcmu_bio_init(void)
 {
     unsigned int minor = 0;
     unsigned int nminor = 0;
     char ** cfgp = cfgs;
-    errno_t err = E_OK;
+    error_t err = E_OK;
     TRACE_ENTRY();
 
     assert(!op_cache);
