@@ -1150,9 +1150,6 @@ check:
 
 /* Returns 0 on success and file size in *file_size, error code otherwise */
 static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
-	loff_t *file_size);
-
-static int vdisk_get_file_size(const struct scst_vdisk_dev *virt_dev,
 	loff_t *file_size)
 {
 	struct inode *inode;

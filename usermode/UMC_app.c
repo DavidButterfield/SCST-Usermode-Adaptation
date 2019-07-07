@@ -40,7 +40,9 @@ MTE_shutdown(void * not_used)
 {
     sleep(1);
     trace("Shutdown finishing");
+
     sys_service_fini();	    /* frees memory allocator */
+
     MTE_sys_service_put(SYS_SERVICE);
     sys_service_set(NULL);
     pthread_exit(NULL);
@@ -101,7 +103,7 @@ __attribute__((__constructor__))	/* runs before main() is called */
 static void
 UMC_constructor(void)
 {
-    errno_t err;
+    error_t err;
     sys_service_set(MTE_sys_service_get());	/* install MTE as sys_service provider */
     sys_service_init(NULL/*cfg*/);  /* initialize sys_service provider, sys_thread_current */
     /*** Now we have a memory allocator ***/

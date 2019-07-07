@@ -18,7 +18,7 @@ tar xvf linux-2.6.32.27.tar
 rm linux-2.6.32.27.tar
 
 (cd drbd-utils; ./autogen.sh; \
-    ./configure --prefix=/usr --localstatedir=/var --sysconfdir=/etc --with-build-usermode --without-manual;
+    ./configure --prefix=/usr --localstatedir=/var --sysconfdir=/etc --without-manual;
     make; sudo make install)
 
 (cd drbd-9.0; make check-submods)

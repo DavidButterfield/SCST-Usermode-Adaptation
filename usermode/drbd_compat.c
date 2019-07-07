@@ -23,13 +23,13 @@ extern void UMC_param_create_allow_oos(void);
 extern void UMC_param_create_minor_count(void);
 extern void UMC_param_create_protocol_version_min(void);
 
-extern errno_t UMC_INIT_drbd_init(void);		/* drbd_main.c */
-extern errno_t UMC_INIT_dtt_initialize(void);		/* drbd_transport_tcp.c */
+extern error_t UMC_INIT_drbd_init(void);		/* drbd_main.c */
+extern error_t UMC_INIT_dtt_initialize(void);		/* drbd_transport_tcp.c */
 
 void
 DRBD_init(void)
 {
-    errno_t err;
+    error_t err;
 
     UMC_fuse_module_mkdir(THIS_MODULE->name);
 

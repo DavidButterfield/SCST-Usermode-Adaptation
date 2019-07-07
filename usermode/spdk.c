@@ -168,7 +168,7 @@ _tcmu_spdk_poll(struct tcmu_device * dev)
 
 /* Receive a poll callback from MTE (after sys_callback_schedule) */
 static void
-SCST_tcmu_spdk_poll(void * env, uintptr_t arg, errno_t err)
+SCST_tcmu_spdk_poll(void * env, uintptr_t arg, error_t err)
 {
     struct tcmu_device * dev = env;
     assert(arg == 0);

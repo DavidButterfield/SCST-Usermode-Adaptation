@@ -24,7 +24,7 @@
 #include <net/sock.h>
 
 #ifdef SCST_USERMODE			/* resolve symbol conflicts */
-  extern void iscsi_conn_rd_wakeup_handler(void *, uintptr_t, errno_t);
+  extern void iscsi_conn_rd_wakeup_handler(void *, uintptr_t, error_t);
   /* Rename some kernel-code symbols that conflict with daemon-code symbols */
   #define conn_free                     SCST_kconn_free
   #define session_free                  SCST_ksession_free

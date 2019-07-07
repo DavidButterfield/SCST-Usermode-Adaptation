@@ -42,15 +42,15 @@ extern void UMC_param_create_scst_max_cmd_mem(void);
 extern void UMC_param_create_scst_max_dev_cmd_mem(void);
 extern void UMC_param_create_forcibly_close_sessions(void);
 
-extern errno_t UMC_INIT_init_scst(void);			/* scst_main.c */
-extern errno_t UMC_INIT_init_scst_vdisk_driver(void);		/* scst_vdisk.c */
-extern errno_t UMC_INIT_iscsi_init(void);			/* iscsi.c */
+extern error_t UMC_INIT_init_scst(void);			/* scst_main.c */
+extern error_t UMC_INIT_init_scst_vdisk_driver(void);		/* scst_vdisk.c */
+extern error_t UMC_INIT_iscsi_init(void);			/* iscsi.c */
 
 /* Master init() call for all the SCST "kernel modules" */
 void
 SCST_init(void)
 {
-    errno_t err;
+    error_t err;
 
     UMC_fuse_module_mkdir(THIS_MODULE->name);
 
@@ -97,7 +97,7 @@ SCST_exit(void)
 	SCST_nl_fdwrite = -1;
     }
 
-    errno_t err = ctr_fops.release(NULL, NULL);
+    error_t err = ctr_fops.release(NULL, NULL);
     verify_eq(err, E_OK);
 
     UMC_EXIT_iscsi_exit();
@@ -141,7 +141,7 @@ int
 SCST_nl_open(void)
 {
     int fd[2];
-    errno_t err = UMC_socketpair(AF_LOCAL,
+    error_t err = UMC_socketpair(AF_LOCAL,
 		       SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC, 0, fd);
     verify_rc(err, socketpair);
     assert(SCST_nl_fdwrite == -1);
@@ -156,7 +156,7 @@ unsigned long trace_flag;
 
 /* Called from kernel code to issue a notification to the daemon through the "nl" socket */
 // XXX Does the data need to be copied?  I don't think so, but should check
-errno_t
+error_t
 event_send(u32 tid, u64 sid, u32 cid, u32 cookie,
 	   enum iscsi_kern_event_code code, const char * param1, const char * param2)
 {
@@ -186,7 +186,7 @@ event_send(u32 tid, u64 sid, u32 cid, u32 cookie,
 	[3] = { .iov_base = _unconstify(param2), .iov_len = event.param2_size },   //XXX
     };
 
-    return (errno_t)UMC_kernelize64(writev(SCST_nl_fdwrite, iov, ARRAY_SIZE(iov)));
+    return (error_t)UMC_kernelize64(writev(SCST_nl_fdwrite, iov, ARRAY_SIZE(iov)));
 }
 
 /******************************************************************************/
@@ -209,7 +209,7 @@ aios_thread_init(void * unused)
 		    unused,
 		    kstrdup(sys_pthread_name, IGNORED)));
 
-    errno_t err = pthread_setname_np(pthread_self(), sys_pthread_name);
+    error_t err = pthread_setname_np(pthread_self(), sys_pthread_name);
     expect_noerr(err, "pthread_setname_np");
 }
 

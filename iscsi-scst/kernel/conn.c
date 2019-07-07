@@ -614,7 +614,7 @@ static void iscsi_data_ready(struct sock *sk, int len)
 }
 
 #ifdef SCST_USERMODE			/* define iscsi_conn_rd_wakeup_handler */
-void iscsi_conn_rd_wakeup_handler(void * env, uintptr_t arg, errno_t err)
+void iscsi_conn_rd_wakeup_handler(void * env, uintptr_t arg, error_t err)
 {
 	assert_eq(err, E_OK);
 	assert_eq(arg, 0);
