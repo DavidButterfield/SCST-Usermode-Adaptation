@@ -1,4 +1,4 @@
-Sun 07 Jul 2019 03:26:27 PM MDT
+Mon 08 Jul 2019 01:02:52 AM MDT
     This is an early runnable version of usermode SCST/DRBD.
 
     The drbd source code is (nearly) unmodified, with its expected kernel environment simulated
@@ -250,8 +250,7 @@ Target iqn.2001-04.com.example.blackbox:1
 ################################################################################
 
 Need some build instructions here.  The process is rather a mess at the moment.  It isn't as
-automatic as it ought to be, so you'll likely have to actually read what's below.  Especially
-the last three paragraphs.
+automatic as it ought to be, so you'll likely have to actually read what's below.
 
 Also, some Makefiles require various build tools which I installed one by one as it complained
 about not having them.  These are some of them:
@@ -358,18 +357,23 @@ Create the ramdisk backing files (names currently hardcoded in bio_tcmu.c):
     dd if=/dev/zero of=/tmp/cfg1 bs=4096 count=262144	# 1 GiB (unreplicated)
     dd if=/dev/zero of=/tmp/cfg2 bs=4096 count=262144	# 1 GiB (replicated)
 
+***SET ENVIRONMENT***
 To RUN the DRBD utilities so that the scripts refer to the simulated /proc that talks to the
-usermode server process (rather than the real /proc that talks to kernel), ***SET ENVIRONMENT***
+usermode server process (rather than the real /proc that talks to kernel):
     export UMC_FS_ROOT=/UMCfuse
 
 The utilities need the UMC_FS_ROOT environment variable set to control the usermode DRBD server
 instead of a kernel-based server.  But they also need to run superuser.  Keep in mind that the
 sudo program does not pass your shell environment through to the program given on its command
-line, unless you specify "sudo -E".  
+line, unless you specify "sudo -E".
+
+The server also needs the environment variable set, because it invokes the utilities through the
+"usermode helper", and they inherit the server's environment.
 
 Start the usermode SCST/DRBD server:
     export UMC_FS_ROOT=/UMCfuse
-    sudo ./scst.out -f
+    sudo -E ./scst.out -f
+    sudo -E drbdmeta 1 v09 /UMCfuse/dev/tcmu001 internal create-md 2
     sudo -E drbdadm up r0
     sudo -E drbdsetup primary r0
 
