@@ -209,9 +209,11 @@ static int tcmu_ram_open(struct tcmu_device * td)
 		file_size = sys_size;
 		lseek(mmap_fd, file_size, SEEK_SET);
 		err = write(mmap_fd, "X", 1);
+#if 0
 	} else if (sys_size < file_size) {
 		tcmu_dev_warn(td, "%s space unused: sys_size %ld < file_size %ld",
 				  config, sys_size, file_size);
+#endif
 	}
 
 	tcmu_set_dev_num_lbas(td, file_size / tcmu_get_dev_block_size(td));

@@ -55,19 +55,19 @@ APP_shutdown(void * not_used)
     /* Order matters here -- earlier items depend on later items */
     trace("APP_shutdown calls SCST_exit()");
     SCST_exit();
-    trace("XXX sleep(2)"); sleep(2);
+    trace("sleep(1)"); sleep(1);
 
     trace("APP_shutdown calls DRBD_exit()");
     DRBD_exit();
-    trace("XXX sleep(2)"); sleep(2);
+    trace("sleep(1)"); sleep(1);
 
     trace("APP_shutdown calls tcmu_bio_exit()");
     tcmu_bio_exit();
-    trace("XXX sleep(2)"); sleep(2);
+    trace("sleep(1)"); sleep(1);
 
     trace("APP_shutdown calls UMC_exit()");
     UMC_exit();
-    trace("XXX sleep(2)"); sleep(2);
+    trace("sleep(1)"); sleep(1);
 
     /* Start the SYS shutdown thread */
     pthread_t pthr;

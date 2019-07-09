@@ -143,7 +143,7 @@ _thread_assimilate(void)
     name[15] = '\0';
     err = pthread_setname_np(pthread_self(), name);
 
-    /* XXX These structures and their strings are not freed anywhere */
+    /* XXXXX These structures and their strings are not freed anywhere */
     sys_thread = sys_thread_alloc((void *)"bio_tcmu", "bio_tcmu", (void *)vstrdup(name));
     current = UMC_current_alloc();
     UMC_current_init(current, sys_thread, (void *)"bio_tcmu", "bio_tcmu", vstrdup(name));
@@ -330,7 +330,7 @@ tcmu_make_request(struct request_queue *rq_unused, struct bio * bio)
 {
     int ret = E_OK;
     bool is_write = op_is_write(bio_op(bio));
-    // bool fua = op_is_flush(bio_op(bio));    //XXX add fua support
+    // bool fua = op_is_flush(bio_op(bio));    //XXXXX add fua support
     struct tcmulib_cmd * op = NULL;
 
     struct gendisk * disk = bio->bi_bdev->bd_disk;
@@ -423,7 +423,7 @@ out:
 out_finish:
     bio->bi_error = -EIO;
     bio_endio(bio, bio->bi_error);
-    ret = -EIO;	    //XXX ?
+    ret = -EIO;	    //XXX Right?  return from tcmu_make_request()
     goto out;
 }
 
