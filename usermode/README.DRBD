@@ -1,11 +1,11 @@
-Mon 08 Jul 2019 01:02:52 AM MDT
+Tue 09 Jul 2019 12:26:26 AM MDT
     This is an early runnable version of usermode SCST/DRBD.
 
     The drbd source code is (nearly) unmodified, with its expected kernel environment simulated
     around it.  For more information about how that was done, see the README.md shown at
     https://github.com/DavidButterfield/SCST-Usermode-Adaptation
 
-    Build information at the end below.
+    Build information near the end below.
 
 Demo config:
     I set up a small DRBD device of 1 GB, internal metadata, with ext4 filesystem
@@ -248,9 +248,10 @@ Target iqn.2001-04.com.example.blackbox:1
 	DataDigest None
 
 ################################################################################
+BUILDING and CONFIGURING
 
 Need some build instructions here.  The process is rather a mess at the moment.  It isn't as
-automatic as it ought to be, so you'll likely have to actually read what's below.
+automatic as it ought to be, so you may have to actually read what's below.
 
 Also, some Makefiles require various build tools which I installed one by one as it complained
 about not having them.  These are some of them:
@@ -357,10 +358,12 @@ Create the ramdisk backing files (names currently hardcoded in bio_tcmu.c):
     dd if=/dev/zero of=/tmp/cfg1 bs=4096 count=262144	# 1 GiB (unreplicated)
     dd if=/dev/zero of=/tmp/cfg2 bs=4096 count=262144	# 1 GiB (replicated)
 
-***SET ENVIRONMENT***
+################################################################################
+RUNNING
+
 To RUN the DRBD utilities so that the scripts refer to the simulated /proc that talks to the
 usermode server process (rather than the real /proc that talks to kernel):
-    export UMC_FS_ROOT=/UMCfuse
+    export UMC_FS_ROOT=/UMCfuse		    # *** SET ENVIRONMENT ***
 
 The utilities need the UMC_FS_ROOT environment variable set to control the usermode DRBD server
 instead of a kernel-based server.  But they also need to run superuser.  Keep in mind that the
@@ -383,3 +386,52 @@ Either export the replicated device as a LUN through SCST:
 Or use the replicated device through its fuse node, e.g.
     sudo mkfs.ext4 /UMCfuse/dev/drbd1
     sudo mount /UMCfuse/dev/drbd1 /mnt/i
+
+################################################################################
+TROUBLESHOOTING
+
+If you didn't read the section "RUNNING" just above, read that.
+
+Make sure your configuration files were suitably modified for your names, addresses, etc.
+
+Make sure you are running the server and the utilities with environment variable set:
+    export UMC_FS_ROOT=/UMCfuse
+    sudo -E drbdadm ...			# to pass the environment variable through sudo
+
+This message means you forgot to set the environment variable when running the server:
+    Parse error: 'disk | device | address | meta-disk | flexible-meta-disk' expected,
+	    but got 'node-id'
+
+Observing State
+
+After starting the server, but before creating any DRBD resource or other command,
+/UMCfuse/dev/tcmu000 and /UMCfuse/dev/tcmu001 should be visible.  After the "drbdsetup attach"
+or "drbdadm up" command /UMCfuse/dev/drbd1 should also appear.
+
+You can configure just parts of the datapath; for example, instead of the demo configuration
+    /mnt/j  <==>  /dev/sdj
+		      |
+demo config:	      |
+		    LUN_1  <==>  /UMCfuse/dev/drbd1  <==>  /UMCfuse/dev/tcmu001  <==>  /tmp/cfg2
+
+This one needs the drbd1 resource configured, but does not use the SCST iSCSI server:
+    sudo mount /UMCfuse/dev/drbd1 /mnt/d
+config:            /mnt/d  <==>  /UMCfuse/dev/drbd1  <==>  /UMCfuse/dev/tcmu001  <==>  /tmp/cfg2
+
+This one can be done after starting the server, but without configuring any DRBD resources:
+    sudo mount /UMCfuse/dev/tcmu001 /mnt/t
+config:                                      /mnt/t  <==>  /UMCfuse/dev/tcmu001  <==>  /tmp/cfg2
+
+This message appears to be due to a write of four bytes by fsck at offset 48 into a sector(??):
+WARNING:  '*ofs % 512' (48) == (0) '0' -- UMC_fuse.c:822: EINVAL unaligned file offset to bdev tcmu000
+WARNING: 'iosize % 512' (4) == (0) '0' -- UMC_fuse.c:823: EINVAL unaligned iosize to bdev tcmu000
+[02]           0x5ff9ef  (A2) UMC_fuse_dev_io UMC_fuse.c:822 (discriminator 5) 
+[03]           0x60015c  (A2) UMC_fuse_dev_write UMC_fuse.c:885 
+[04]           0x5fc7d1  (A2) UMCfuse_node_write UMC_fuse.c:314 (discriminator 6) 
+[05]           0x5fe474  (A2) UMC_fuse_write UMC_fuse.c:566 
+[06]           0x66968f  (A2) fuse_fs_write_buf ??:? 
+[07]           0x669754  (A2) fuse_lib_write_buf fuse.o:? 
+[08]           0x672a25  (A2) fuse_ll_process_buf fuse_lowlevel.o:? 
+[09]           0x66f1ff  (A2) fuse_session_loop ??:? 
+[10]           0x66db42  (A2) fuse_loop ??:? 
+[11]           0x662997  (A2) fuse_main_common helper.o:? 
