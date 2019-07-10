@@ -143,7 +143,7 @@ _thread_assimilate(void)
     name[15] = '\0';
     err = pthread_setname_np(pthread_self(), name);
 
-    /* XXXXX These structures and their strings are not freed anywhere */
+    /* XXX These structures and their strings are not freed anywhere */
     sys_thread = sys_thread_alloc((void *)"bio_tcmu", "bio_tcmu", (void *)vstrdup(name));
     current = UMC_current_alloc();
     UMC_current_init(current, sys_thread, (void *)"bio_tcmu", "bio_tcmu", vstrdup(name));
@@ -603,9 +603,9 @@ bio_tcmu_create(int minor, const char * cfg)
 
     // tcmu_set_dev_max_xfer_len(tcmu_dev, 8*1024*1024);	//XXX
 
-    sys_notice(LOGID" handler %s attach target %s size %"PRIu64"/%"PRIu64" block_size %d%s",
+    sys_notice(LOGID" handler %s attach target %s size %"PRIu64"/%"PRIu64" block_size %d %s",
 	       tcmu_dev->handler->name, tcmu_get_dev_name(tcmu_dev),
-	       dev_size, size, bdev->bd_block_size, is_rdonly ? " READONLY" : "READ/WRITE");
+	       dev_size, size, bdev->bd_block_size, is_rdonly ? "READ-ONLY" : "READ-WRITE");
 
     bio_tcmu_minors[minor] = tcmu_dev;
 

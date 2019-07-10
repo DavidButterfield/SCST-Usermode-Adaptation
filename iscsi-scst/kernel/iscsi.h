@@ -518,6 +518,10 @@ struct iscsi_cmnd {
 		struct {
 			struct scatterlist rsp_sg[2];
 			struct iscsi_sense_data sense_hdr;
+#ifdef SCST_USERMODE	/* page structures to refer to sense reply fields */
+			struct page sense_hdr_page;
+			struct page sense_buf_page;
+#endif
 		};
 	};
 

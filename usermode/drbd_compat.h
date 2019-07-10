@@ -40,4 +40,6 @@ extern int
 #define IDR_GET_NEXT_EXPORTED
 #define __LINUX_MUTEX_H
 
+#define drbd_protocol_version uint  //XXX dodgy hacking away of a module_param type
+
 #endif /* DRBD_COMPAT_H */

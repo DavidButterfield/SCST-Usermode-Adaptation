@@ -1034,26 +1034,28 @@ static void iscsi_tcp_set_sense_data(struct iscsi_cmnd *rsp,
 {
 	struct scatterlist *sg;
 	sg = rsp->sg = rsp->rsp_sg;
-#ifndef SCST_USERMODE
 	rsp->sg_cnt = 2;
 	rsp->own_sg = 1;
-
 	sg_init_table(sg, 2);
+#ifndef SCST_USERMODE
 	sg_set_buf(&sg[0], &rsp->sense_hdr, sizeof(rsp->sense_hdr));
 	sg_set_buf(&sg[1], (u8 *)sense_buf, sense_len);
 #else
-	/* sg_set_buf() wants to be able to virt_to_page() the sense buffer */
+	/* sg_set_buf() wants to be able to virt_to_page() the sense buffer. */
 	/* In SCST_USERMODE we don't have struct page for regular allocations */
-	/* Get a page to use, and copy the sense data into it */
-	struct page * page = alloc_page(GFP_KERNEL);	//XXXXX Never freed!
-	memcpy(page->vaddr, &rsp->sense_hdr, sizeof(rsp->sense_hdr));
-	memcpy(page->vaddr + sizeof(rsp->sense_hdr), sense_buf, sense_len);
+	/* Instead use a couple of spare page structures kept in the command */
+	struct page * page;
+	size_t offset;
 
-        rsp->sg_cnt = 1;
-        rsp->own_sg = 1;
+	page = &rsp->sense_hdr_page;
+	page->vaddr = virt_to_page_addr(&rsp->sense_hdr);
+	offset = virt_to_page_ofs(&rsp->sense_hdr);
+	sg_set_page(&sg[0], page, sizeof(rsp->sense_hdr), offset);
 
-        sg_init_table(sg, 1);
-	sg_set_page(&sg[0], page, sizeof(rsp->sense_hdr) + sense_len, 0/*offset*/);
+	page = &rsp->sense_buf_page;
+	page->vaddr = virt_to_page_addr((u8 *)sense_buf);
+	offset = virt_to_page_ofs((u8 *)sense_buf);
+	sg_set_page(&sg[1], page, sense_len, offset);
 #endif
         return;
 }

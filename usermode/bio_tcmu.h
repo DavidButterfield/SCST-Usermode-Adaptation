@@ -138,8 +138,6 @@ extern void tcmu_bio_exit(void);
  * the system about its idea of the device's size.
  */
 extern ssize_t	    tcmu_get_device_size(struct tcmu_device *);
-
-extern int	    tcmu_get_attribute(struct tcmu_device *, string_t);
 extern sam_stat_t   tcmu_set_sense_data(uint8_t * sense_buf, uint8_t key, uint16_t asc_ascq, uint32_t * info);
 
 /* Used by earlier versions of rbd.c for RBD without readv/writev ops */
