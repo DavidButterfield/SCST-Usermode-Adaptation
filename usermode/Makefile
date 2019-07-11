@@ -227,26 +227,26 @@ export src := .
 export KVER = __NONE__
 
 ifdef USERMODE_TCMU_RBD
-TCMU_LIBS = rbd.o
+TCMU_LIBS = tcmur/rbd.o
 BACKEND_LIBS = -lrbd -lrados
 endif
 
 ifdef USERMODE_TCMU_RAM
-TCMU_LIBS = ram.o
+TCMU_LIBS = tcmur/ram.o
 endif
 
 ifdef USERMODE_TCMU_GLFS
-TCMU_LIBS = glfs.o
+TCMU_LIBS = tcmur/glfs.o
 BACKEND_LIBS = -lgfapi
 endif
 
 ifdef USERMODE_TCMU_QEMU
-TCMU_LIBS = qcow.o
+TCMU_LIBS = tcmur/qcow.o
 BACKEND_LIBS = -lz
 endif
 
 ifdef USERMODE_TCMU_SPDK
-TCMU_LIBS = spdk.o
+TCMU_LIBS = tcmur/spdk.o
 # BACKEND_LIBS = -lspdk_event -lspdk_conf -lspdk_trace		    # for DPDK event loop
 BACKEND_LIBS = -lspdk_nvme -lspdk_nvmf -lspdk_env_dpdk -lspdk_log -lspdk_sock -lspdk_util
 BACKEND_LIBS += -lrte_eal -lrte_mempool -lrte_bus_pci -lrte_pci -lrte_ring -lspdk_util -lrte_kvargs
@@ -256,7 +256,7 @@ BACKEND_LIBS += -luuid -lnuma
 endif
 
 ifdef USERMODE_BIO_TCMU
-TCMU_LIBS += bio_tcmu.o
+TCMU_LIBS += tcmur/bio_tcmu.o
 endif
 
 export SCST_USERMODE = 1	    # Tell sub-makefiles to do SCST_USERMODE build
@@ -295,6 +295,8 @@ COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst
 
 USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.o $(USERMODE_LIB_SRC)/UMC_fuse.o
 
+export TCMU_CFLAGS
+
 scst.out:   $(TCMU_LIBS) UMC_app.o drbd_compat.o $(COMPONENTS)
 	# Gather up all the objects we need from SCST kernel and daemon code;
 	# Link SCST with the usermode compatibility module, libmte, and other libraries;
@@ -302,6 +304,9 @@ scst.out:   $(TCMU_LIBS) UMC_app.o drbd_compat.o $(COMPONENTS)
 		    $(COMPONENTS) UMC_app.o drbd_compat.o \
 		    $(TCMU_LIBS) $(BACKEND_LIBS) $(USERMODE_LIB) \
 		    $(LIBMTE) -lfuse -laio $(LOCAL_LIBS) -lc
+
+tcmur:	
+	$(MAKE) -i -C tcmur tcmur
 
 check_mte:
 	@if [[ ! -f /lib/libmte.$(LIB_SUFFIX) ]] ; then $(MAKE) -C $(MTE_SRC) ; fi
@@ -318,19 +323,23 @@ drbd_compat.o:	drbd_compat.c
 UMC_app.o: UMC_app.c
 	$(CC) -c -o $(@) $(TCMU_CFLAGS) -I$(USERMODE_LIB_SRC)/arch/x86/include -I$(USERMODE_LIB_SRC)/include $(<)
 
-#XXX investigate include directives
-bio_tcmu.o: bio_tcmu.c
-	$(CC) -c -o $(@) $(TCMU_CFLAGS) -I$(USERMODE_LIB_SRC)/arch/x86/include -I$(USERMODE_LIB_SRC)/include $(<)
+tcmur/bio_tcmu.o:
+	$(MAKE) -C tcmur bio_tcmu.o
 
-ram.o:	scsi_defs.h bio_tcmu.h ram.c tcmu-runner.h libtcmu.h
+tcmur/ram.o:
+	$(MAKE) -C tcmur ram.o
 
-rbd.o:	scsi_defs.h bio_tcmu.h rbd.c tcmu-runner.h libtcmu.h
+tcmur/rbd.o:
+	$(MAKE) -C tcmur rbd.o
 
-glfs.o:	scsi_defs.h bio_tcmu.h darray.h glfs.c tcmu-runner.h libtcmu.h
+tcmur/glfs.o:
+	$(MAKE) -C tcmur glfs.o
 
-qcow.o:	scsi_defs.h bio_tcmu.h qcow.c qcow.h qcow2.h tcmu-runner.h libtcmu.h
+tcmur/qcow.o:
+	$(MAKE) -C tcmur qcow.o
 
-spdk.o: spdk.c spdk/stdinc.h spdk/nvme.h spdk/env.h tcmu-runner.h libtcmu.h
+tcmur/spdk.o:
+	$(MAKE) -C tcmur spdk.o
 
 # XXX Add 2perf/2debug stuff
 
@@ -349,6 +358,7 @@ clean:
 	$(MAKE) -C .. $@
 	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 	$(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode $@
+	$(MAKE) -C tcmur $@
 
 extraclean:
 	rm -rf *.o scst.out
@@ -356,12 +366,13 @@ extraclean:
 	$(MAKE) -C .. $@
 	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 	$(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode $@
+	$(MAKE) -C tcmur $@
 
 cscope:
 	cscope -b -c -R `find -L $(USERMODE_LIB_SRC) $(SCST_SRC) $(MTE_SRC) $(DRBD_SRC)/drbd $(DRBD_SRC)/drbd-headers -name \*.c -o -name \*.h`
 	@ctags       -R		 $(USERMODE_LIB_SRC) $(SCST_SRC) $(MTE_SRC) $(DRBD_SRC)/drbd $(DRBD_SRC)/drbd-headers
 
-.PHONY:	all usermode drbd drbd-utils check_mte valgrind clean extraclean cscope
+.PHONY:	all usermode drbd drbd-utils check_mte valgrind clean extraclean cscope tcmur
 
 ##### Copied from drbd/Kbuild #####
 # for some reason some of the commands below only work correctly in bash,
