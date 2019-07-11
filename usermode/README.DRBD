@@ -1,16 +1,17 @@
-Wed 10 Jul 2019 05:06:28 PM MDT				       David Butterfield
+SCST/DRBD Server running in usermode [DRBD 9.0.19-1]	       David Butterfield
+Wed 10 Jul 2019 11:23:16 PM MDT				       
 
-    This is an early version of an SCST/DRBD server running in usermode.  [DRBD 9.0.19-1]
+    This is an early version of an SCST/DRBD server running in usermode.
     Build information near the end below.
 
     A DRBD replicated device can either be exposed by the primary node as an iSCSI LUN through
-    SCST, or accessed locally as a huge file through fuse; & mounted as a filesystem either way.
+    SCST, or accessed locally as a huge file through fuse (mounted as a filesystem either way).
 
-    The usermode server stays up and DRBD replicating with peers without crashing (for me).
+    The usermode server stays up with DRBD replicating to peers without crashing (works for me).
     A server can be killed and restarted and "drbdadm up all" brings it all back up replicating.
-    It can be up and testing under valgrind or gdb a few seconds after compiling :-)
+    (And it can be up and testing under valgrind or gdb a few seconds after compiling ends :-)
 
-    The DRBD kernel source code is (within ten lines of) unmodified, with its expected kernel
+    The DRBD kernel source code is (within a dozen lines of) unmodified, with expected kernel
     environment simulated around it.  For more information about how that was done, see the
     README.md with diagrams at https://github.com/DavidButterfield/SCST-Usermode-Adaptation
 
@@ -21,7 +22,7 @@ Demo config:
 	DRBD's backing device is a partition on a real disk /dev/sda1
 	Replicated device can be mounted as /dev/drbd1 (when primary)
 
-    Node (U) running DRBD 9.0 in USERMODE in a process with SCST (dev_t internal only)
+    Node (U) running DRBD 9.0 in USERMODE in a process with SCST
 	DRBD's backing device is a block device implemented as a 1 GB ramdisk
 	The ramdisk is an mmap(2) backed by a 1 GB file /tmp/cfg2
 	Replicated DRBD device is plumbed underneath SCST as an SCST vdisk backing bdev
@@ -37,9 +38,7 @@ Demo config:
     bio requests from DRBD or SCST into the protocol expected by the existing TCMU handlers.
 
     There are several TCMU handlers for different usermode storage providers such as ceph, qemu,
-    and gluster; I've written a simple one for an mmap(2) ramdisk, used here.  I also have
-    started a prototype of a handler for SPDK, which interfaces through bio_tcmu from the same
-    place occupied by tcmu_ram in this diagram.
+    and gluster; I've written a simple one for an mmap(2) ramdisk, used here.
 
                             iSCSI
   /dev/sdj ---> Initiator <=======> SCST-iSCSI 
@@ -67,63 +66,34 @@ Demo config:
     (replicated)    /dev/sdj    LUN 1   /UMCfuse/dev/drbd1  /UMCfuse/dev/tcmu001    /tmp/cfg2
 					(The /tmp/cfg names are currently hardcoded in bio_tcmu.c)
 
-    Finally, it is also now possible to access and mount a DRBD or tcmu_runner block device
-    through a fuse node that issues bio requests (not shown in diagram).  (This does not make
-    use of the iSCSI initiator or SCST)
+    In a separate configuration I ran two usermode SCST/DRBD servers on two machines doing the
+    same sort of replication as above (but not using any kernel-based DRBD).
+
+    Finally, it is also possible to access and mount a DRBD or tcmu_runner block device through
+    a fuse node that issues bio requests (not making use of the iSCSI initiator or SCST).
+
 	sudo mount /UMCfuse/dev/drbd1	/mnt/i		# replicated device
 	sudo mount /UMCfuse/dev/tcmu000 /mnt/j		# unreplicated device
 
-Demo capabilities -- with this config I was able to do the following:
+    You can configure just part of the datapath; e.g, instead of this demo configuration:
 
-    Monitor network traffic between Nodes (U) and (K) using tcpdump
-    Establish DRBD replication connection between Nodes (U) and (K)
+    /mnt/j  <==>  /dev/sdj
+                      |
+       demo config:   |
+                    LUN_1  <==>  /UMCfuse/dev/drbd1  <==>  /UMCfuse/dev/tcmu001  <==>  /tmp/cfg2
 
-    On Node (U):
-	drbdsetup primary r0
-	scstadmin -config /etc/scst.conf    # configure SCST
+    Below config needs the drbd1 resource configured, but does not use the SCST iSCSI server:
+	sudo mount /UMCfuse/dev/drbd1 /mnt/d
 
-    On iSCSI initiator machine:
-	iSCSI login to node (U) (exposes /dev/sdj on my initiator)
-	mkfs.ext4 /dev/sdj
-	mount /dev/sdj /mnt/j ; mkdir /mnt/j/git ; cd /mnt/j/git 
-	Download source repositories from github directly onto the replicated device
-	Run "make" and successfully build the usermode binary with Node (U) primary
-	    while observing replication traffic in tcpdump during the build
-	cd / ; umount /mnt/j
-	iSCSI logout from Node (U)  # causes SCST to close the DRBD device
+       config:     /mnt/d  <==>  /UMCfuse/dev/drbd1  <==>  /UMCfuse/dev/tcmu001  <==>  /tmp/cfg2
 
-    Set node (U) as secondary:
-	drbdsetup secondary r0	    # should succeed after iSCSI logout
+    Below config can be done after starting the server, without configuring any DRBD resources:
+	sudo mount /UMCfuse/dev/tcmu001 /mnt/t
 
-    On Node (K):
-	drbdsetup primary r0
-	mount /dev/drbd1 /mnt/j
-	Observe the built binary from the make done on Node (U)
-	Save a copy of the binary built on Node (U)
-	Run "make clean" and "make" to do the successful build again on Node (K)
-	    while observing replication traffic in tcpdump during the build
-	Strip the two binaries and they compare equal except 20 bytes probably timestamp
-	cd / ; umount /mnt/j
-	drbdsetup secondary r0
-
-    On Node (U):
-	drbdsetup primary r0
-	scstadmin -config /etc/scst.conf    # configure SCST
-
-    On iSCSI initiator machine:
-	iSCSI login to node (U)
-	mount /dev/sdj /mnt/j
-	Copy the binary built on Node (U) onto a local disk of node (U)
-	Restart the server on Node (U), running the executable built on the replicated device
-
-    In a separate configuration I ran two usermode SCST/DRBD servers on two machines
-    doing the same sort of replication as above (but not using any kernel-based DRBD).
-
-    I've also carried out the full download/build process on a locally-mounted DRBD device
-    through fuse.
+       config:                               /mnt/t  <==>  /UMCfuse/dev/tcmu001  <==>  /tmp/cfg2
 
 Limitations:
-    Netlink multicast emulation not yet implemented, so anything like "drbdsetup wait*" hangs.
+    Netlink MULTICAST emulation not yet implemented, so anything like "drbdsetup wait*" hangs.
 
     Many things are hacked just enough to get it to work, and neglecting performance.
     The makefiles have optimizations turned off and debugs turned on.  But not taking any
@@ -131,21 +101,23 @@ Limitations:
     more-or-less like normal, watching my makes run.  (They do have the significant advantage
     of running on a ramdisk).
 
-    The server-internal block device nodes are exposed through the fuse filesystem mount.  The
-    fuse-tree node that represents a drbd or tcmu block device appears as a regular file rather
-    than as a block device (because otherwise fuse directs I/O for that dev_t to the kernel
-    instead of the fuse filesystem server).  So when communicating with a usermode server, the
-    DRBD utilities omit the check that their device is S_IFBLK() rather than S_IFREG().
+    The server-internal block device nodes are exposed through a mount of the server's usermode
+    compatibility fuse filesystem implementation.  The fuse-tree node that represents a DRBD or
+    TCMU block device appears as a regular file rather than as a block device (because otherwise
+    fuse directs I/O for that dev_t to the kernel instead of the fuse filesystem server).  So
+    when communicating with a usermode server, the DRBD utilities are modified omit to the check
+    that their device is S_IFBLK() rather than S_IFREG().
 
     Resync may run noticeably slower when observing resync network traffic with tcpdump.
 
     Something I expect NOT to work is running the server executable off of a disk it implements.
 
-Bugs:
-    Clean shutdown via SIGINT (CTRL-C) has unfreed memory:
-	"fifo" leak at drbd_sender.c:552
-	"idr" leak after drbdadm up/down
+    I have only run the usermode server on machines without DRBD installed in the kernel.  The
+    build script and the config/run instructions below assume that there are no DRBD modules or
+    utilities installed.  (That would likely be very confusing, but might actually work if
+    assigned separate ports)
 
+Bugs:
     Sometimes resync doesn't start upon reconnect after restarting the usermode server.
     It doesn't seem to happen as much when running tcpdump to observe the inter-peer traffic.
     If it doesn't start, disconnecting + reconnecting to the peer usually gets it going.
@@ -157,7 +129,11 @@ Bugs:
     "Exclusive" opens aren't really exclusive, so be careful not to mount the same storage
     twice; for example /UMCfuse/dev/tcmu001 and /UMCfuse/dev/drbd1 are the same storage.
 
-Sample configuration files
+    Clean shutdown via SIGINT (CTRL-C) (after "drbdadm down all") has unfreed memory:
+	"fifo" leak at drbd_sender.c:552
+	"idr" leak after drbdadm up/down
+
+Sample configuration files from Node (U)
 ################################################################################
 # /etc/drbd.d/r0.res
 
@@ -252,111 +228,42 @@ Target iqn.2001-04.com.example.blackbox:1
 	DataDigest None
 
 ################################################################################
-BUILDING and CONFIGURING
+BUILDING
 
-Need some build instructions here.  The process is rather a mess at the moment.  It isn't as
-automatic as it ought to be, so you may have to actually read what's below.
+If this script is run in an empty directory, it will try to download the repositories
+from github and build a usermode SCST/DRBD server.  It needs about 1 GiB of free space.
 
-Also, some Makefiles require various build tools which I installed one by one as it complained
-about not having them.  These are some of them:
+    https://github.com/DavidButterfield/SCST-Usermode-Adaptation/blob/drbd/usermode/BUILD.sh
+
+Comments in the script document the process in case you want to do some steps manually.
+(It does ask for the sudo password to install, so you might want to look at it first.)
+
+Some of the makefiles require various build tools which I installed one by one as it
+complained about not having them.  These are the package names of at least some of them:
     libfuse-dev  libaio-dev  autoconf  flex  exuberant-ctags  cscope
 
-I have only run the usermode server on machines without DRBD installed in the kernel.
-The description below assumes that there are no DRBD modules or utilities installed.
-(That would likely be very confusing, though it might work if assigned separate ports)
+I always "make clean" before "make", because the dependencies are not calculated right.
 
-    NOTE:  The script SCST-Usermode-Adaptation/usermode/BUILD.sh
-	   does much of the what is described below.
+The build script should produce a usermode SCST/DRBD server in
+SCST-Usermode-Adaptation/usermode/scst.out
 
-Make a git directory and clone these repositories into it:
-    mkdir git
-    cd git
-    git clone https://github.com/DavidButterfield/MTE.git
-    git clone https://github.com/DavidButterfield/usermode_compat.git
-    git clone https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git
-    git clone https://github.com/DavidButterfield/drbd-9.0.git
-    git clone https://github.com/DavidButterfield/drbd-utils.git
-
-Checkout the right branches:
-    MTE				master		# should be default
-    usermode_compat		drbd
-    SCST-Usermode-Adaptation	drbd
-    drbd-9.0			usermode	# should be default
-    drbd-utils			usermode	# should be default
-
-Also get linux-2.6.32.27 into the same "git" directory.
-    wget https://cdn.kernel.org/pub/linux/kernel/v2.6/linux-2.6.32.27.tar.gz
-    gunzip linux-2.6.32.27.tar.gz
-    tar xvf linux-2.6.32.27.tar
-    rm linux-2.6.32.27.tar	    # for space if FS is only 1GB
-
-In the drbd-utils source directory:
-    ./autogen.sh
-
-    ## If you omit --without-manual, it will take a long time for the make to complete.
-    ./configure --prefix=/usr --localstatedir=/var --sysconfdir=/etc --without-manual
-    make
-    sudo make install
-
-In the drbd-9.0 source directory:
-    ## NOTE: if you do a "make" in drbd-9.0, it may create a file drbd/compat.h which
-    ##	     ***MUST BE DELETED*** before the usermode compile will succeed.
-    ##
-    ## You should not need to "make" in the drbd-9.0 directory.  The make for usermode DRBD is
-    ## done from SCST-Usermode-Adaptation/usermode/Makefile passing in the appropriate flags
-    ## to drbd-9.0/drbd/Makefile.usermode
-    ## 
-    ## However, it is necessary to download some headers and compatibility code external
-    ## to the drbd-9.0 repository:
-    make check-submods
-
-    ## After that additional code gets downloaded, there is a patch to apply to it:
-    cd drbd/drbd-kernel-compat
-    patch -p1 < ../../PATCH.drbd-kernel-compat
-
-For now SCST has to use emulated /proc (not /sys).  This is enabled by:
-    cd SCST-Usermode-Adaptation
-    make enable_proc
-
-Install the usermode version of scstadmin and SCST.pm (this must be done AFTER running the
-"make enable_proc" above):
-    cd SCST-Usermode-Adaptation
-    sudo make scstadm
-    sudo make scstadm_install
-
-If everything is right, it should now successfully build in SCST-Usermode-Adaptation/usermode.
-BUT... the dependencies are not computed correctly in the Makefiles, so for now I always do a
-clean make:
-    cd SCST-Usermode-Adaptation/usermode
-    make clean
-    make
-
-That should produce the SCST/DRBD usermode server as scst.out.  There should be no compile
-errors, but there will be a few warnings; these can be ignored for now:
-    #warning "BDI_CAP_STABLE_WRITES not available"
-    #warning In the PROCFS build EXTENDED COPY not supported
-    Using 'getaddrinfo' in statically linked apps requires at runtime the shared libraries...
-    Using 'dlopen' in statically linked apps requires at runtime the shared libraries...
-    "pr_fmt" redefined
-    "arch_wb_cache_pmem" redefined
-    comparison of distinct pointer types lacks a cast
-	[because parts of the code think uint64_t is long and other parts long long]
+There should be no compile errors, but there will be a few warnings.  The build script
+documents a few that are expected and can be ignored for now.
 
 By default the binary is built statically so that addr2line works right for stacktraces.
 
 But for some reason the static binary from gcc (version 8.3.0) makes valgrind think a
 lot of memory is uninitialized, so to run under valgrind I change usermode/Makefile in
 SCST-Usermode-Adaptation to build non-statically, in addition to enabling -DVALGRIND.
-When running under valgrind it lets valgrind do the (better) stacktrace.
+(When running under valgrind I get valgrind to do the stacktraces for me anyway.)
+
+################################################################################
+CONFIGURING
 
 Configuration files:
-    The example config files shown above are from Node (U) in my setup.  They will have to be
-    modified to suit your network configuration, and put into /etc/iscsi-scstd.conf,
+    The example config files shown above are from Node (U) in my setup.  They will have
+    to be modified to suit your network configuration, and put into /etc/iscsi-scstd.conf,
     /etc/scst.conf, and somewhere in /etc/drbd.d such as /etc/drbd.d/r0.res
-
-SCST needs these directories created:
-    sudo mkdir -p /var/lib/scst/pr
-    sudo mkdir -p /var/lib/scst/vdev_mode_pages
 
 Create the ramdisk backing files (names currently hardcoded in bio_tcmu.c):
     ## You can make them bigger if you want -- 1 GiB can download and build the server
@@ -366,77 +273,65 @@ Create the ramdisk backing files (names currently hardcoded in bio_tcmu.c):
 ################################################################################
 RUNNING
 
-To RUN the DRBD utilities so that the scripts refer to the simulated /proc that talks to the
-usermode server process (rather than the real /proc that talks to kernel):
+To run the DRBD utilities so that the scripts refer to the simulated /proc that talks to
+the usermode server process (rather than the real /proc that talks to kernel):
     export UMC_FS_ROOT=/UMCfuse			    # *** SET ENVIRONMENT ***
 
-The utilities need the UMC_FS_ROOT environment variable set to control the usermode DRBD server
-instead of a kernel-based server.  But they also need to run superuser.  Keep in mind that the
-sudo program does not pass your shell environment through to the program given on its command
-line, unless you specify "sudo -E".
+The utilities need the $UMC_FS_ROOT environment variable set to control the usermode DRBD
+server instead of a kernel-based server.  But they also need to run superuser.  Keep in mind
+that the sudo program does not pass your shell environment through to the program given on
+its command line, unless you specify "sudo -E".
 
-The server also needs the environment variable set, because it invokes the utilities through the
-"usermode helper", and they inherit the server's environment.
+The server also needs the $UMC_FS_ROOT environment variable set, because it invokes the
+utilities through the "usermode helper", and they inherit the server's environment.
 
-Start the usermode SCST/DRBD server:
+Adjust these commands for your environment:
+
+Start the usermode SCST/DRBD server
     export UMC_FS_ROOT=/UMCfuse
     sudo -E ./scst.out -f		# scst.out -f stays in foreground
-On a different terminal:
+
+On a different terminal (window):
+    export UMC_FS_ROOT=/UMCfuse
     ls -l /UMCfuse/dev
-    sudo -E drbdmeta 1 v09 /UMCfuse/dev/tcmu001 internal create-md 2
+    sudo -E drbdmeta 1 v09 /UMCfuse/dev/tcmu001 internal create-md 2	# only the first time!
     sudo -E drbdadm up r0
     ls -l /UMCfuse/dev
     sudo -E drbdsetup primary r0
+    sudo mkfs.ext4 /UMCfuse/dev/drbd1					# only the first time!
+    sudo fsck.ext4 /UMCfuse/dev/drbd1
 
 Either export the replicated device as a LUN through SCST:
     scstadmin -config /etc/scst.conf
 
 Or use the replicated device through its fuse node, e.g.
-    sudo mkfs.ext4 /UMCfuse/dev/drbd1
     sudo mount /UMCfuse/dev/drbd1 /mnt/i
 
 ################################################################################
 TROUBLESHOOTING
 
-If you didn't read the section "RUNNING" just above, read that.
+If you didn't read the sections "CONFIGURING" and "RUNNING" just above, read those.
 
 Make sure your configuration files were suitably modified for your names, addresses, etc.
 
 Make sure you are running the server and the utilities with environment variable set:
     export UMC_FS_ROOT=/UMCfuse
-    sudo -E drbdadm ...			# -E to pass the environment variable through sudo
+    sudo -E drbdadm ...		# -E to pass the environment variable through sudo
 
 This message in the server log means the environment variable is not set for the server:
     Parse error: 'disk | device | address | meta-disk | flexible-meta-disk' expected,
 	    but got 'node-id'
 
-This is the last message from SCST initialization; ignore it, we don't care about isert.
+This is the last message from SCST initialization; ignore it, we don't care about isert:
     cannot find isert_scst in /proc/devices - make sure the module is loaded
 
-Observing State
-
 Some of the /proc and /sys/module entries for the usermode server can be found under /UMCfuse.
-Try exploring there.
 
 After starting the server, but before creating any DRBD resource or other command,
 /UMCfuse/dev/tcmu000 and /UMCfuse/dev/tcmu001 should be visible.  After the "drbdsetup attach"
-or "drbdadm up" command /UMCfuse/dev/drbd1 should also appear.
+or "drbdadm up" command, /UMCfuse/dev/drbd1 should also appear.
 
-You can configure just parts of the datapath; for example, instead of the demo configuration:
-    /mnt/j  <==>  /dev/sdj
-                      |
-    demo config:      |
-                    LUN_1  <==>  /UMCfuse/dev/drbd1  <==>  /UMCfuse/dev/tcmu001  <==>  /tmp/cfg2
-
-This one needs the drbd1 resource configured, but does not use the SCST iSCSI server:
-    sudo mount /UMCfuse/dev/drbd1 /mnt/d
-    config:        /mnt/d  <==>  /UMCfuse/dev/drbd1  <==>  /UMCfuse/dev/tcmu001  <==>  /tmp/cfg2
-
-This one can be done after starting the server, but without configuring even any DRBD resources:
-    sudo mount /UMCfuse/dev/tcmu001 /mnt/t
-    config:                                  /mnt/t  <==>  /UMCfuse/dev/tcmu001  <==>  /tmp/cfg2
-
-This message appears to be due to a write of four bytes by fsck.ext4 at offset 48 into a sector(??):
+This message appears to be due to a write of four bytes by fsck.ext4 at offset 48 into a sector:
 WARNING:  '*ofs % 512' (48) == (0) '0' -- UMC_fuse.c:822: EINVAL unaligned file offset to bdev tcmu000
 WARNING: 'iosize % 512' (4) == (0) '0' -- UMC_fuse.c:823: EINVAL unaligned iosize to bdev tcmu000
 [02]           0x5ff9ef  (A2) UMC_fuse_dev_io UMC_fuse.c:822 (discriminator 5) 
