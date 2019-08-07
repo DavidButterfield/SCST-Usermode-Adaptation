@@ -12,6 +12,7 @@ sudo echo Got sudo password
 
 # Start in an empty directory and clone these repositories into it:
 git clone https://github.com/DavidButterfield/MTE.git
+git clone https://github.com/DavidButterfield/tcmu-runner.git
 git clone https://github.com/DavidButterfield/usermode_compat.git
 git clone https://github.com/DavidButterfield/SCST-Usermode-Adaptation.git
 git clone https://github.com/DavidButterfield/drbd-9.0.git
@@ -21,6 +22,9 @@ git clone https://github.com/DavidButterfield/drbd-utils.git
 (cd usermode_compat; \
     git checkout drbd)
 
+(cd tcmu-runner; \
+    git checkout libtcmur)
+
 (cd SCST-Usermode-Adaptation; \
     git checkout drbd)
 
@@ -29,6 +33,13 @@ wget https://cdn.kernel.org/pub/linux/kernel/v2.6/linux-2.6.32.27.tar.gz
 gunzip linux-2.6.32.27.tar.gz
 tar xvf linux-2.6.32.27.tar
 rm linux-2.6.32.27.tar		# for space if FS is only 1GB
+
+# In the tcmu-runner source directory:
+(cd tcmu-runner; \
+    cmake .; \
+    make; \
+    cd libtcmur; \
+    make)
 
 # In the drbd-utils source directory:
     ## If you omit --without-manual, it will take a long time for the make to complete.

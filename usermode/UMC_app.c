@@ -5,11 +5,19 @@
  * This is the file that knows about all the various pieces being brought together.
  * Establishes "kernel" environment before starting the "application" module(s).
  */
+#define _GNU_SOURCE
+#include <features.h>
+#include <errno.h>
 #include <mtelib.h>
-#include <sys_debug.h>
 #include <pthread.h>
+#include <signal.h>
+#include <stdio.h>
 
-#define NAME UMC_APP
+#include "UMC_assert.h"
+
+#define pr_warning(fmtargs...)		fprintf(stderr, "WARNING: "fmtargs)
+#define pr_notice(fmtargs...)		fprintf(stderr, "NOTICE: "fmtargs)
+#define trace_app(fmtargs...)	    //	fprintf(stderr, ""fmtargs)
 
 #define UMC_FUSE_MOUNT_POINT_DEFAULT	"/UMCfuse"
 #define UMC_FUSE_MOUNT_POINT_ENV	"UMC_FS_ROOT"
@@ -27,8 +35,8 @@ extern error_t DRBD_init(void);
 extern error_t DRBD_exit(void);
 
 /* bio interface to TCMU backstore handlers */
-extern error_t tcmu_bio_init(void);
-extern error_t tcmu_bio_exit(void);
+extern error_t bio_tcmur_init(void);
+extern error_t bio_tcmur_exit(void);
 
 /* Don't want to #include usermode_lib.h here */
 extern void __attribute__((__noreturn__)) do_exit(long);
@@ -39,7 +47,7 @@ static void *
 MTE_shutdown(void * not_used)
 {
     sleep(1);
-    trace("Shutdown finishing");
+    trace_app("Shutdown finishing");
 
     sys_service_fini();	    /* frees memory allocator */
 
@@ -53,21 +61,21 @@ static error_t
 APP_shutdown(void * not_used)
 {
     /* Order matters here -- earlier items depend on later items */
-    trace("APP_shutdown calls SCST_exit()");
+    trace_app("APP_shutdown calls SCST_exit()");
     SCST_exit();
-    trace("sleep(1)"); sleep(1);
+    trace_app("sleep(1)"); sleep(1);
 
-    trace("APP_shutdown calls DRBD_exit()");
+    trace_app("APP_shutdown calls DRBD_exit()");
     DRBD_exit();
-    trace("sleep(1)"); sleep(1);
+    trace_app("sleep(1)"); sleep(1);
 
-    trace("APP_shutdown calls tcmu_bio_exit()");
-    tcmu_bio_exit();
-    trace("sleep(1)"); sleep(1);
+    trace_app("APP_shutdown calls bio_tcmur_exit()");
+    bio_tcmur_exit();
+    trace_app("sleep(1)"); sleep(1);
 
-    trace("APP_shutdown calls UMC_exit()");
+    trace_app("APP_shutdown calls UMC_exit()");
     UMC_exit();
-    trace("sleep(1)"); sleep(1);
+    trace_app("sleep(1)"); sleep(1);
 
     /* Start the SYS shutdown thread */
     pthread_t pthr;
@@ -88,10 +96,10 @@ sigint_handler(uint32_t signum)
     expect_eq(signum, SIGINT);
 
     if (shutdown_started) {
-	sys_warning("Recursive SIGINT->UMC_shutdown ignored");
+	pr_warning("Recursive SIGINT->UMC_shutdown ignored");
     } else {
 	shutdown_started = true;
-	sys_notice("Shutdown initiated by SIGINT");
+	pr_notice("Shutdown initiated by SIGINT");
 
 	/* Drive the shutdown from an independent kthread */
 	UMC_run_shutdown(APP_shutdown, NULL);
@@ -124,25 +132,24 @@ UMC_constructor(void)
 	mount_point = UMC_FUSE_MOUNT_POINT_DEFAULT;
 
     /* Order matters here -- later items depend on earlier items */
-    trace("UMC_constructor calls UMC_init()");
+    trace_app("UMC_constructor calls UMC_init()");
     err = UMC_init(mount_point);
     verify_noerr(err, "UMC_init");
 
-    trace("UMC_constructor calls tcmu_bio_init()");
-    tcmu_bio_init();
+    trace_app("UMC_constructor calls bio_tcmur_init()");
+    bio_tcmur_init();
 
-    trace("UMC_constructor calls DRBD_init()");
+    trace_app("UMC_constructor calls DRBD_init()");
     DRBD_init();
 
-    trace("UMC_constructor calls SCST_init()");
+    trace_app("UMC_constructor calls SCST_init()");
     SCST_init();
 
-    trace("UMC_constructor done");
+    trace_app("UMC_constructor done");
 }
 
 __attribute__((__destructor__))	    /* runs after exit() is called */
 static void
 UMC_destructor(void)
 {
-    sys_breakpoint();
 }

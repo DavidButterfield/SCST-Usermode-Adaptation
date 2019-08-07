@@ -2,6 +2,7 @@
  * Compatibility for DRBD running in usermode
  * Copyright 2019 David A. Butterfield
  */
+#define _GNU_SOURCE
 #define NAME DRBD_COMPAT
 
 #ifndef DRBD_COMPAT_H
@@ -9,19 +10,19 @@
 #endif
 
 #include <sys_service.h>
-#include <sys_debug.h>
+#include "fuse_tree.h"
 
 struct module UMC_DRBD_module = { .name = "drbd", .version = "UMC" };
 
 /* Here we must know the names of all the DRBD params and init/fini functions */
-extern void UMC_param_create_enable_faults(void);
-extern void UMC_param_create_fault_rate(void);
-extern void UMC_param_create_fault_count(void);
-extern void UMC_param_create_fault_devs(void);
-extern void UMC_param_create_disable_sendpage(void);
-extern void UMC_param_create_allow_oos(void);
-extern void UMC_param_create_minor_count(void);
-extern void UMC_param_create_protocol_version_min(void);
+extern void fuse_modparm_add_enable_faults(void);
+extern void fuse_modparm_add_fault_rate(void);
+extern void fuse_modparm_add_fault_count(void);
+extern void fuse_modparm_add_fault_devs(void);
+extern void fuse_modparm_add_disable_sendpage(void);
+extern void fuse_modparm_add_allow_oos(void);
+extern void fuse_modparm_add_minor_count(void);
+extern void fuse_modparm_add_protocol_version_min(void);
 
 extern error_t UMC_INIT_drbd_init(void);		/* drbd_main.c */
 extern error_t UMC_INIT_dtt_initialize(void);		/* drbd_transport_tcp.c */
@@ -31,18 +32,18 @@ DRBD_init(void)
 {
     error_t err;
 
-    UMC_fuse_module_mkdir(THIS_MODULE->name);
+    fuse_pde_mkdir(THIS_MODULE->name, NULL);
 
     /* Set up the /proc entries for these parameters */
-    UMC_param_create_disable_sendpage();
-    UMC_param_create_allow_oos();
-    UMC_param_create_minor_count();
-    UMC_param_create_protocol_version_min();
+    fuse_modparm_add_disable_sendpage();
+    fuse_modparm_add_allow_oos();
+    fuse_modparm_add_minor_count();
+    fuse_modparm_add_protocol_version_min();
 #ifdef CONFIG_DRBD_FAULT_INJECTION
-    UMC_param_create_enable_faults();
-    UMC_param_create_fault_rate();
-    UMC_param_create_fault_count();
-    UMC_param_create_fault_devs();
+    fuse_modparm_add_enable_faults();
+    fuse_modparm_add_fault_rate();
+    fuse_modparm_add_fault_count();
+    fuse_modparm_add_fault_devs();
 #endif
 
     /* Call the various module init functions -- we must know all their names here, which
@@ -55,14 +56,14 @@ DRBD_init(void)
     verify_noerr(err, "dtt_initialize");
 }
 
-extern void UMC_param_remove_enable_faults(void);
-extern void UMC_param_remove_fault_rate(void);
-extern void UMC_param_remove_fault_count(void);
-extern void UMC_param_remove_fault_devs(void);
-extern void UMC_param_remove_disable_sendpage(void);
-extern void UMC_param_remove_allow_oos(void);
-extern void UMC_param_remove_minor_count(void);
-extern void UMC_param_remove_protocol_version_min(void);
+extern void fuse_modparm_remove_enable_faults(void);
+extern void fuse_modparm_remove_fault_rate(void);
+extern void fuse_modparm_remove_fault_count(void);
+extern void fuse_modparm_remove_fault_devs(void);
+extern void fuse_modparm_remove_disable_sendpage(void);
+extern void fuse_modparm_remove_allow_oos(void);
+extern void fuse_modparm_remove_minor_count(void);
+extern void fuse_modparm_remove_protocol_version_min(void);
 
 extern void UMC_EXIT_dtt_cleanup(void);
 extern void UMC_EXIT_drbd_cleanup(void);
@@ -74,15 +75,15 @@ DRBD_exit(void)
     UMC_EXIT_drbd_cleanup();
 
 #ifdef CONFIG_DRBD_FAULT_INJECTION
-    UMC_param_remove_enable_faults();
-    UMC_param_remove_fault_rate();
-    UMC_param_remove_fault_count();
-    UMC_param_remove_fault_devs();
+    fuse_modparm_remove_enable_faults();
+    fuse_modparm_remove_fault_rate();
+    fuse_modparm_remove_fault_count();
+    fuse_modparm_remove_fault_devs();
 #endif
-    UMC_param_remove_disable_sendpage();
-    UMC_param_remove_allow_oos();
-    UMC_param_remove_minor_count();
-    UMC_param_remove_protocol_version_min();
+    fuse_modparm_remove_disable_sendpage();
+    fuse_modparm_remove_allow_oos();
+    fuse_modparm_remove_minor_count();
+    fuse_modparm_remove_protocol_version_min();
 
-    UMC_fuse_module_rmdir(THIS_MODULE->name);
+    fuse_pde_remove(THIS_MODULE->name, NULL);
 }

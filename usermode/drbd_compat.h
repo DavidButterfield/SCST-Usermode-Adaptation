@@ -9,12 +9,16 @@
  */
 #ifndef DRBD_COMPAT_H
 #define DRBD_COMPAT_H
+#define _GNU_SOURCE
 
 extern struct module UMC_DRBD_module;
 #define THIS_MODULE (&UMC_DRBD_module)
 
 #define KBUILD_MODNAME			"DRBD"
+
+#define LINUX_VERSION_CODE		KERNEL_VERSION(2, 6, 32)
 #include "usermode_lib.h"		/* kernel emulated interfaces */
+#include <linux/rbtree.h>		/* rb_parent, rb_next for drbd_wrappers.h */
 
 /* Called from APP_init() at gcc process constructor time (before main()) */
 extern void DRBD_init(void);

@@ -9,6 +9,9 @@
  */
 #ifndef SCST_COMPAT_H
 #define SCST_COMPAT_H
+#define _GNU_SOURCE
+#include <ctype.h>		/* isdigit, isspace, tolower */
+
 #define __LINUX_CPUMASK_H   /* set so SCST's backport.h will give us a few more things */
 
 extern struct module UMC_SCST_module;
@@ -18,9 +21,9 @@ extern struct module UMC_SCST_module;
 
 #define LINUX_VERSION_CODE		KERNEL_VERSION(2, 6, 24)
 #include "usermode_lib.h"
+#include <linux/ioctl.h>	/* _IOW, _IOWR */
 
-#define SCST_USERMODE_NOT() \
-	    sys_panic("SCST_USERMODE should never reach here -- %s()", __func__)
+#define SCST_USERMODE_NOT() panic("SCST_USERMODE should never reach here -- %s()", __func__)
 
 extern void SCST_init(void);
 extern void SCST_exit(void);
