@@ -246,27 +246,33 @@ LIBMTE := $(shell if [ -f /lib/libmte.$(LIB_SUFFIX) ] ; \
 		    else /bin/echo "$(MTE_SRC)/libmte.$(LIB_SUFFIX)" ; \
 		 fi)
 
-usermode all:	cscope check_mte
-	EXTRA_CFLAGS="$(MY_CFLAGS)"    $(MAKE) -C $(USERMODE_LIB_SRC) all			    # UMC library
-	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst all				    # SCST CORE
-	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o    # SCST-VDISK
-	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/iscsi-scst all			    # iSCSI-SCST
-	EXTRA_CFLAGS="$(DRBDU_CFLAGS)" $(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode all
-	$(MAKE) scst.out
-
-drbd-utils:
-	EXTRA_CFLAGS="$(MY_CFLAGS) -DDRBD_USERMODE" $(MAKE) -C $(DRBD_UTIL_SRC)
-
 COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst_vdisk.o \
 	      $(SCST_SRC)/iscsi-scst/kernel/iscsi-scst.o $(SCST_SRC)/iscsi-scst/usr/iscsi-scstlib.o \
 	      $(DRBD_SRC)/drbd/drbd.o
 
 USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.a
 
-scst.out:   UMC_app.o drbd_compat.o $(COMPONENTS) $(USERMODE_LIB)
+usermode all:	check_mte umc scst drbd
+	$(MAKE) cscope
+	$(MAKE) scst_drbd.out
+
+umc:	check_mte
+	EXTRA_CFLAGS="$(MY_CFLAGS)"    $(MAKE) -C $(USERMODE_LIB_SRC) all			    # UMC library
+
+scst:	umc
+	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst all				    # SCST CORE
+	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/scst/src/dev_handlers scst_vdisk.o    # SCST-VDISK
+	EXTRA_CFLAGS="$(SCSTU_CFLAGS)" $(MAKE) -C $(SCST_SRC)/iscsi-scst all			    # iSCSI-SCST
+
+drbd:	umc
+	EXTRA_CFLAGS="$(DRBDU_CFLAGS)" $(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode all
+
+.PHONY:	umc scst drbd
+
+scst_drbd.out:   UMC_app.o drbd_compat.o $(COMPONENTS) $(USERMODE_LIB)
 	# Gather up all the objects we need from DRBD and SCST kernel and daemon code
 	# Link with the usermode compatibility module, libmte, and other libraries
-	$(CC) -o scst.out $(GCCLDFLAGS) UMC_app.o drbd_compat.o \
+	$(CC) -o scst_drbd.out $(GCCLDFLAGS) UMC_app.o drbd_compat.o \
 		    $(COMPONENTS) $(USERMODE_LIB) $(LIBMTE) $(LOCAL_LIBS) -lc
 
 check_mte:
@@ -281,30 +287,31 @@ drbd_compat.o:	drbd_compat.c
 UMC_app.o: UMC_app.c
 	$(CC) -c -o $(@) $(MY_CFLAGS) $(EXTRA_WFLAGS) -I$(USERMODE_LIB_SRC) UMC_app.c
 
+drbd-utils:
+	EXTRA_CFLAGS="$(MY_CFLAGS) -DDRBD_USERMODE" $(MAKE) -C $(DRBD_UTIL_SRC)
+
 ################################################################################
 
 VALGRIND_OPTS = --leak-check=full --show-leak-kinds=all --num-callers=30 --track-fds=yes --sim-hints=no-nptl-pthread-stackcache --track-origins=yes
 valgrind:
-	valgrind $(VALGRIND_OPTS) --vgdb=yes ./scst.out -f
+	valgrind $(VALGRIND_OPTS) --vgdb=yes ./scst_drbd.out -f
 
 valgdb:
-	valgrind $(VALGRIND_OPTS) --vgdb=full --vgdb-error=0 ./scst.out -f
+	valgrind $(VALGRIND_OPTS) --vgdb=full --vgdb-error=0 ./scst_drbd.out -f
 
 clean:
-	rm -rf *.o scst.out
+	rm -rf *.o scst_drbd.out
 	rm -rf tags cscope.out
 	$(MAKE) -C .. $@
 	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 	$(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode $@
-	$(MAKE) -C $(TCMUR_SRC)/libtcmur $@
 
 extraclean:
-	rm -rf *.o scst.out
+	rm -rf *.o scst_drbd.out
 	rm -rf tags cscope.out
 	$(MAKE) -C .. $@
 	$(MAKE) -C $(USERMODE_LIB_SRC) $@
 	$(MAKE) -C $(DRBD_SRC)/drbd -f Makefile.usermode $@
-	$(MAKE) -C $(TCMUR_SRC)/libtcmur $@
 
 cscope:
 	cscope -b -c -R `find -L $(USERMODE_LIB_SRC) $(TCMUR_SRC) $(SCST_SRC) $(MTE_SRC) $(DRBD_SRC)/drbd $(DRBD_SRC)/drbd/drbd-headers -name \*.c -o -name \*.h`

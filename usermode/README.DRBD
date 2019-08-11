@@ -240,7 +240,7 @@ Comments in the script document the process in case you want to do some steps ma
 
 Some of the makefiles require various build tools which I installed one by one as it
 complained about not having them.  These are the package names of at least some of them:
-    libfuse-dev  libaio-dev  autoconf  flex  exuberant-ctags  cscope
+    libfuse-dev  libaio-dev  autoconf  flex  exuberant-ctags  cscope  coccinelle
 
 I always "make clean" before "make", because the dependencies are not calculated right.
 

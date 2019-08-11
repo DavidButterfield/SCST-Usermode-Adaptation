@@ -33,17 +33,8 @@ extern int
 /* kstrtoull is used by DRBD but does not exist in kernel 2.6.32 */
 #define kstrtoull(str, base, var)	strict_strtoull((str), (base), (var))
 
-/* These affect DRBD's backport behavior */
-#define COMPAT_DRBD_RELEASE_RETURNS_VOID
-#define COMPAT_HAVE_BIOSET_CREATE_FRONT_PAD
-#define COMPAT_HAVE_FILE_INODE
-#define COMPAT_HAVE_OPEN_BDEV_EXCLUSIVE
-#define COMPAT_HLIST_FOR_EACH_ENTRY_HAS_THREE_PARAMETERS
-#define COMPAT_IB_ALLOC_PD_HAS_2_PARAMS
-#define CONFIG_DRBD_FAULT_INJECTION 0
-#define IDR_GET_NEXT_EXPORTED
-#define __LINUX_MUTEX_H
-
 #define drbd_protocol_version uint  //XXX dodgy hacking away of a module_param type
+
+#define __LINUX_MUTEX_H	    /* inhibit include of <linux/mutex.h> in drbd_int.h */
 
 #endif /* DRBD_COMPAT_H */

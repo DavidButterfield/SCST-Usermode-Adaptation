@@ -2,6 +2,8 @@
 #
 # To download the repositories and build the usermode SCST/DRBD server:
 # make an empty directory and cd into it, then run this script.
+#
+# Script updated: Sun 11 Aug 2019 09:56:49 PM MDT
 
     ## Some of the Makefiles require various build tools which I installed one by one as
     ## it complained about not having them.  These are the package names of some of them:
@@ -86,7 +88,7 @@ echo "Summary of warnings:"
     make clean > /dev/null; \
     make |& tee build.out | egrep -i "error:|warning:|undefined reference" | sort -uk2)
 
-# That should produce the SCST/DRBD usermode server as scst.out.  There should be no compile
+# That should produce the SCST/DRBD usermode server as scst_drbd.out.  There should be no compile
 # errors, but there will be a few warnings; these can be ignored for now:
 echo "" 
 echo "These warnings can be ignored for now:"
@@ -103,7 +105,7 @@ sudo mkdir -p /var/lib/scst/pr
 sudo mkdir -p /var/lib/scst/vdev_mode_pages
 
 echo ""
-echo "Executable:  " `ls -l SCST-Usermode-Adaptation/usermode/scst.out`
+echo "Executable:  " `ls -l SCST-Usermode-Adaptation/usermode/scst_drbd.out`
 
 if [ ! -e "/tmp/cfg2" ]; then
     echo ""
