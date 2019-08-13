@@ -3,8 +3,6 @@
  * Copyright 2019 David A. Butterfield
  */
 #define _GNU_SOURCE
-#define NAME DRBD_COMPAT
-
 #ifndef DRBD_COMPAT_H
 #error Makefile failed to force-include drbd_compat.h as required
 #endif

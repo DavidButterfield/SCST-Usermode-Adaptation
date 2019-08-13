@@ -22,8 +22,6 @@
  * pair, which induces the daemon to exit its thread.  It also calls the various kernel module
  * exit handlers -- counterparts to the init functions previously called by SCST_init.
  */
-#define NAME SCST_COMPAT
-
 #ifndef SCST_COMPAT_H
   #error Makefile failed to force-include scst_compat.h as required
 #endif
@@ -32,7 +30,7 @@
 #include "UMC_assert.h"
 #include "fuse_tree.h"
 
-#define trace(fmtargs...)		printk(fmtargs)
+#define trace(fmtargs...)		nlprintk(fmtargs)
 
 struct module UMC_SCST_module = { .name = "scsi_tgt", .version = "UMC" };
 
