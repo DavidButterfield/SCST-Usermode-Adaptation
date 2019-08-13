@@ -2775,7 +2775,9 @@ out_thread_free:
 
 #ifdef CONFIG_SCST_PROC
 out_free_acg:
+	mutex_lock(&scst_mutex);
 	scst_del_free_acg(scst_default_acg, false);
+	mutex_unlock(&scst_mutex);
 #endif
 
 out_destroy_sgv_pool:
