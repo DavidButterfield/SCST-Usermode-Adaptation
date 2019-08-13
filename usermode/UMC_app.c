@@ -69,10 +69,6 @@ APP_shutdown(void * not_used)
     DRBD_exit();
     trace_app("sleep(1)"); sleep(1);
 
-    trace_app("APP_shutdown calls bio_tcmur_exit()");
-    bio_tcmur_exit();
-    trace_app("sleep(1)"); sleep(1);
-
     trace_app("APP_shutdown calls UMC_exit()");
     UMC_exit();
     trace_app("sleep(1)"); sleep(1);
@@ -96,10 +92,10 @@ sigint_handler(uint32_t signum)
     expect_eq(signum, SIGINT);
 
     if (shutdown_started) {
-	pr_warning("Recursive SIGINT->UMC_shutdown ignored");
+	pr_warning("Recursive SIGINT->UMC_shutdown ignored\n");
     } else {
 	shutdown_started = true;
-	pr_notice("Shutdown initiated by SIGINT");
+	pr_notice("Shutdown initiated by SIGINT\n");
 
 	/* Drive the shutdown from an independent kthread */
 	UMC_run_shutdown(APP_shutdown, NULL);
@@ -135,9 +131,6 @@ UMC_constructor(void)
     trace_app("UMC_constructor calls UMC_init()");
     err = UMC_init(mount_point);
     verify_noerr(err, "UMC_init");
-
-    trace_app("UMC_constructor calls bio_tcmur_init()");
-    bio_tcmur_init();
 
     trace_app("UMC_constructor calls DRBD_init()");
     DRBD_init();
