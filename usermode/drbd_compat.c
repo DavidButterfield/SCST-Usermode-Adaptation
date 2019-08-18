@@ -30,7 +30,7 @@ DRBD_init(void)
 {
     error_t err;
 
-    fuse_pde_mkdir(THIS_MODULE->name, NULL);
+    fuse_module_mkdir(THIS_MODULE);
 
     /* Set up the /proc entries for these parameters */
     fuse_modparm_add_disable_sendpage();
@@ -83,5 +83,5 @@ DRBD_exit(void)
     fuse_modparm_remove_minor_count();
     fuse_modparm_remove_protocol_version_min();
 
-    fuse_pde_remove(THIS_MODULE->name, NULL);
+    fuse_module_rmdir(THIS_MODULE);
 }

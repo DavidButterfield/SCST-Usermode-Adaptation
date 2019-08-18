@@ -34,10 +34,6 @@ extern error_t SCST_exit(void);
 extern error_t DRBD_init(void);
 extern error_t DRBD_exit(void);
 
-/* bio interface to TCMU backstore handlers */
-extern error_t bio_tcmur_init(void);
-extern error_t bio_tcmur_exit(void);
-
 /* Don't want to #include usermode_lib.h here */
 extern void __attribute__((__noreturn__)) do_exit(long);
 extern struct task_struct * UMC_run_shutdown(error_t (*fn)(void * env), void * env);

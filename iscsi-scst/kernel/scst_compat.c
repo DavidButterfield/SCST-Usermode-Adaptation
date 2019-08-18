@@ -53,7 +53,7 @@ SCST_init(void)
 {
     error_t err;
 
-    fuse_pde_mkdir(THIS_MODULE->name, NULL);
+    fuse_module_mkdir(THIS_MODULE);
 
     fuse_modparm_add_num_threads();
     fuse_modparm_add_scst_vdisk_ID();
@@ -112,7 +112,7 @@ SCST_exit(void)
     fuse_modparm_remove_scst_max_dev_cmd_mem();
     fuse_modparm_remove_forcibly_close_sessions();
 
-    fuse_pde_remove(THIS_MODULE->name, NULL);
+    fuse_module_rmdir(THIS_MODULE);
 }
 
 /******************************************************************************/

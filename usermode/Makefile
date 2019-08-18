@@ -269,11 +269,14 @@ drbd:	umc
 
 .PHONY:	umc scst drbd
 
+# Allow tcmu-runner loadable modules to see our symbols
+GCCLDFLAGS += -rdynamic
+
 scst_drbd.out:   UMC_app.o drbd_compat.o $(COMPONENTS) $(USERMODE_LIB)
 	# Gather up all the objects we need from DRBD and SCST kernel and daemon code
 	# Link with the usermode compatibility module, libmte, and other libraries
 	$(CC) -o scst_drbd.out $(GCCLDFLAGS) UMC_app.o drbd_compat.o \
-		    $(COMPONENTS) $(USERMODE_LIB) $(LIBMTE) $(LOCAL_LIBS) -lc
+	    $(COMPONENTS) -Wl,-whole-archive $(USERMODE_LIB) -Wl,-no-whole-archive $(LIBMTE) $(LOCAL_LIBS) -lc
 
 check_mte:
 	@if [[ ! -f /lib/libmte.$(LIB_SUFFIX) ]] ; then $(MAKE) -C $(MTE_SRC) ; fi
