@@ -33,6 +33,9 @@ extern int
 /* kstrtoull is used by DRBD but does not exist in kernel 2.6.32 */
 #define kstrtoull(str, base, var)	strict_strtoull((str), (base), (var))
 
+typedef int blk_qc_t;
+#define BLK_QC_T_NONE 0
+
 #define drbd_protocol_version uint  //XXX dodgy hacking away of a module_param type
 
 #define __LINUX_MUTEX_H	    /* inhibit include of <linux/mutex.h> in drbd_int.h */
