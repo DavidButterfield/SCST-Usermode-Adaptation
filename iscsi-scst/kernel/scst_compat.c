@@ -26,8 +26,6 @@
   #error Makefile failed to force-include scst_compat.h as required
 #endif
 
-#include <sys_service.h>
-#include "UMC_assert.h"
 #include "fuse_tree.h"
 
 #define trace(fmtargs...)		nlprintk(fmtargs)
@@ -156,7 +154,6 @@ unsigned long trace_flag;
 #include <linux/netlink.h>
 
 /* Called from kernel code to issue a notification to the daemon through the "nl" socket */
-// XXX Does the data need to be copied?  I don't think so, but should check
 error_t
 event_send(u32 tid, u64 sid, u32 cid, u32 cookie,
 	   enum iscsi_kern_event_code code, const char * param1, const char * param2)
@@ -183,8 +180,8 @@ event_send(u32 tid, u64 sid, u32 cid, u32 cookie,
     struct iovec iov[] = {
 	[0] = { .iov_base = &hdr,		 .iov_len = sizeof(hdr)       },
 	[1] = { .iov_base = &event,		 .iov_len = sizeof(event)     },
-	[2] = { .iov_base = _unconstify(param1), .iov_len = event.param1_size },   //XXX
-	[3] = { .iov_base = _unconstify(param2), .iov_len = event.param2_size },   //XXX
+	[2] = { .iov_base = _unconstify(param1), .iov_len = event.param1_size },
+	[3] = { .iov_base = _unconstify(param2), .iov_len = event.param2_size },
     };
 
     return (error_t)UMC_kernelize64(writev(SCST_nl_fdwrite, iov, ARRAY_SIZE(iov)));

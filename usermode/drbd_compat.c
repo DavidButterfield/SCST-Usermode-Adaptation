@@ -7,7 +7,6 @@
 #error Makefile failed to force-include drbd_compat.h as required
 #endif
 
-#include <sys_service.h>
 #include "fuse_tree.h"
 
 struct module UMC_DRBD_module = { .name = "drbd", .version = "UMC" };

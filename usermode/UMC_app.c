@@ -13,6 +13,10 @@
 #include <signal.h>
 #include <stdio.h>
 
+#include <unistd.h>
+#include <syscall.h>
+#define tgkill(pid, tid, sig)   syscall(__NR_tgkill, (pid), (tid), (sig))
+
 #include "UMC_assert.h"
 
 #define pr_warning(fmtargs...)		fprintf(stderr, "WARNING: "fmtargs)
@@ -49,6 +53,10 @@ MTE_shutdown(void * not_used)
 
     MTE_sys_service_put(SYS_SERVICE);
     sys_service_set(NULL);
+
+    /* Jab the main thread in case SCST_DISABLE is set */
+    tgkill(getpid(), getpid(), SIGHUP);
+
     pthread_exit(NULL);
 }
 
@@ -56,14 +64,17 @@ MTE_shutdown(void * not_used)
 static error_t
 APP_shutdown(void * not_used)
 {
-    /* Order matters here -- earlier items depend on later items */
-    trace_app("APP_shutdown calls SCST_exit()");
-    SCST_exit();
-    trace_app("sleep(1)"); sleep(1);
+    if (!getenv("SCST_DISABLE")) {
+	trace_app("APP_shutdown calls SCST_exit()");
+	SCST_exit();
+	trace_app("sleep(1)"); sleep(1);
+    }
 
-    trace_app("APP_shutdown calls DRBD_exit()");
-    DRBD_exit();
-    trace_app("sleep(1)"); sleep(1);
+    if (!getenv("DRBD_DISABLE")) {
+	trace_app("APP_shutdown calls DRBD_exit()");
+	DRBD_exit();
+	trace_app("sleep(1)"); sleep(1);
+    }
 
     trace_app("APP_shutdown calls UMC_exit()");
     UMC_exit();
@@ -104,6 +115,10 @@ static void
 UMC_constructor(void)
 {
     error_t err;
+    if (geteuid()) {
+	fprintf(stderr, "Should run as superuser\n");
+    }
+
     sys_service_set(MTE_sys_service_get());	/* install MTE as sys_service provider */
     sys_service_init(NULL/*cfg*/);  /* initialize sys_service provider, sys_thread_current */
     /*** Now we have a memory allocator ***/
@@ -123,16 +138,19 @@ UMC_constructor(void)
     if (!mount_point)
 	mount_point = UMC_FUSE_MOUNT_POINT_DEFAULT;
 
-    /* Order matters here -- later items depend on earlier items */
     trace_app("UMC_constructor calls UMC_init()");
     err = UMC_init(mount_point);
     verify_noerr(err, "UMC_init");
 
-    trace_app("UMC_constructor calls DRBD_init()");
-    DRBD_init();
+    if (!getenv("DRBD_DISABLE")) {
+	trace_app("UMC_constructor calls DRBD_init()");
+	DRBD_init();
+    }
 
-    trace_app("UMC_constructor calls SCST_init()");
-    SCST_init();
+    if (!getenv("SCST_DISABLE")) {
+	trace_app("UMC_constructor calls SCST_init()");
+	SCST_init();
+    }
 
     trace_app("UMC_constructor done");
 }

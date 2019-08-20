@@ -24,6 +24,7 @@
 #include <getopt.h>
 #include <netdb.h>
 #include <signal.h>
+#include <pthread.h>
 
 #include <sys/poll.h>
 #include <sys/socket.h>
@@ -854,6 +855,15 @@ int main(int argc, char **argv)
 	uid_t uid = 0;
 	gid_t gid = 0;
 	int err;
+
+	#define SCST_DISABLE "SCST_DISABLE"
+	if (getenv(SCST_DISABLE)) {
+		fprintf(stderr,"environment variable %s is set\n",SCST_DISABLE);
+		fflush(stderr);
+		/* Exiting the main thread confuses the dynamic loader, so pause first */
+		pause();
+		pthread_exit(NULL);
+	}
 
 #ifdef CONFIG_SCST_PROC
 	iscsi_enabled = 1;
