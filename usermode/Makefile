@@ -83,13 +83,14 @@ endif
 # Target: x86_64-linux-gnu gcc version 8.3.0 (Ubuntu 8.3.0-6ubuntu1) 
 # XXX Dynamic builds break addr2line stacktraces
 # XXX Static builds break memory initialization for valgrind
-BUILD_STATIC=defined	    # XXX
+# XXXXXX Suddenly today static builds can no longer dlopen() the tcmu handlers!
+### BUILD_STATIC=defined	    # XXX
 
 # Enable assert/expect and some other checking and/or tracing
 MY_CFLAGS += -DDEBUG
 
 # -fsanitize catches runtime errors but makes disassembly virtually useless
-MY_CFLAGS += -fsanitize=undefined
+# MY_CFLAGS += -fsanitize=undefined
 # MY_CFLAGS += -DNDEBUG
 
 # MY_CFLAGS += -DTRACE_TRACE
@@ -205,6 +206,15 @@ export EXTRA_WFLAGS := $(WFLAGS_WARN) $(WFLAGS_INHIBIT)
 
 SHELL=/bin/bash
 
+ifdef BUILD_STATIC
+LIB_SUFFIX="a"
+BUILD_TYPE=-static
+else
+LIB_SUFFIX="so"
+# Allow tcmu-runner loadable modules to see our symbols
+BUILD_TYPE=-rdynamic
+endif
+
 GCCLDFLAGS = $(BUILD_TYPE) -Wl,-z,now	    # -Wl,-O1
 export LOCAL_LD_FLAGS = $(GCCLDFLAGS)
 export LOCAL_LIBS = -lubsan -lfuse -laio -lrt -lpthread -ldl
@@ -233,14 +243,6 @@ export KVER = __NONE__
 export SCST_USERMODE = 1	    # Tell sub-makefiles to do SCST_USERMODE build
 export DRBD_USERMODE = 1	    # Tell sub-makefiles to do DRBD_USERMODE build
 
-ifdef BUILD_STATIC
-LIB_SUFFIX="a"
-BUILD_TYPE=-static
-else
-LIB_SUFFIX="so"
-BUILD_TYPE=
-endif
-
 LIBMTE := $(shell if [ -f /lib/libmte.$(LIB_SUFFIX) ] ; \
 		    then /bin/echo "-lmte" ; \
 		    else /bin/echo "$(MTE_SRC)/libmte.$(LIB_SUFFIX)" ; \
@@ -251,6 +253,25 @@ COMPONENTS := $(SCST_SRC)/scst/src/scst.o $(SCST_SRC)/scst/src/dev_handlers/scst
 	      $(DRBD_SRC)/drbd/drbd.o
 
 USERMODE_LIB := $(USERMODE_LIB_SRC)/usermode_lib.a
+#
+# UMC_OBJ += $(USERMODE_LIB_SRC)/usermode_lib.o
+# UMC_OBJ += $(USERMODE_LIB_SRC)/UMC_sys.o
+# UMC_OBJ += $(USERMODE_LIB_SRC)/UMC_socket.o
+# UMC_OBJ += $(USERMODE_LIB_SRC)/UMC_fuse_proc.o
+# UMC_OBJ += $(USERMODE_LIB_SRC)/UMC_bio.o
+# UMC_OBJ += $(USERMODE_LIB_SRC)/UMC_netlink.o
+# UMC_OBJ += $(USERMODE_LIB_SRC)/UMC_fuse_bio.o
+# UMC_OBJ += $(USERMODE_LIB_SRC)/UMC_thread.o
+# UMC_OBJ += $(USERMODE_LIB_SRC)/UMC_bio_tcmur.o
+# 
+# RUNNER_OBJ += $(LIBTCMUR)/fuse_tcmur.o
+# RUNNER_OBJ += $(LIBTCMUR)/simple_log.o
+# RUNNER_OBJ += $(LIBTCMUR)/fuse_tcmur_ctl.o
+# RUNNER_OBJ += $(LIBTCMUR)/libtcmur.o
+# RUNNER_OBJ += $(LIBTCMUR)/fuse_tree.o
+# RUNNER_OBJ += $(LIBTCMUR)/../CMakeFiles/tcmu.dir/api.c.o
+#
+# USERMODE_LIB := $(UMC_OBJ) $(RUNNER_OBJ)
 
 usermode all:	check_mte umc scst drbd
 	$(MAKE) cscope
@@ -269,14 +290,14 @@ drbd:	umc
 
 .PHONY:	umc scst drbd
 
-# Allow tcmu-runner loadable modules to see our symbols
+###XXX
 GCCLDFLAGS += -rdynamic
 
 scst_drbd.out:   UMC_app.o drbd_compat.o $(COMPONENTS) $(USERMODE_LIB)
 	# Gather up all the objects we need from DRBD and SCST kernel and daemon code
 	# Link with the usermode compatibility module, libmte, and other libraries
-	$(CC) -o scst_drbd.out $(GCCLDFLAGS) UMC_app.o drbd_compat.o \
-	    $(COMPONENTS) -Wl,-whole-archive $(USERMODE_LIB) -Wl,-no-whole-archive $(LIBMTE) $(LOCAL_LIBS) -lc
+	$(CC) $(GCCLDFLAGS) -o scst_drbd.out UMC_app.o drbd_compat.o $(COMPONENTS) \
+		-Wl,-E -Wl,-whole-archive $(USERMODE_LIB) -Wl,-no-whole-archive $(LIBMTE) $(LOCAL_LIBS) -lc
 
 check_mte:
 	@if [[ ! -f /lib/libmte.$(LIB_SUFFIX) ]] ; then $(MAKE) -C $(MTE_SRC) ; fi
