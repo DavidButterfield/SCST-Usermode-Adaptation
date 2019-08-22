@@ -37,9 +37,7 @@ endif
 # API header files should be in /usr/include.  Otherwise SYS_SERVICE_INCL
 # specifies where they are:
 ifndef SYS_SERVICE_INCL
-export SYS_SERVICE_INCL = $(shell if [ -d $(MY_SRC)/MTE/include ]; \
-				  then echo $(MY_SRC)/MTE/include; \
-				  fi)
+export SYS_SERVICE_INCL = $(MY_SRC)/MTE/include
 endif
 
 # If libmte (Multithreaded Engine) is not installed on the system, this is
@@ -221,6 +219,7 @@ export LOCAL_LIBS = -lubsan -lfuse -laio -lrt -lpthread -ldl
 
 LIBTCMUR = $(TCMUR_SRC)/libtcmur
 MY_CFLAGS += -I$(TCMUR_SRC) -I$(TCMUR_SRC)/ccan -I$(LIBTCMUR)
+MY_CFLAGS += -I$(SYS_SERVICE_INCL)
 
 MY_CFLAGS += -g -ggdb -fno-omit-frame-pointer -fPIC
 SCSTU_CFLAGS += $(MY_CFLAGS) $(EXTRA_WFLAGS)
