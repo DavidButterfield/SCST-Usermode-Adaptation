@@ -477,7 +477,7 @@ void iscsi_make_conn_rd_active(struct iscsi_conn *conn)
 		conn->rd_state = ISCSI_CONN_RD_STATE_WAKING;
 		sys_callback_schedule(conn->sock->sk->rd_poll_event_task,
 				      iscsi_conn_rd_wakeup_handler,
-				      conn->sock->sk, 0, E_OK, "sock read wakeup");
+				      conn->sock->sk, 0, 0, "sock read wakeup");
 #endif
 	}
 
@@ -616,7 +616,7 @@ static void iscsi_data_ready(struct sock *sk, int len)
 #ifdef SCST_USERMODE			/* define iscsi_conn_rd_wakeup_handler */
 void iscsi_conn_rd_wakeup_handler(void * env, uintptr_t arg, error_t err)
 {
-	assert_eq(err, E_OK);
+	assert_eq(err, 0);
 	assert_eq(arg, 0);
 	struct sock * sk = env;
 	iscsi_data_ready(sk, 0);

@@ -79,7 +79,7 @@ struct scsi_device {
 	unsigned int sector_size;
 };
 
-#define scsi_register_interface(interface)      (_USE(interface), E_OK)
+#define scsi_register_interface(interface)      (_USE(interface), 0)
 #define scsi_unregister_interface(interface)    DO_NOTHING()
 #define to_scsi_device(device)			UMC_STUB(to_scsi_device, NULL)
 

@@ -97,7 +97,7 @@ SCST_exit(void)
     }
 
     error_t err = ctr_fops.release(NULL, NULL);
-    verify_eq(err, E_OK);
+    verify_eq(err, 0);
 
     UMC_EXIT_iscsi_exit();
     UMC_EXIT_exit_scst_vdisk_driver();
@@ -189,10 +189,10 @@ event_send(u32 tid, u64 sid, u32 cid, u32 cookie,
 
 /******************************************************************************/
 
-int event_init(void)	{ return E_OK; }
+int event_init(void)	{ return 0; }
 void event_exit(void)	{ }
 
-extern int scst_event_init(void);   int scst_event_init(void)	{ return E_OK; }
+extern int scst_event_init(void);   int scst_event_init(void)	{ return 0; }
 extern void scst_event_exit(void);  void scst_event_exit(void)	{ }
 
 struct scst_cmd;
@@ -211,10 +211,10 @@ extern int scst_event_queue_tm_fn_received(struct scst_mgmt_cmd *mcmd);
 void scst_event_queue(uint32_t event_code, const char *issuer_name, struct scst_event_entry *e) \
 	    { UMC_STUB(scst_event_queue); }
 int scst_event_queue_lun_not_found(const struct scst_cmd *cmd) \
-	    { pr_warning("SKIP queuing event scst_event_queue_lun_not_found"); return E_OK; }
+	    { pr_warning("SKIP queuing event scst_event_queue_lun_not_found"); return 0; }
 int scst_event_queue_negative_luns_inquiry(const struct scst_tgt *tgt, const char *initiator_name) \
-	    { pr_warning("SKIP queuing event scst_event_queue_negative_luns_inquiry"); return E_OK; }
+	    { pr_warning("SKIP queuing event scst_event_queue_negative_luns_inquiry"); return 0; }
 int scst_event_queue_tm_fn_received(struct scst_mgmt_cmd *mcmd) \
-	    { pr_warning("SKIP queuing event scst_event_queue_tm_fn_received"); return E_OK; }
+	    { pr_warning("SKIP queuing event scst_event_queue_tm_fn_received"); return 0; }
 
-int scsi_reset_provider(struct scsi_device * sdev, int flags) { UMC_STUB(scsi_reset_provider); return E_OK; }
+int scsi_reset_provider(struct scsi_device * sdev, int flags) { UMC_STUB(scsi_reset_provider); return 0; }

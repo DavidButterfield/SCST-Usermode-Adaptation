@@ -17,7 +17,7 @@
 #include <syscall.h>
 #define tgkill(pid, tid, sig)   syscall(__NR_tgkill, (pid), (tid), (sig))
 
-#include "UMC_assert.h"
+#include "sys_assert.h"
 
 #define pr_warning(fmtargs...)		fprintf(stderr, "WARNING: "fmtargs)
 #define pr_notice(fmtargs...)		fprintf(stderr, "NOTICE: "fmtargs)
