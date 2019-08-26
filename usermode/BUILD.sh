@@ -3,11 +3,14 @@
 # To download the repositories and build the usermode SCST/DRBD server:
 # make an empty directory and cd into it, then run this script.
 #
-# Script updated: Sun 11 Aug 2019 09:56:49 PM MDT
+# Script updated: Mon 26 Aug 2019 01:12:21 PM MDT
 
-    ## Some of the Makefiles require various build tools which I installed one by one as
-    ## it complained about not having them.  These are the package names of some of them:
-    ##   libfuse-dev  libaio-dev  autoconf  flex  exuberant-ctags  cscope
+### Some of the makefiles require various build tools -- here are package names
+### I added to a fresh installation of Ubuntu 18.04 LTS to complete the build:
+###
+###    build-essential  g++  gcc  git  make  gdb  valgrind  cscope  exuberant-ctags
+###    libfuse-dev  libaio-dev  libglib2.0-dev  libkmod-dev  libnl-3-dev  libnl-genl-3-dev
+###    librbd-dev  autoconf  automake  flex  coccinelle  cmake
 
 echo Getting sudo password at start of script rather than sometime later
 sudo echo Got sudo password
@@ -30,16 +33,17 @@ git clone https://github.com/DavidButterfield/drbd-utils.git
 (cd SCST-Usermode-Adaptation; \
     git checkout drbd)
 
-# Also get linux-2.6.32.27 into the same directory.
+# Also get our reference kernel into the same directory.
 wget https://cdn.kernel.org/pub/linux/kernel/v2.6/linux-2.6.32.27.tar.gz
 gunzip linux-2.6.32.27.tar.gz
-tar xvf linux-2.6.32.27.tar
+tar xf linux-2.6.32.27.tar
 rm linux-2.6.32.27.tar		# for space if FS is only 1GB
 
 # In the tcmu-runner source directory:
 (cd tcmu-runner; \
     cmake -Dwith-glfs=false .; \
     make; \
+    if [ ! -e /usr/local/lib/tcmu-runner/handler_ram.sh ]; then sudo make install; fi; \
     cd libtcmur; \
     make)
 
@@ -52,9 +56,6 @@ rm linux-2.6.32.27.tar		# for space if FS is only 1GB
     sudo make install)
 
 # In the drbd-9.0 source directory:
-    ## NOTE: if you do a "make" in drbd-9.0, it may create a file drbd/compat.h which
-    ##	     ***MUST BE DELETED*** before the usermode compile will succeed.
-    ##
     ## You should not need to "make" in the drbd-9.0 directory.  The make for usermode DRBD is
     ## done from SCST-Usermode-Adaptation/usermode/Makefile passing in the appropriate flags
     ## to drbd-9.0/drbd/Makefile.usermode
@@ -78,6 +79,10 @@ rm linux-2.6.32.27.tar		# for space if FS is only 1GB
     sudo make scstadm; \
     sudo make scstadm_install)
 
+# SCST needs these directories created:
+sudo mkdir -p /var/lib/scst/pr
+sudo mkdir -p /var/lib/scst/vdev_mode_pages
+
 echo "Full build output will appear in SCST-Usermode-Adaptation/usermode/build.out"
 echo "Summary of warnings:"
 
@@ -95,23 +100,17 @@ echo "These warnings can be ignored for now:"
 echo "  " "arch_wb_cache_pmem redefined"
 echo "  " "comparison of distinct pointer types lacks a cast [uint64_t long vs long long]"
 echo "  " "pr_fmt redefined"
-echo "  " "Using 'dlopen' in statically linked apps requires at runtime the shared libraries..."
-echo "  " "Using 'getaddrinfo' in statically linked apps requires at runtime the shared..."
 echo "  " "#warning BDI_CAP_STABLE_WRITES not available"
 echo "  " "#warning In the PROCFS build EXTENDED COPY not supported"
-
-# SCST needs these directories created:
-sudo mkdir -p /var/lib/scst/pr
-sudo mkdir -p /var/lib/scst/vdev_mode_pages
 
 echo ""
 echo "Executable:  " `ls -l SCST-Usermode-Adaptation/usermode/scst_drbd.out`
 
-if [ ! -e "/tmp/cfg2" ]; then
+if [ ! -e "/tmp/cfg1" ]; then
     echo ""
     echo "Create the backing files at whatever size you want, e.g. 1 GiB:"
+    echo "        dd if=/dev/zero of=/tmp/cfg0 bs=4096 count=262144"
     echo "        dd if=/dev/zero of=/tmp/cfg1 bs=4096 count=262144"
-    echo "        dd if=/dev/zero of=/tmp/cfg2 bs=4096 count=262144"
 fi
 
 if [ ! -e "/etc/scst.conf" ]; then
