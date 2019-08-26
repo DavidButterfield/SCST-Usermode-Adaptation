@@ -38,7 +38,7 @@ rm linux-2.6.32.27.tar		# for space if FS is only 1GB
 
 # In the tcmu-runner source directory:
 (cd tcmu-runner; \
-    cmake .; \
+    cmake -Dwith-glfs=false .; \
     make; \
     cd libtcmur; \
     make)
