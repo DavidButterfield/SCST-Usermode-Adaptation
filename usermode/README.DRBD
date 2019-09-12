@@ -184,16 +184,16 @@ On a different terminal (window):
     echo "add 0 /ram/tmp/cfg0" | cat > /UMCfuse/dev/tcmur
     echo "add 1 /ram/tmp/cfg1" | cat > /UMCfuse/dev/tcmur
 
-    ls -lsd `find /UMCfuse`		# observe /UMCfuse/dev/ram00* devices
+    ls -lsd `find /UMCfuse`	# observe /UMCfuse/dev/ram00* devices
 
     # Configure DRBD
-    drbdmeta 1 v09 /UMCfuse/dev/ram001 internal create-md 2	# only the first time!
+    drbdmeta 1 v09 /UMCfuse/dev/ram001 internal create-md 2 --force	# only the first time!
     drbdadm up r0
 
-    ls -lsd `find /UMCfuse`		# observe /UMCfuse/dev/drbd1 device
+    ls -lsd `find /UMCfuse`	# observe /UMCfuse/dev/drbd1 device
 
     drbdsetup primary r0
-    mkfs.ext4 /UMCfuse/dev/drbd1				# only the first time!
+    mkfs.ext4 /UMCfuse/dev/drbd1					# only the first time!
     fsck.ext4 /UMCfuse/dev/drbd1
 
 Either export the replicated device as a LUN through SCST:
@@ -212,6 +212,9 @@ Make sure your configuration files were suitably modified for your names, addres
 Make sure you are running the server and the utilities with environment variable set:
     export UMC_FS_ROOT=/UMCfuse
     sudo -E drbdadm ...		# -E to pass the environment variable through sudo
+
+This message from drbdsetup probably means it did not have UMC_FS_ROOT set in its environment:
+    Cannot determine minor device number of device
 
 This message in the server log means the environment variable is not set for the server:
     Parse error: 'disk | device | address | meta-disk | flexible-meta-disk' expected,
