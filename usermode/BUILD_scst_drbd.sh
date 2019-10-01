@@ -65,10 +65,6 @@ rm linux-2.6.32.27.tar		# for space if FS is only 1GB
 (cd drbd-9.0; \
     make check-submods)
 
-# After that additional code gets downloaded, there is a patch to apply to it:
-(cd drbd-9.0/drbd/drbd-kernel-compat; \
-    patch -p1 < ../../PATCH.drbd-kernel-compat)
-
 # For now SCST has to use emulated /proc (not /sys).  This is enabled by:
 (cd SCST-Usermode-Adaptation; \
     make enable_proc)
